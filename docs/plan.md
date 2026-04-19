@@ -20,7 +20,7 @@ License: **MIT**.
 
 | VS Code feature | VS implementation |
 |---|---|
-| Keyword / slash-command search (`/mail` `/teams` `/sharepoint` `/onedrive` `/all` `/ask` `/clear`) | Ported 1:1 (same grammar) |
+| Keyword / slash-command search (`/mail` `/teams` `/sharepoint` `/onedrive` `/connectors` `/all` `/ask` `/clear`) | Ported 1:1 (same grammar) |
 | Snippet pinning (persisted across sessions) | Cross-editor shared store (`%LocalAppData%\ContextRelay\shared\snippets.json`) |
 | Handoff docs (`PLAN.md` / `TASKS.md` / `TEST_PLAN.md` / `HANDOFF.md`) | Written under solution root `.contextrelay/` (fallback `%USERPROFILE%\.contextrelay\`) |
 | Chat tab (Copilot Chat API /beta) | Phase 2 (feature flag off in Phase 1) |
@@ -31,7 +31,7 @@ License: **MIT**.
 
 - **Phase 0**: Repo/solution scaffold, MIT LICENSE, CI, empty VSIX launches.
 - **Phase 1 (MVP)**: Auth + Mail/SharePoint/OneDrive/Teams search + slash router + snippet pinning + handoff docs + settings + cache + debug log + cross-editor shared store.
-- **Phase 2**: Copilot Chat API (`/ask`), connectors, deeper Copilot-for-VS handoff, Japanese UI.
+- **Phase 2**: Copilot Chat API (`/ask`), connectors, deeper Copilot-for-VS handoff, Japanese UI, slash-command discovery, and result context actions.
 - **Phase 3**: Marketplace publish, auto-update, opt-in telemetry.
 
 ## 2. Target environment
@@ -72,7 +72,7 @@ ContextRelayVS/
 - Interactive (WAM) → Silent (cache) → Interactive fallback.
 - Token cache under `%LocalAppData%\ContextRelayVS\msal.cache` via `MsalCacheHelper` + DPAPI.
 - Same Graph scope set as the VS Code version.
-- Entra app-registration requirements documented in `docs/tenant_admin_quickstart.md` (TBD).
+- Entra app-registration requirements documented in `docs/tenant_admin_quickstart.md`.
 
 ## 6. Graph calls
 
@@ -144,7 +144,7 @@ See [`shared-session-schema.md`](shared-session-schema.md) for the authoritative
 
 - VSIX targeting `[17.0,19.0)` with an installable manifest, pkgdef generation, compiled VSCT menu resources, and local `LICENSE.txt` packaging.
 - SDK-style VSIX packaging is enabled through `Microsoft.VsSDK.targets` imported via `CustomAfterMicrosoftCSharpTargets`, with `GeneratePkgDefFile=true` and CLI deployment disabled.
-- GitHub Actions (`windows-latest`) restores, runs the vulnerability audit, builds the solution, runs Core tests, and uploads the generated `.vsix` artifact.
+- GitHub Actions (`windows-latest`) restores, runs the vulnerable/deprecated package audit, builds the solution, runs Core tests, and uploads the generated `.vsix` artifact.
 - The `vsix-skeleton` milestone is complete once the `.vsix` artifact is emitted by CLI build and the remaining work is only manual host validation.
 
 ## 14. Testing
@@ -181,7 +181,9 @@ Initial todos are seeded in the session SQL store. Update this plan whenever hig
 
 ## 18. Current implementation status
 
-- **Implemented end-to-end in-repo**: shared session store, schema docs, MSAL auth core, slash-command router, shared snippet repository, handoff document generator, TTL + LRU cache, Graph/retrieval/chat adapters, WPF tool window UI, VS commands, options pages, logging panes, and installable VSIX packaging.
+- **Implemented end-to-end in-repo**: shared session store, schema docs, MSAL auth core, slash-command router, shared snippet repository, handoff document generator, TTL + LRU cache, Graph/retrieval/chat adapters, localized WPF tool window UI, slash-command popup, result-card context actions, dedicated `/connectors` routing, `/ask` editor previews, VS commands, options pages, logging panes, and installable VSIX packaging.
+- **Parity follow-up against the VS Code extension**: result pinning now toggles/unpins instead of only warning on duplicates, mail/SharePoint/OneDrive pinning hydrates fuller content for handoff use, `/ask` now requires pinned snippets and uses capped context plus output-format detection, and the soft handoff command now tries to open GitHub Copilot Chat after copying the prompt.
 - **Shared-store behavior covered**: schema emission, unknown-field preservation, handoff path normalization, tombstone-aware snippet merge, retry on Windows atomic replace failures.
-- **Repository readiness improved**: README / README_ja now reflect implementation status, `docs/e2e_checklist.md` exists, and CI uploads a built VSIX artifact.
-- **Still missing for release readiness**: `/rootsuffix Exp` validation on supported VS versions, marketplace publish/sign flow, tenant-admin quickstart polishing, and the out-of-repo VS Code shared-store migration PR.
+- **Repository readiness improved**: README / README_ja now reflect implementation status, `docs/e2e_checklist.md` and `docs/marketplace_release.md` exist, CI audits vulnerable/deprecated packages, and release assets include a Marketplace publish manifest plus a release workflow.
+- **Still missing for release readiness**: `/rootsuffix Exp` validation on supported VS versions and the out-of-repo VS Code shared-store migration PR.
+- **Intentional remaining VS/VS Code difference**: GitHub Copilot Chat prompt prefill remains clipboard-based in Visual Studio because this extension does not have a supported prompt-injection API comparable to VS Code's `workbench.action.chat.open`.

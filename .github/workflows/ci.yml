@@ -23,7 +23,8 @@ jobs:
         run: dotnet restore ContextRelayVS.sln
 
       - name: Audit packages
-        run: dotnet list ContextRelayVS.sln package --vulnerable --include-transitive
+        shell: pwsh
+        run: .\build\Invoke-PackageAudit.ps1 -SolutionPath .\ContextRelayVS.sln
 
       - name: Build solution
         run: dotnet build ContextRelayVS.sln -c Release --no-restore -v minimal

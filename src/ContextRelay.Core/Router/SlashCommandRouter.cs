@@ -13,6 +13,18 @@ public static class SlashCommandRouter
         ContextSource.Teams
     };
 
+    private static readonly IReadOnlyList<string> SupportedSlashCommands = new[]
+    {
+        "/mail",
+        "/teams",
+        "/sharepoint",
+        "/onedrive",
+        "/connectors",
+        "/all",
+        "/ask",
+        "/clear"
+    };
+
     private static readonly IReadOnlyDictionary<string, RouteTarget> SlashCommands =
         new Dictionary<string, RouteTarget>(StringComparer.OrdinalIgnoreCase)
         {
@@ -20,6 +32,7 @@ public static class SlashCommandRouter
             ["teams"] = RouteTarget.Teams,
             ["sharepoint"] = RouteTarget.SharePoint,
             ["onedrive"] = RouteTarget.OneDrive,
+            ["connectors"] = RouteTarget.Connectors,
             ["all"] = RouteTarget.All,
             ["ask"] = RouteTarget.Ask,
             ["clear"] = RouteTarget.Clear
@@ -32,6 +45,7 @@ public static class SlashCommandRouter
             ["teams"] = "Example: /teams sprint review\nExample: /teams from:bob mentions:me",
             ["sharepoint"] = "Example: /sharepoint VPN setup guide\nExample: /sharepoint architecture",
             ["onedrive"] = "Example: /onedrive architecture diagram\nExample: /onedrive Q3 report",
+            ["connectors"] = "Example: /connectors incident tracker\nExample: /connectors external knowledge base",
             ["all"] = "Example: /all architecture decisions\nOr just type a query without a slash command.",
             ["ask"] = "Example: /ask 日本語に翻訳してmarkdownにして\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the Microsoft 365 Copilot response is opened in a new editor tab.",
             ["clear"] = "Example: /clear\nClears the current chat transcript and discards all pinned snippets."
@@ -89,6 +103,11 @@ public static class SlashCommandRouter
             : "Type a query to search Microsoft 365 content.";
     }
 
+    public static IReadOnlyList<string> GetSupportedCommands()
+    {
+        return SupportedSlashCommands;
+    }
+
     private static int FindCommandEnd(string value)
     {
         for (var index = 1; index < value.Length; index++)
@@ -110,6 +129,7 @@ public static class SlashCommandRouter
             RouteTarget.Teams => new[] { ContextSource.Teams },
             RouteTarget.SharePoint => new[] { ContextSource.SharePoint },
             RouteTarget.OneDrive => new[] { ContextSource.OneDrive },
+            RouteTarget.Connectors => new[] { ContextSource.Connectors },
             RouteTarget.All => SearchAllSources,
             _ => Array.Empty<ContextSource>()
         };

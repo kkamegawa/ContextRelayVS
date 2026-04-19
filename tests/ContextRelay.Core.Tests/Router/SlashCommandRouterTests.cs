@@ -39,6 +39,18 @@ public sealed class SlashCommandRouterTests
     }
 
     [Fact]
+    public void Parse_ConnectorsCommand_RoutesToConnectorSource()
+    {
+        var result = SlashCommandRouter.Parse("/connectors incident tracker");
+
+        Assert.Equal(RouteTarget.Connectors, result.Target);
+        Assert.Equal("/connectors", result.SlashCommandName);
+        Assert.Equal("incident tracker", result.Query);
+        Assert.Single(result.TargetSources);
+        Assert.Equal(ContextSource.Connectors, result.TargetSources[0]);
+    }
+
+    [Fact]
     public void Parse_ClearCommand_IsNeverEmpty()
     {
         var result = SlashCommandRouter.Parse("/clear");
@@ -64,5 +76,13 @@ public sealed class SlashCommandRouterTests
         var help = SlashCommandRouter.GetHelpText("/teams");
 
         Assert.Contains("/teams sprint review", help);
+    }
+
+    [Fact]
+    public void GetSupportedCommands_IncludesConnectorsCommand()
+    {
+        var commands = SlashCommandRouter.GetSupportedCommands();
+
+        Assert.Contains("/connectors", commands);
     }
 }

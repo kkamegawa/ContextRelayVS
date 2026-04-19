@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_to_marketplace:
+        description: "Publish the built VSIX to Visual Studio Marketplace"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ContextRelayVS.sln
+
+      - name: Audit packages
+        shell: pwsh
+        run: .\build\Invoke-PackageAudit.ps1 -SolutionPath .\ContextRelayVS.sln
+
+      - name: Build solution
+        run: dotnet build ContextRelayVS.sln -c Release --no-restore -v minimal
+
+      - name: Test core
+        run: dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj -c Release --no-build -v minimal
+
+      - name: Verify VSIX exists
+        id: verify_vsix
+        shell: pwsh
+        run: |
+          $vsix = Get-ChildItem -Path .\src\ContextRelay.VSExtension\bin\Release\net472 -Filter *.vsix | Select-Object -First 1
+          if (-not $vsix) {
+            throw "VSIX artifact was not generated."
+          }
+
+          "vsix_path=$($vsix.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ContextRelayVS-vsix
+          path: src\ContextRelay.VSExtension\bin\Release\net472\*.vsix
+
+      - name: Publish to Visual Studio Marketplace
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_marketplace == 'true'
+        shell: pwsh
+        env:
+          VS_MARKETPLACE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
+        run: |
+          if (-not $env:VS_MARKETPLACE_PAT) {
+            throw "VS_MARKETPLACE_PAT secret is required when publish_to_marketplace is true."
+          }
+
+          $manifest = Join-Path $PWD "vs-publish.json"
+          if (-not (Test-Path $manifest)) {
+            throw "Publish manifest not found at $manifest."
+          }
+
+          $searchRoots = @(
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio",
+            "${env:ProgramFiles}\Microsoft Visual Studio"
+          ) | Where-Object { $_ -and (Test-Path $_) }
+
+          $publisher = $null
+          foreach ($root in $searchRoots) {
+            $publisher = Get-ChildItem -Path $root -Filter VsixPublisher.exe -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+            if ($publisher) {
+              break
+            }
+          }
+
+          if (-not $publisher) {
+            throw "VsixPublisher.exe was not found on the runner. Use a runner image with the Visual Studio SDK installed."
+          }
+
+          & $publisher publish -payload "${{ steps.verify_vsix.outputs.vsix_path }}" -publishManifest $manifest -personalAccessToken $env:VS_MARKETPLACE_PAT

@@ -97,6 +97,19 @@ public sealed class ContextRelayPackage : AsyncPackage
         dte?.ItemOperations?.OpenFile(filePath);
     }
 
+    internal async Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default)
+    {
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        var dte = await GetServiceAsync(typeof(DTE)).ConfigureAwait(true) as DTE2;
+        if (dte is null)
+        {
+            return false;
+        }
+
+        return TryExecuteCommand(dte, "View.GitHubCopilotChat") ||
+            TryExecuteCommand(dte, "GitHub.Copilot.OpenCopilotChat");
+    }
+
     internal async Task ShowContextRelayToolWindowAsync(bool focusSearch)
     {
         await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
@@ -110,6 +123,25 @@ public sealed class ContextRelayPackage : AsyncPackage
         if (focusSearch && window.Content is ContextRelayToolWindowControl control)
         {
             control.FocusSearchBox();
+        }
+    }
+
+    private static bool TryExecuteCommand(DTE2 dte, string commandName)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        try
+        {
+            dte.ExecuteCommand(commandName);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (COMException)
+        {
+            return false;
         }
     }
 }

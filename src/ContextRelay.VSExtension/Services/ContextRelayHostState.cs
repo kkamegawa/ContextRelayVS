@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.SharedStore;
+using ContextRelay.VSExtension.ToolWindows;
 
 namespace ContextRelay.VSExtension.Services;
 
@@ -9,9 +10,9 @@ internal sealed class ContextRelayHostState
 {
     public string QueryText { get; set; } = string.Empty;
 
-    public string HelpText { get; set; } = "Type a query to search Microsoft 365 content.";
+    public string HelpText { get; set; } = ContextRelayLocalizedStrings.GenericHelpText;
 
-    public string StatusMessage { get; set; } = "ContextRelay is ready.";
+    public string StatusMessage { get; set; } = ContextRelayLocalizedStrings.ReadyStatus;
 
     public string? SignedInUser { get; set; }
 

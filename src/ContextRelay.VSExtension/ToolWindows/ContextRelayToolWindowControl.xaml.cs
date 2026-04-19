@@ -7,19 +7,22 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.SharedStore;
-using Microsoft.VisualStudio.Shell;
 using ContextRelay.VSExtension.Services;
+using Microsoft.VisualStudio.Shell;
 
 namespace ContextRelay.VSExtension.ToolWindows;
 
 public sealed partial class ContextRelayToolWindowControl : UserControl, INotifyPropertyChanged
 {
     private readonly ContextRelayHost host;
+    private bool isApplyingState;
     private bool isBusy;
+    private bool isCommandPopupOpen;
     private string queryText = string.Empty;
-    private string helpText = "Type a query to search Microsoft 365 content.";
-    private string statusMessage = "ContextRelay is ready.";
-    private string signedInUserText = "Not signed in.";
+    private string helpText = ContextRelayLocalizedStrings.GenericHelpText;
+    private string statusMessage = ContextRelayLocalizedStrings.ReadyStatus;
+    private string signedInUserText = ContextRelayLocalizedStrings.SignedOutText;
+    private SlashCommandSuggestion? selectedCommandSuggestion;
 
     internal ContextRelayToolWindowControl(ContextRelayHost host)
     {
@@ -39,6 +42,50 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     public ObservableCollection<SharedChatHistoryItem> ChatHistory { get; } = new();
 
+    public ObservableCollection<SlashCommandSuggestion> CommandSuggestions { get; } = new();
+
+    public string GenerateHandoffButtonText => ContextRelayLocalizedStrings.GenerateHandoffButtonText;
+
+    public string CopyPromptButtonText => ContextRelayLocalizedStrings.CopyPromptButtonText;
+
+    public string OpenHandoffButtonText => ContextRelayLocalizedStrings.OpenHandoffButtonText;
+
+    public string OpenCopilotButtonText => ContextRelayLocalizedStrings.OpenCopilotButtonText;
+
+    public string ClearChatButtonText => ContextRelayLocalizedStrings.ClearChatButtonText;
+
+    public string ClearSnippetsButtonText => ContextRelayLocalizedStrings.ClearSnippetsButtonText;
+
+    public string ClearCacheButtonText => ContextRelayLocalizedStrings.ClearCacheButtonText;
+
+    public string SettingsButtonText => ContextRelayLocalizedStrings.SettingsButtonText;
+
+    public string DebugLogButtonText => ContextRelayLocalizedStrings.DebugLogButtonText;
+
+    public string SearchButtonText => ContextRelayLocalizedStrings.SearchButtonText;
+
+    public string SearchResultsHeaderText => ContextRelayLocalizedStrings.SearchResultsHeaderText;
+
+    public string SnippetsHeaderText => ContextRelayLocalizedStrings.SnippetsHeaderText;
+
+    public string ChatHistoryHeaderText => ContextRelayLocalizedStrings.ChatHistoryHeaderText;
+
+    public string SearchToolTipText => ContextRelayLocalizedStrings.SearchToolTip;
+
+    public string PinButtonText => ContextRelayLocalizedStrings.PinButtonText;
+
+    public string OpenButtonText => ContextRelayLocalizedStrings.OpenButtonText;
+
+    public string DeleteButtonText => ContextRelayLocalizedStrings.DeleteButtonText;
+
+    public string CopyMenuText => ContextRelayLocalizedStrings.CopyMenuText;
+
+    public string AppendToHandoffMenuText => ContextRelayLocalizedStrings.AppendToHandoffMenuText;
+
+    public string OpenInBrowserMenuText => ContextRelayLocalizedStrings.OpenInBrowserMenuText;
+
+    public string CommandPopupHeaderText => ContextRelayLocalizedStrings.CommandPopupHeaderText;
+
     public string QueryText
     {
         get => queryText;
@@ -51,6 +98,11 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
             queryText = value;
             OnPropertyChanged(nameof(QueryText));
+            if (!isApplyingState)
+            {
+                UpdateCommandSuggestions();
+                UpdateTransientHelpText();
+            }
         }
     }
 
@@ -99,6 +151,40 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
         }
     }
 
+    public bool IsCommandPopupOpen
+    {
+        get => isCommandPopupOpen;
+        private set
+        {
+            if (isCommandPopupOpen == value)
+            {
+                return;
+            }
+
+            isCommandPopupOpen = value;
+            OnPropertyChanged(nameof(IsCommandPopupOpen));
+        }
+    }
+
+    public SlashCommandSuggestion? SelectedCommandSuggestion
+    {
+        get => selectedCommandSuggestion;
+        set
+        {
+            if (ReferenceEquals(selectedCommandSuggestion, value))
+            {
+                return;
+            }
+
+            selectedCommandSuggestion = value;
+            OnPropertyChanged(nameof(SelectedCommandSuggestion));
+            if (!isApplyingState && IsCommandPopupOpen)
+            {
+                UpdateTransientHelpText();
+            }
+        }
+    }
+
     public bool IsNotBusy => !isBusy;
 
     public void FocusSearchBox()
@@ -141,6 +227,7 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
     private async Task SubmitAsync()
     {
         var query = QueryText;
+        CloseCommandPopup();
         await RunBusyAsync(async delegate
         {
             var state = await host.SubmitQueryAsync(query).ConfigureAwait(false);
@@ -171,16 +258,33 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     private void ApplyState(ContextRelayHostState state)
     {
-        QueryText = state.QueryText;
-        HelpText = state.HelpText;
-        StatusMessage = state.StatusMessage;
-        SignedInUserText = string.IsNullOrWhiteSpace(state.SignedInUser)
-            ? "Not signed in. Configure Client ID under Tools > Options > ContextRelay."
-            : $"Signed in as {state.SignedInUser}";
+        isApplyingState = true;
+        try
+        {
+            QueryText = state.QueryText;
+            HelpText = state.HelpText;
+            StatusMessage = state.StatusMessage;
+            var signedInUser = state.SignedInUser;
+            if (string.IsNullOrWhiteSpace(signedInUser))
+            {
+                SignedInUserText = ContextRelayLocalizedStrings.SignedOutText;
+            }
+            else
+            {
+                SignedInUserText = ContextRelayLocalizedStrings.GetSignedInUserText(signedInUser!);
+            }
 
-        ReplaceItems(SearchResults, state.SearchResults);
-        ReplaceItems(Snippets, state.Snippets);
-        ReplaceItems(ChatHistory, state.ChatHistory);
+            ReplaceItems(SearchResults, state.SearchResults);
+            ReplaceItems(Snippets, state.Snippets);
+            ReplaceItems(ChatHistory, state.ChatHistory);
+            ReplaceItems(CommandSuggestions, Array.Empty<SlashCommandSuggestion>());
+            SelectedCommandSuggestion = null;
+            IsCommandPopupOpen = false;
+        }
+        finally
+        {
+            isApplyingState = false;
+        }
     }
 
     private static void ReplaceItems<T>(ObservableCollection<T> target, System.Collections.Generic.IEnumerable<T> items)
@@ -194,6 +298,34 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     private void SearchTextBox_KeyDown(object sender, KeyEventArgs e)
     {
+        if (IsCommandPopupOpen)
+        {
+            switch (e.Key)
+            {
+                case Key.Down:
+                    MoveCommandSelection(1);
+                    e.Handled = true;
+                    return;
+                case Key.Up:
+                    MoveCommandSelection(-1);
+                    e.Handled = true;
+                    return;
+                case Key.Tab:
+                case Key.Enter:
+                    if (ApplySelectedCommandSuggestion())
+                    {
+                        e.Handled = true;
+                        return;
+                    }
+
+                    break;
+                case Key.Escape:
+                    CloseCommandPopup();
+                    e.Handled = true;
+                    return;
+            }
+        }
+
         if (e.Key == Key.Enter)
         {
             e.Handled = true;
@@ -204,6 +336,14 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
     private void SearchButton_Click(object sender, RoutedEventArgs e)
     {
         _ = SubmitAsync();
+    }
+
+    private void CommandSuggestionsListBox_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (ApplySelectedCommandSuggestion())
+        {
+            e.Handled = true;
+        }
     }
 
     private void GenerateHandoffButton_Click(object sender, RoutedEventArgs e)
@@ -257,15 +397,31 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     private void PinResultButton_Click(object sender, RoutedEventArgs e)
     {
-        if (((FrameworkElement)sender).Tag is ContextItem item)
+        if (TryGetTag(sender, out ContextItem? item) && item is not null)
         {
             _ = RunBusyAsync(async () => await host.PinSnippetAsync(item).ConfigureAwait(false));
         }
     }
 
+    private void CopyResultMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetTag(sender, out ContextItem? item) && item is not null)
+        {
+            _ = RunBusyAsync(async () => await host.CopyResultToClipboardAsync(item).ConfigureAwait(false));
+        }
+    }
+
+    private void AppendResultMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetTag(sender, out ContextItem? item) && item is not null)
+        {
+            _ = RunBusyAsync(async () => await host.AppendResultToHandoffAsync(item).ConfigureAwait(false));
+        }
+    }
+
     private void OpenResultButton_Click(object sender, RoutedEventArgs e)
     {
-        if (((FrameworkElement)sender).Tag is ContextItem item)
+        if (TryGetTag(sender, out ContextItem? item) && item is not null)
         {
             host.OpenExternalUrl(item.Url);
         }
@@ -273,7 +429,7 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     private void OpenSnippetButton_Click(object sender, RoutedEventArgs e)
     {
-        if (((FrameworkElement)sender).Tag is SharedSnippetItem item)
+        if (TryGetTag(sender, out SharedSnippetItem? item) && item is not null)
         {
             host.OpenExternalUrl(item.SourceUrl);
         }
@@ -281,10 +437,77 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     private void DeleteSnippetButton_Click(object sender, RoutedEventArgs e)
     {
-        if (((FrameworkElement)sender).Tag is SharedSnippetItem item)
+        if (TryGetTag(sender, out SharedSnippetItem? item) && item is not null)
         {
             _ = RunBusyAsync(async () => await host.DeleteSnippetAsync(item.Id).ConfigureAwait(false));
         }
+    }
+
+    private void MoveCommandSelection(int delta)
+    {
+        if (CommandSuggestions.Count == 0)
+        {
+            return;
+        }
+
+        var currentIndex = SelectedCommandSuggestion is null
+            ? -1
+            : CommandSuggestions.IndexOf(SelectedCommandSuggestion);
+        var nextIndex = currentIndex + delta;
+        if (nextIndex < 0)
+        {
+            nextIndex = CommandSuggestions.Count - 1;
+        }
+        else if (nextIndex >= CommandSuggestions.Count)
+        {
+            nextIndex = 0;
+        }
+
+        SelectedCommandSuggestion = CommandSuggestions[nextIndex];
+        CommandSuggestionsListBox.ScrollIntoView(SelectedCommandSuggestion);
+    }
+
+    private bool ApplySelectedCommandSuggestion()
+    {
+        if (SelectedCommandSuggestion is null)
+        {
+            return false;
+        }
+
+        QueryText = $"{SelectedCommandSuggestion.Name} ";
+        CloseCommandPopup();
+        SearchTextBox.Focus();
+        SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+        return true;
+    }
+
+    private void UpdateCommandSuggestions()
+    {
+        var suggestions = ContextRelayLocalizedStrings.GetCommandSuggestions(QueryText);
+        ReplaceItems(CommandSuggestions, suggestions);
+        SelectedCommandSuggestion = CommandSuggestions.Count > 0 ? CommandSuggestions[0] : null;
+        IsCommandPopupOpen = CommandSuggestions.Count > 0;
+    }
+
+    private void UpdateTransientHelpText()
+    {
+        HelpText = IsCommandPopupOpen && SelectedCommandSuggestion is not null
+            ? SelectedCommandSuggestion.Description
+            : ContextRelayLocalizedStrings.GetHelpTextForQuery(QueryText);
+    }
+
+    private void CloseCommandPopup()
+    {
+        ReplaceItems(CommandSuggestions, Array.Empty<SlashCommandSuggestion>());
+        SelectedCommandSuggestion = null;
+        IsCommandPopupOpen = false;
+    }
+
+    private static bool TryGetTag<T>(object sender, out T? item)
+        where T : class
+    {
+        item = (sender as FrameworkElement)?.Tag as T;
+        return item is not null;
     }
 
     private void OnPropertyChanged(string propertyName)

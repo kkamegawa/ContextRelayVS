@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             x:Name="RootControl"
              mc:Ignorable="d">
     <Grid Margin="12">
         <Grid.RowDefinitions>
@@ -14,15 +15,15 @@
         </Grid.RowDefinitions>
 
         <WrapPanel Grid.Row="0" Margin="0,0,0,8">
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Generate handoff" Click="GenerateHandoffButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Copy prompt" Click="CopyPromptButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Open handoff" Click="OpenHandoffButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Open Copilot" Click="OpenCopilotButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Clear chat" Click="ClearChatButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Clear snippets" Click="ClearSnippetsButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Clear cache" Click="ClearCacheButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Settings" Click="SettingsButton_Click" IsEnabled="{Binding IsNotBusy}" />
-            <Button Margin="0,0,8,8" Padding="12,4" Content="Debug log" Click="DebugLogButton_Click" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding GenerateHandoffButtonText}" Click="GenerateHandoffButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding CopyPromptButtonText}" Click="CopyPromptButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding OpenHandoffButtonText}" Click="OpenHandoffButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding OpenCopilotButtonText}" Click="OpenCopilotButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding ClearChatButtonText}" Click="ClearChatButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding ClearSnippetsButtonText}" Click="ClearSnippetsButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding ClearCacheButtonText}" Click="ClearCacheButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding SettingsButtonText}" Click="SettingsButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Margin="0,0,8,8" Padding="12,4" Content="{Binding DebugLogButtonText}" Click="DebugLogButton_Click" />
         </WrapPanel>
 
         <Grid Grid.Row="1" Margin="0,0,0,8">
@@ -36,9 +37,44 @@
                      Margin="0,0,8,0"
                      Padding="8,6"
                      Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
-                     ToolTip="Use /mail /teams /sharepoint /onedrive /all /ask /clear"
+                     ToolTip="{Binding SearchToolTipText}"
                      KeyDown="SearchTextBox_KeyDown" />
-            <Button Grid.Column="1" Padding="16,6" Content="Search" Click="SearchButton_Click" IsEnabled="{Binding IsNotBusy}" />
+            <Button Grid.Column="1" Padding="16,6" Content="{Binding SearchButtonText}" Click="SearchButton_Click" IsEnabled="{Binding IsNotBusy}" />
+
+            <Popup IsOpen="{Binding IsCommandPopupOpen}"
+                   PlacementTarget="{Binding ElementName=SearchTextBox}"
+                   Placement="Bottom"
+                   StaysOpen="True"
+                   AllowsTransparency="True">
+                <Border Width="{Binding ActualWidth, ElementName=SearchTextBox}"
+                        Margin="0,4,0,0"
+                        Padding="0"
+                        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                        BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                        BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Margin="8,6,8,4"
+                                   FontWeight="SemiBold"
+                                   Opacity="0.8"
+                                   Text="{Binding CommandPopupHeaderText}" />
+                        <ListBox x:Name="CommandSuggestionsListBox"
+                                 MaxHeight="220"
+                                 BorderThickness="0"
+                                 ItemsSource="{Binding CommandSuggestions}"
+                                 SelectedItem="{Binding SelectedCommandSuggestion, Mode=TwoWay}"
+                                 PreviewMouseLeftButtonUp="CommandSuggestionsListBox_PreviewMouseLeftButtonUp">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="8,4">
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                        <TextBlock Margin="0,2,0,0" Opacity="0.8" Text="{Binding Description}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+            </Popup>
         </Grid>
 
         <StackPanel Grid.Row="2" Margin="0,0,0,8">
@@ -47,11 +83,31 @@
             <TextBlock Margin="0,2,0,0" Text="{Binding SignedInUserText}" TextWrapping="Wrap" Opacity="0.8" />
         </StackPanel>
 
-        <GroupBox Grid.Row="3" Header="Search results" Margin="0,0,0,8">
+        <GroupBox Grid.Row="3" Header="{Binding SearchResultsHeaderText}" Margin="0,0,0,8">
             <ListBox ItemsSource="{Binding SearchResults}">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="#33000000">
+                        <Border Padding="8"
+                                BorderThickness="0,0,0,1"
+                                BorderBrush="#33000000"
+                                Tag="{Binding RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{Binding PlacementTarget.Tag.PinButtonText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Click="PinResultButton_Click" />
+                                    <MenuItem Header="{Binding PlacementTarget.Tag.CopyMenuText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Click="CopyResultMenuItem_Click" />
+                                    <MenuItem Header="{Binding PlacementTarget.Tag.AppendToHandoffMenuText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Click="AppendResultMenuItem_Click" />
+                                    <Separator />
+                                    <MenuItem Header="{Binding PlacementTarget.Tag.OpenInBrowserMenuText, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Tag="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Click="OpenResultButton_Click" />
+                                </ContextMenu>
+                            </Border.ContextMenu>
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -65,8 +121,15 @@
                                 <TextBlock Grid.Row="1" Margin="0,4,0,0" Text="{Binding Snippet}" TextWrapping="Wrap" />
                                 <StackPanel Grid.Row="2" Margin="0,6,0,0" Orientation="Horizontal">
                                     <TextBlock Margin="0,0,12,0" Text="{Binding Timestamp}" Opacity="0.7" />
-                                    <Button Margin="0,0,8,0" Padding="8,2" Content="Pin" Tag="{Binding}" Click="PinResultButton_Click" />
-                                    <Button Padding="8,2" Content="Open" Tag="{Binding}" Click="OpenResultButton_Click" />
+                                    <Button Margin="0,0,8,0"
+                                            Padding="8,2"
+                                            Content="{Binding PinButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Tag="{Binding}"
+                                            Click="PinResultButton_Click" />
+                                    <Button Padding="8,2"
+                                            Content="{Binding OpenButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Tag="{Binding}"
+                                            Click="OpenResultButton_Click" />
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -81,7 +144,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <GroupBox Grid.Column="0" Header="Pinned snippets" Margin="0,0,8,0">
+            <GroupBox Grid.Column="0" Header="{Binding SnippetsHeaderText}" Margin="0,0,8,0">
                 <ListBox ItemsSource="{Binding Snippets}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -91,8 +154,15 @@
                                     <TextBlock Margin="0,2,0,0" Text="{Binding Snippet}" TextWrapping="Wrap" />
                                     <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
                                         <TextBlock Margin="0,0,12,0" Text="{Binding Source}" Opacity="0.75" />
-                                        <Button Margin="0,0,8,0" Padding="8,2" Content="Open" Tag="{Binding}" Click="OpenSnippetButton_Click" />
-                                        <Button Padding="8,2" Content="Delete" Tag="{Binding}" Click="DeleteSnippetButton_Click" />
+                                        <Button Margin="0,0,8,0"
+                                                Padding="8,2"
+                                                Content="{Binding OpenButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Tag="{Binding}"
+                                                Click="OpenSnippetButton_Click" />
+                                        <Button Padding="8,2"
+                                                Content="{Binding DeleteButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Tag="{Binding}"
+                                                Click="DeleteSnippetButton_Click" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -101,7 +171,7 @@
                 </ListBox>
             </GroupBox>
 
-            <GroupBox Grid.Column="1" Header="Shared chat history">
+            <GroupBox Grid.Column="1" Header="{Binding ChatHistoryHeaderText}">
                 <ListBox ItemsSource="{Binding ChatHistory}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
