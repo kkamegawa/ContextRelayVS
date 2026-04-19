@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Id="ContextRelayVS.kkamegawa.11111111-2222-3333-4444-555555555555" Version="0.1.0" Language="en-US" Publisher="kkamegawa" />
+    <DisplayName>ContextRelay for Visual Studio</DisplayName>
+    <Description xml:space="preserve">Surface Microsoft 365 context (SharePoint, OneDrive, Teams, Mail) in a Visual Studio tool window. Companion to the VS Code extension ContextRelay.</Description>
+    <MoreInfo>https://github.com/kkamegawa/ContextRelayVS</MoreInfo>
+    <License>..\..\LICENSE</License>
+    <GettingStartedGuide>..\..\README.md</GettingStartedGuide>
+    <Tags>copilot;github-copilot;microsoft-365;graph;teams;sharepoint;onedrive;outlook;handoff;productivity</Tags>
+    <Preview>true</Preview>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0, 19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0, 19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0, 19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName=".NET Framework" d:Source="Manual" Version="[4.7.2,)" />
+  </Dependencies>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,19.0)" DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <!-- Filled in during the vsix-skeleton task -->
+  </Assets>
+</PackageManifest>

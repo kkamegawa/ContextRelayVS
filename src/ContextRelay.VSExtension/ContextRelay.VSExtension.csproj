@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  VSIX project skeleton.
+
+  The VSIX project system still relies on MSBuild imports provided by the
+  Visual Studio SDK, so the final csproj will be filled in during the
+  `vsix-skeleton` task once the Visual Studio SDK build tools are present.
+
+  TODO (vsix-skeleton):
+  - Import $(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets
+  - Set <GeneratePkgDefFile>true</GeneratePkgDefFile>
+  - Add <None Include="source.extension.vsixmanifest" />
+  - Reference ContextRelay.Core and ContextRelay.UI
+  - Add Microsoft.VisualStudio.Sdk, Microsoft.VSSDK.BuildTools
+  - Target .NET Framework 4.7.2
+-->
+<Project ToolsVersion="Current" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{B1000001-0000-0000-0000-000000000001}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ContextRelay.VSExtension</RootNamespace>
+    <AssemblyName>ContextRelay.VSExtension</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+    <GeneratePkgDefFile>true</GeneratePkgDefFile>
+    <CreateVsixContainer>true</CreateVsixContainer>
+    <DeployExtension Condition=" '$(IsCrossTargetingBuild)' == 'true' ">false</DeployExtension>
+  </PropertyGroup>
+
+  <!-- <Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" /> -->
+</Project>

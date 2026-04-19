@@ -1,0 +1,34 @@
+## Visual Studio / .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+*.vsidx
+*.vspx
+*.vssscc
+*.psess
+*.vsp
+*.VC.db
+*.VC.VC.opendb
+
+## VSIX build output
+*.vsix
+*.vsidx
+
+## Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+## Node (for potential tooling)
+node_modules/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Local ContextRelay artifacts (must never be committed)
+.contextrelay/
