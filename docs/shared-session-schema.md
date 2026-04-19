@@ -36,6 +36,28 @@ On Linux (VS Code only): `${XDG_DATA_HOME:-~/.local/share}/ContextRelay/shared/`
 
 Permissions: the store MUST remain under the user's profile directory with OS-default ACLs. The VS extension and VS Code extension MUST NOT change ACLs.
 
+## 2.1 File: `schema.json`
+
+`schema.json` is a lightweight metadata file written whenever either extension updates the shared store.
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-04-19T12:34:56.789Z",
+  "updatedBy": "vs",
+  "producerVersion": "0.1.0",
+  "files": [
+    "schema.json",
+    "snippets.json",
+    "chat-history.json",
+    "handoff-index.json"
+  ]
+}
+```
+
+- `files` is the authoritative list of managed files under the shared directory.
+- Unknown top-level fields in `schema.json` MUST be preserved by future writers, just like the data envelopes.
+
 ## 3. Common envelope
 
 Every JSON file in the shared store has this shape:
@@ -143,7 +165,7 @@ To make `contentHash` deterministic across platforms and serializers:
 1. Acquire an exclusive lock on `<name>.lock` in the same directory (`FileShare.None` in .NET, `proper-lockfile` in Node). Retry up to 1 second with jitter; then fail.
 2. Write the new payload to `<name>.tmp.<pid>.<rand>`.
 3. `fsync` the temp file.
-4. `File.Move(tmp, target, overwrite: true)` / `fs.renameSync(tmp, target)`.
+4. Replace the target atomically. On .NET this means `File.Replace(tmp, target, ...)` when the target already exists and `File.Move(tmp, target)` on first write; on Node it is `fs.renameSync(tmp, target)`.
 5. Release the lock.
 
 Readers open the target file with read-share; on transient rename collisions they retry up to 3 times with 50 ms backoff before treating the file as corrupt.

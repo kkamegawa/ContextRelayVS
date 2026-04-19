@@ -10,13 +10,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Planned dependencies (pinned during auth-msal / graph-client tasks) -->
-    <!-- <PackageReference Include="Microsoft.Identity.Client" Version="*" /> -->
-    <!-- <PackageReference Include="Microsoft.Identity.Client.Broker" Version="*" /> -->
-    <!-- <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="*" /> -->
-    <!-- <PackageReference Include="Microsoft.Graph" Version="5.*" /> -->
-    <!-- <PackageReference Include="Microsoft.Graph.Beta" Version="5.*" /> -->
-    <!-- <PackageReference Include="System.Text.Json" Version="*" /> -->
+    <PackageReference Include="Azure.Core" Version="1.44.1" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.83.3" />
+    <PackageReference Include="Microsoft.Identity.Client.Broker" Version="4.83.3" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.83.3" />
+    <PackageReference Include="Microsoft.Graph" Version="5.95.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
 </Project>

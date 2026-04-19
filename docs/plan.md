@@ -131,6 +131,8 @@ See [`shared-session-schema.md`](shared-session-schema.md) for the authoritative
 - `FileSystemWatcher` (VS) / `fs.watch` (VS Code) pushes changes across processes with a 200 ms debounce.
 - Conflict policy: last-writer-wins with `id` + `updatedAt`. Deletes are tombstoned for 7 days.
 - VS Code side migration: on first run after adopting the shared store, existing `globalState` snippets are migrated once and the migration flag is persisted.
+- Every shared-store mutation also refreshes `schema.json`, and writers preserve unknown top-level fields so future additive schema changes are not stripped accidentally.
+- `handoff-index.json` values are canonicalized on write: `workspaceRoot` is normalized to native path form, and document paths use `/` separators.
 
 ## 12. Logging
 
@@ -140,14 +142,16 @@ See [`shared-session-schema.md`](shared-session-schema.md) for the authoritative
 
 ## 13. Packaging / CI
 
-- VSIX targeting `[17.0,18.0)` and `[18.0,19.0)` (VS 2026).
-- GitHub Actions (`windows-latest` + `msbuild`) builds VSIX, runs tests, and publishes via `VsixPublisher`.
-- `dotnet list package --vulnerable --include-transitive` gates each build.
+- VSIX targeting `[17.0,19.0)` with an installable manifest, pkgdef generation, compiled VSCT menu resources, and local `LICENSE.txt` packaging.
+- SDK-style VSIX packaging is enabled through `Microsoft.VsSDK.targets` imported via `CustomAfterMicrosoftCSharpTargets`, with `GeneratePkgDefFile=true` and CLI deployment disabled.
+- GitHub Actions (`windows-latest`) restores, runs the vulnerability audit, builds the solution, runs Core tests, and uploads the generated `.vsix` artifact.
+- The `vsix-skeleton` milestone is complete once the `.vsix` artifact is emitted by CLI build and the remaining work is only manual host validation.
 
 ## 14. Testing
 
 - xUnit for Core. WPF ViewModels are pure POCOs and unit-tested.
-- Manual E2E checklist (`docs/e2e_checklist.md`, to be authored) run against `/rootsuffix Exp` for VS 2022 and VS 2026.
+- Manual E2E checklist lives in `docs/e2e_checklist.md` and is intended for `/rootsuffix Exp` on VS 2022 and VS 2026.
+- Shared-store tests explicitly cover `schema.json` emission, forward-compatible unknown-field preservation, path canonicalization, and corrupt-file quarantine behavior.
 
 ## 15. Risks
 
@@ -155,7 +159,29 @@ See [`shared-session-schema.md`](shared-session-schema.md) for the authoritative
 2. `/beta` Graph APIs (Retrieval / Chat) may change — gate under a feature flag and surface clear errors.
 3. Copilot-for-VS has no public API for direct prompt injection — soft handoff via clipboard + command invocation.
 4. Shared-store concurrency with the VS Code extension — test carefully with both running simultaneously.
+5. A buildable assembly is not sufficient for release readiness; CI must prove that the VSIX artifact, pkgdef/menu registration, and `/rootsuffix Exp` load path all work on supported VS versions.
 
 ## 16. Todo tracking
 
 Initial todos are seeded in the session SQL store. Update this plan whenever high-level design decisions change; keep low-level work items in SQL.
+
+## 17. GitHub issue breakdown
+
+- **#10** Implement Core authentication stack for ContextRelayVS
+  - **#1** auth scope catalog and options model
+  - **#2** MSAL.NET + WAM auth provider
+  - **#3** DPAPI / MsalCacheHelper token cache
+- **#4** slash command router
+- **#5** shared snippet repository integration
+- **#6** handoff document generator
+- **#7** TTL + LRU cache service
+- **#8** VS Code extension shared-store migration
+- **#11** finish VSIX packaging and install validation
+  - **#9** installable VSIX assets + Experimental Instance validation
+
+## 18. Current implementation status
+
+- **Implemented end-to-end in-repo**: shared session store, schema docs, MSAL auth core, slash-command router, shared snippet repository, handoff document generator, TTL + LRU cache, Graph/retrieval/chat adapters, WPF tool window UI, VS commands, options pages, logging panes, and installable VSIX packaging.
+- **Shared-store behavior covered**: schema emission, unknown-field preservation, handoff path normalization, tombstone-aware snippet merge, retry on Windows atomic replace failures.
+- **Repository readiness improved**: README / README_ja now reflect implementation status, `docs/e2e_checklist.md` exists, and CI uploads a built VSIX artifact.
+- **Still missing for release readiness**: `/rootsuffix Exp` validation on supported VS versions, marketplace publish/sign flow, tenant-admin quickstart polishing, and the out-of-repo VS Code shared-store migration PR.

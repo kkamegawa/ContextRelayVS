@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ContextRelayVS.sln
+
+      - name: Audit packages
+        run: dotnet list ContextRelayVS.sln package --vulnerable --include-transitive
+
+      - name: Build solution
+        run: dotnet build ContextRelayVS.sln -c Release --no-restore -v minimal
+
+      - name: Test core
+        run: dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj -c Release --no-build -v minimal
+
+      - name: Verify VSIX exists
+        shell: pwsh
+        run: |
+          $vsix = Get-ChildItem -Path .\src\ContextRelay.VSExtension\bin\Release\net472 -Filter *.vsix
+          if (-not $vsix) {
+            throw "VSIX artifact was not generated."
+          }
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ContextRelayVS-vsix
+          path: src\ContextRelay.VSExtension\bin\Release\net472\*.vsix
