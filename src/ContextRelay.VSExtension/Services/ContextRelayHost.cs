@@ -217,7 +217,7 @@ internal sealed class ContextRelayHost : IDisposable
             var hydrationResult = await TryHydrateContextItemForHandoffAsync(item, cancellationToken).ConfigureAwait(false);
             var metadata = new Dictionary<string, JsonElement>
             {
-                ["contextItemKey"] = JsonDocument.Parse($"\"{itemKey}\"").RootElement.Clone()
+                ["contextItemKey"] = JsonSerializer.SerializeToElement(itemKey)
             };
             await snippetRepository.SaveAsync(new SaveSnippetRequest
             {
@@ -987,10 +987,56 @@ internal sealed class ContextRelayHost : IDisposable
         {
             using (response)
             {
-                await graphClient.ReadJsonAsync<JsonDocument>(response, cancellationToken).ConfigureAwait(false);
-            }
+                JsonDocument? errorDocument = null;
+                try
+                {
+                    var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(responseBody))
+                    {
+                        errorDocument = JsonDocument.Parse(responseBody);
+                    }
+                }
+                catch (JsonException)
+                {
+                }
 
-            throw new InvalidOperationException("The drive item content request did not complete successfully.");
+                using (errorDocument)
+                {
+                    string? graphErrorCode = null;
+                    string? graphErrorMessage = null;
+                    if (errorDocument is not null &&
+                        errorDocument.RootElement.ValueKind == JsonValueKind.Object &&
+                        errorDocument.RootElement.TryGetProperty("error", out var errorElement) &&
+                        errorElement.ValueKind == JsonValueKind.Object)
+                    {
+                        if (errorElement.TryGetProperty("code", out var codeElement) &&
+                            codeElement.ValueKind == JsonValueKind.String)
+                        {
+                            graphErrorCode = codeElement.GetString();
+                        }
+
+                        if (errorElement.TryGetProperty("message", out var messageElement) &&
+                            messageElement.ValueKind == JsonValueKind.String)
+                        {
+                            graphErrorMessage = messageElement.GetString();
+                        }
+                    }
+
+                    var statusDescription = $"{(int)response.StatusCode} {response.ReasonPhrase}".Trim();
+                    var message = $"The drive item content request did not complete successfully. URL: {url}. HTTP status: {statusDescription}.";
+                    if (!string.IsNullOrWhiteSpace(graphErrorCode))
+                    {
+                        message += $" Graph error code: {graphErrorCode}.";
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(graphErrorMessage))
+                    {
+                        message += $" Graph error message: {graphErrorMessage}.";
+                    }
+
+                    throw new InvalidOperationException(message);
+                }
+            }
         }
 
         return response;

@@ -270,7 +270,56 @@ internal static class ContextRelayLocalizedStrings
             buffer[writeIndex++] = char.IsWhiteSpace(character) ? '_' : character;
         }
 
-        return writeIndex == 0 ? "response" : new string(buffer, 0, writeIndex);
+        var sanitized = writeIndex == 0 ? string.Empty : new string(buffer, 0, writeIndex);
+        sanitized = sanitized.TrimEnd(' ', '.');
+
+        return string.IsNullOrWhiteSpace(sanitized) || IsReservedWindowsFileName(sanitized)
+            ? "response"
+            : sanitized;
+    }
+
+    private static bool IsReservedWindowsFileName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var deviceName = value;
+        var extensionIndex = deviceName.IndexOf('.');
+        if (extensionIndex >= 0)
+        {
+            deviceName = deviceName.Substring(0, extensionIndex);
+        }
+
+        switch (deviceName.ToUpperInvariant())
+        {
+            case "CON":
+            case "PRN":
+            case "AUX":
+            case "NUL":
+            case "COM1":
+            case "COM2":
+            case "COM3":
+            case "COM4":
+            case "COM5":
+            case "COM6":
+            case "COM7":
+            case "COM8":
+            case "COM9":
+            case "LPT1":
+            case "LPT2":
+            case "LPT3":
+            case "LPT4":
+            case "LPT5":
+            case "LPT6":
+            case "LPT7":
+            case "LPT8":
+            case "LPT9":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static string NormalizeExtension(string extension)

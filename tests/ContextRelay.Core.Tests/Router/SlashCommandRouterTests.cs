@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ContextRelay.Core.Router;
 using Xunit;
 
@@ -84,5 +85,21 @@ public sealed class SlashCommandRouterTests
         var commands = SlashCommandRouter.GetSupportedCommands();
 
         Assert.Contains("/connectors", commands);
+    }
+
+    [Fact]
+    public void GetSupportedCommands_DoesNotExposeMutableArrayState()
+    {
+        var commands = SlashCommandRouter.GetSupportedCommands();
+
+        Assert.False(commands is string[]);
+
+        if (commands is IList<string> mutableCommands && !mutableCommands.IsReadOnly)
+        {
+            mutableCommands[0] = "/mutated";
+        }
+
+        Assert.Contains("/mail", SlashCommandRouter.GetSupportedCommands());
+        Assert.DoesNotContain("/mutated", SlashCommandRouter.GetSupportedCommands());
     }
 }

@@ -105,7 +105,7 @@ public static class SlashCommandRouter
 
     public static IReadOnlyList<string> GetSupportedCommands()
     {
-        return SupportedSlashCommands;
+        return new List<string>(SupportedSlashCommands);
     }
 
     private static int FindCommandEnd(string value)
