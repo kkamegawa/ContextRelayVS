@@ -41,7 +41,7 @@ jobs:
           }
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ContextRelayVS-vsix
           path: src\ContextRelay.VSExtension\bin\Release\net472\*.vsix
