@@ -6,6 +6,7 @@ public enum RouteTarget
     Teams,
     SharePoint,
     OneDrive,
+    Connectors,
     All,
     Ask,
     Clear
