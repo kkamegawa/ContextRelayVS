@@ -8,6 +8,7 @@ namespace ContextRelay.VSExtension.Options.Controls;
 public partial class GraphApiOptionsControl : UserControl
 {
     private bool suppressSelectionChanged;
+    private Func<CloudEnvironment, string, string, string>? requiredScopesProvider;
 
     public GraphApiOptionsControl()
     {
@@ -16,7 +17,15 @@ public partial class GraphApiOptionsControl : UserControl
         PopulateCloudEnvironments();
     }
 
-    public Func<CloudEnvironment, string, string, string>? RequiredScopesProvider { get; set; }
+    public Func<CloudEnvironment, string, string, string>? RequiredScopesProvider
+    {
+        get => requiredScopesProvider;
+        set
+        {
+            requiredScopesProvider = value;
+            UpdateRequiredScopes();
+        }
+    }
 
     public CloudEnvironment CloudEnvironment
     {
@@ -141,7 +150,7 @@ public partial class GraphApiOptionsControl : UserControl
 
     private void UpdateRequiredScopes()
     {
-        RequiredScopesTextBox.Text = RequiredScopesProvider?.Invoke(
+        RequiredScopesTextBox.Text = requiredScopesProvider?.Invoke(
             CloudEnvironment,
             CustomGraphEndpointTextBox.Text,
             CustomAuthEndpointTextBox.Text) ?? string.Empty;
