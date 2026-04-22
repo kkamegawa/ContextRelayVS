@@ -10,17 +10,20 @@ namespace ContextRelay.Core.Adapters;
 
 public sealed class GraphHttpClient
 {
-    public const string GraphBase = "https://graph.microsoft.com";
+    public const string DefaultGraphBase = "https://graph.microsoft.com";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient httpClient;
     private readonly IGraphLogger? logger;
 
-    public GraphHttpClient(HttpClient? httpClient = null, IGraphLogger? logger = null)
+    public GraphHttpClient(HttpClient? httpClient = null, IGraphLogger? logger = null, string? baseUrl = null)
     {
         this.httpClient = httpClient ?? new HttpClient();
         this.logger = logger;
+        BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? DefaultGraphBase : baseUrl!.TrimEnd('/');
     }
+
+    public string BaseUrl { get; set; }
 
     public async Task<HttpResponseMessage> SendAsync(
         string url,

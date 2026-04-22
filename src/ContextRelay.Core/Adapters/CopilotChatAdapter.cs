@@ -31,7 +31,7 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
     private async Task<string> CreateConversationAsync(string accessToken, CancellationToken cancellationToken)
     {
         using var response = await graphClient
-            .SendWithRetryAsync($"{GraphHttpClient.GraphBase}/beta/copilot/conversations", accessToken, HttpMethod.Post, "{}", cancellationToken: cancellationToken)
+            .SendWithRetryAsync($"{graphClient.BaseUrl}/beta/copilot/conversations", accessToken, HttpMethod.Post, "{}", cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var data = await graphClient.ReadJsonAsync<CreateConversationResponse>(response, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(data.Id))
@@ -51,7 +51,7 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         });
 
         using var response = await graphClient
-            .SendWithRetryAsync($"{GraphHttpClient.GraphBase}/beta/copilot/conversations/{conversationId}/chat", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
+            .SendWithRetryAsync($"{graphClient.BaseUrl}/beta/copilot/conversations/{conversationId}/chat", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var data = await graphClient.ReadJsonAsync<ChatResponse>(response, cancellationToken).ConfigureAwait(false);
 

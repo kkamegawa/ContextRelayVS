@@ -36,4 +36,44 @@ public sealed class AuthScopeCatalogTests
         Assert.Contains("openid", scopes);
         Assert.Contains("profile", scopes);
     }
+
+    [Fact]
+    public void BuildQualifiedGraphScopes_UsesCustomGraphResource()
+    {
+        var scopes = AuthScopeCatalog.BuildQualifiedGraphScopes(
+            new ContextRelayFeatureOptions { MailEnabled = true, TeamsEnabled = false, SharePointEnabled = false, OneDriveEnabled = false, ChatPreviewEnabled = false },
+            graphResource: "https://graph.microsoft.us");
+
+        Assert.Contains("https://graph.microsoft.us/User.Read", scopes);
+        Assert.Contains("https://graph.microsoft.us/Mail.Read", scopes);
+        Assert.DoesNotContain("https://graph.microsoft.com/User.Read", scopes);
+    }
+
+    [Fact]
+    public void QualifyGraphScope_UsesDefaultResourceWhenNullPassed()
+    {
+        var qualified = AuthScopeCatalog.QualifyGraphScope("User.Read");
+        Assert.Equal("https://graph.microsoft.com/User.Read", qualified);
+    }
+
+    [Fact]
+    public void QualifyGraphScope_UsesCustomResource()
+    {
+        var qualified = AuthScopeCatalog.QualifyGraphScope("User.Read", "https://graph.microsoft.de");
+        Assert.Equal("https://graph.microsoft.de/User.Read", qualified);
+    }
+
+    [Fact]
+    public void QualifyGraphScope_PreservesOidcScopes()
+    {
+        Assert.Equal("offline_access", AuthScopeCatalog.QualifyGraphScope("offline_access", "https://graph.microsoft.us"));
+        Assert.Equal("openid", AuthScopeCatalog.QualifyGraphScope("openid", "https://graph.microsoft.us"));
+    }
+
+    [Fact]
+    public void QualifyGraphScope_PreservesAlreadyQualifiedScopes()
+    {
+        var qualified = AuthScopeCatalog.QualifyGraphScope("https://graph.microsoft.com/User.Read", "https://graph.microsoft.us");
+        Assert.Equal("https://graph.microsoft.com/User.Read", qualified);
+    }
 }

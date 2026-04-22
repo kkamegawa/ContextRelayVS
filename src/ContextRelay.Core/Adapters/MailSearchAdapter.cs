@@ -28,7 +28,7 @@ public sealed class MailSearchAdapter : IContextSearchAdapter
         CancellationToken cancellationToken = default)
     {
         var encoded = Uri.EscapeDataString($"\"{query}\"");
-        var url = $"{GraphHttpClient.GraphBase}/v1.0/me/messages?$search={encoded}&$top={maxResults}";
+        var url = $"{graphClient.BaseUrl}/v1.0/me/messages?$search={encoded}&$top={maxResults}";
 
         using var response = await graphClient
             .SendWithRetryAsync(url, accessToken, HttpMethod.Get, cancellationToken: cancellationToken)

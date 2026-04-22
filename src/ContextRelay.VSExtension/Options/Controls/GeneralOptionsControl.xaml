@@ -1,0 +1,41 @@
+<UserControl x:Class="ContextRelay.VSExtension.Options.Controls.GeneralOptionsControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignWidth="460" d:DesignHeight="360">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="12">
+            <TextBlock x:Name="PageTitleText" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
+
+            <!-- Max results -->
+            <TextBlock x:Name="MaxResultsLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock x:Name="MaxResultsDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+            <TextBox x:Name="MaxResultsTextBox" Width="80" HorizontalAlignment="Left" Padding="4,3" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Output directory -->
+            <TextBlock x:Name="OutputDirectoryLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock x:Name="OutputDirectoryDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+            <TextBox x:Name="OutputDirectoryTextBox" Padding="4,3" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Enable chat preview -->
+            <CheckBox x:Name="EnableChatPreviewCheckBox" Margin="0,0,0,4">
+                <TextBlock x:Name="EnableChatPreviewLabelText" FontWeight="SemiBold" />
+            </CheckBox>
+            <TextBlock x:Name="EnableChatPreviewDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="20,0,0,0" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Enable Graph debug logging -->
+            <CheckBox x:Name="EnableGraphDebugLoggingCheckBox" Margin="0,0,0,4">
+                <TextBlock x:Name="EnableGraphDebugLoggingLabelText" FontWeight="SemiBold" />
+            </CheckBox>
+            <TextBlock x:Name="EnableGraphDebugLoggingDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="20,0,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

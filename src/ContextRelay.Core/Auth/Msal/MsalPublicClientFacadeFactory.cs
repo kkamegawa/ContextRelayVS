@@ -28,12 +28,24 @@ public sealed class MsalPublicClientFacadeFactory : IMsalPublicClientFacadeFacto
 
         Directory.CreateDirectory(cacheConfiguration.CacheDirectory);
 
-        var application = PublicClientApplicationBuilder
+        var builder = PublicClientApplicationBuilder
             .Create(settings.ClientId.Trim())
-            .WithAuthority(AzureCloudInstance.AzurePublic, NormalizeTenant(settings.TenantId))
             .WithDefaultRedirectUri()
-            .WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows))
-            .Build();
+            .WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows));
+
+        var cloudInstance = MapCloudInstance(settings.CloudEnvironment);
+        if (settings.CloudEnvironment == CloudEnvironment.Custom &&
+            !string.IsNullOrWhiteSpace(settings.CustomAuthEndpoint))
+        {
+            var authority = $"{CloudEndpoints.NormalizeEndpoint(settings.CustomAuthEndpoint, CloudEndpoints.GlobalAuth)}/{NormalizeTenant(settings.TenantId)}";
+            builder.WithAuthority(authority);
+        }
+        else
+        {
+            builder.WithAuthority(cloudInstance, NormalizeTenant(settings.TenantId));
+        }
+
+        var application = builder.Build();
 
         try
         {
@@ -59,5 +71,19 @@ public sealed class MsalPublicClientFacadeFactory : IMsalPublicClientFacadeFacto
     private static string NormalizeTenant(string tenantId)
     {
         return string.IsNullOrWhiteSpace(tenantId) ? "organizations" : tenantId.Trim();
+    }
+
+    internal static AzureCloudInstance MapCloudInstance(CloudEnvironment environment)
+    {
+        return environment switch
+        {
+            CloudEnvironment.Global => AzureCloudInstance.AzurePublic,
+            CloudEnvironment.USGovGCCHigh => AzureCloudInstance.AzureUsGovernment,
+            CloudEnvironment.USGovDoD => AzureCloudInstance.AzureUsGovernment,
+            CloudEnvironment.Germany => AzureCloudInstance.AzureGermany,
+            CloudEnvironment.China => AzureCloudInstance.AzureChina,
+            CloudEnvironment.Custom => AzureCloudInstance.AzurePublic,
+            _ => AzureCloudInstance.AzurePublic
+        };
     }
 }
