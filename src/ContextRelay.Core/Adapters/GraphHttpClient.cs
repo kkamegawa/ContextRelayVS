@@ -5,21 +5,30 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.Auth;
 
 namespace ContextRelay.Core.Adapters;
 
 public sealed class GraphHttpClient
 {
-    public const string GraphBase = "https://graph.microsoft.com";
+    public const string DefaultGraphBase = "https://graph.microsoft.com";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient httpClient;
     private readonly IGraphLogger? logger;
+    private string baseUrl = DefaultGraphBase;
 
-    public GraphHttpClient(HttpClient? httpClient = null, IGraphLogger? logger = null)
+    public GraphHttpClient(HttpClient? httpClient = null, IGraphLogger? logger = null, string? baseUrl = null)
     {
         this.httpClient = httpClient ?? new HttpClient();
         this.logger = logger;
+        BaseUrl = baseUrl ?? DefaultGraphBase;
+    }
+
+    public string BaseUrl
+    {
+        get => baseUrl;
+        set => baseUrl = CloudEndpoints.NormalizeEndpoint(value, DefaultGraphBase);
     }
 
     public async Task<HttpResponseMessage> SendAsync(

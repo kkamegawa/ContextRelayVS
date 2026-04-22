@@ -41,7 +41,7 @@ public sealed class TeamsSearchAdapter : IContextSearchAdapter
         });
 
         using var response = await graphClient
-            .SendWithRetryAsync($"{GraphHttpClient.GraphBase}/v1.0/search/query", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
+            .SendWithRetryAsync($"{graphClient.BaseUrl}/v1.0/search/query", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var data = await graphClient.ReadJsonAsync<SearchResponse>(response, cancellationToken).ConfigureAwait(false);
 

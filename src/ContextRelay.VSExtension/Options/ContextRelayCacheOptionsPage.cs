@@ -1,22 +1,47 @@
 using System.ComponentModel;
+using System.Windows;
+using ContextRelay.VSExtension.Options.Controls;
 using Microsoft.VisualStudio.Shell;
 
 namespace ContextRelay.VSExtension.Options;
 
-public sealed class ContextRelayCacheOptionsPage : DialogPage
+public sealed class ContextRelayCacheOptionsPage : UIElementDialogPage
 {
-    [Category("Cache")]
-    [DisplayName("TTL seconds")]
-    [Description("Number of seconds before cached search results expire.")]
+    private CacheOptionsControl? control;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public int TtlSeconds { get; set; } = 300;
 
-    [Category("Cache")]
-    [DisplayName("Max entries")]
-    [Description("Maximum number of search result entries kept in the LRU cache.")]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public int MaxEntries { get; set; } = 200;
 
-    [Category("Cache")]
-    [DisplayName("Persist workspace state")]
-    [Description("Persist the search cache under the current solution's .vs directory.")]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public bool PersistWorkspaceState { get; set; } = true;
+
+    protected override UIElement Child => control ??= new CacheOptionsControl();
+
+    protected override void OnActivate(CancelEventArgs e)
+    {
+        base.OnActivate(e);
+        if (control is null)
+        {
+            return;
+        }
+
+        control.TtlSeconds = TtlSeconds;
+        control.MaxEntries = MaxEntries;
+        control.PersistWorkspaceState = PersistWorkspaceState;
+    }
+
+    protected override void OnApply(PageApplyEventArgs e)
+    {
+        if (e.ApplyBehavior == ApplyKind.Apply && control is not null)
+        {
+            TtlSeconds = control.TtlSeconds;
+            MaxEntries = control.MaxEntries;
+            PersistWorkspaceState = control.PersistWorkspaceState;
+        }
+
+        base.OnApply(e);
+    }
 }

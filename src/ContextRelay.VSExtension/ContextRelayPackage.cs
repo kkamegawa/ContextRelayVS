@@ -18,6 +18,7 @@ namespace ContextRelay.VSExtension;
 [ProvideMenuResource("Menus.ctmenu", 1)]
 [ProvideOptionPage(typeof(ContextRelayGeneralOptionsPage), "ContextRelay", "General", 0, 0, true)]
 [ProvideOptionPage(typeof(ContextRelayAuthenticationOptionsPage), "ContextRelay", "Authentication", 0, 0, true)]
+[ProvideOptionPage(typeof(ContextRelayGraphApiOptionsPage), "ContextRelay", "Graph API", 0, 0, true)]
 [ProvideOptionPage(typeof(ContextRelayCacheOptionsPage), "ContextRelay", "Cache", 0, 0, true)]
 [ProvideOptionPage(typeof(ContextRelayAdaptersOptionsPage), "ContextRelay", "Adapters", 0, 0, true)]
 [ProvideToolWindow(typeof(ContextRelayToolWindow))]
@@ -48,6 +49,7 @@ public sealed class ContextRelayPackage : AsyncPackage
 
         var general = (ContextRelayGeneralOptionsPage)GetDialogPage(typeof(ContextRelayGeneralOptionsPage));
         var auth = (ContextRelayAuthenticationOptionsPage)GetDialogPage(typeof(ContextRelayAuthenticationOptionsPage));
+        var graphApi = (ContextRelayGraphApiOptionsPage)GetDialogPage(typeof(ContextRelayGraphApiOptionsPage));
         var cache = (ContextRelayCacheOptionsPage)GetDialogPage(typeof(ContextRelayCacheOptionsPage));
         var adapters = (ContextRelayAdaptersOptionsPage)GetDialogPage(typeof(ContextRelayAdaptersOptionsPage));
 
@@ -59,6 +61,9 @@ public sealed class ContextRelayPackage : AsyncPackage
             EnableGraphDebugLogging = general.EnableGraphDebugLogging,
             ClientId = auth.ClientId,
             TenantId = auth.TenantId,
+            CloudEnvironment = graphApi.CloudEnvironment,
+            CustomGraphEndpoint = graphApi.CustomGraphEndpoint,
+            CustomAuthEndpoint = graphApi.CustomAuthEndpoint,
             CacheTtlSeconds = cache.TtlSeconds,
             CacheMaxEntries = cache.MaxEntries,
             PersistWorkspaceState = cache.PersistWorkspaceState,

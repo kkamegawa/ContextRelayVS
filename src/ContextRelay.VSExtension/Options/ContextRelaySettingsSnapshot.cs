@@ -16,6 +16,12 @@ internal sealed class ContextRelaySettingsSnapshot
 
     public string TenantId { get; set; } = "organizations";
 
+    public CloudEnvironment CloudEnvironment { get; set; } = CloudEnvironment.Global;
+
+    public string CustomGraphEndpoint { get; set; } = string.Empty;
+
+    public string CustomAuthEndpoint { get; set; } = string.Empty;
+
     public int CacheTtlSeconds { get; set; } = 300;
 
     public int CacheMaxEntries { get; set; } = 200;
@@ -37,7 +43,10 @@ internal sealed class ContextRelaySettingsSnapshot
         return new ContextRelayAuthSettings
         {
             ClientId = ClientId ?? string.Empty,
-            TenantId = string.IsNullOrWhiteSpace(TenantId) ? "organizations" : TenantId
+            TenantId = string.IsNullOrWhiteSpace(TenantId) ? "organizations" : TenantId,
+            CloudEnvironment = CloudEnvironment,
+            CustomGraphEndpoint = CustomGraphEndpoint ?? string.Empty,
+            CustomAuthEndpoint = CustomAuthEndpoint ?? string.Empty
         };
     }
 

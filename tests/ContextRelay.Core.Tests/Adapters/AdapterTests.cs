@@ -16,6 +16,7 @@ public sealed class AdapterTests
     [Fact]
     public async Task MailSearchAdapter_MapsMessagesToContextItems()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = CreateClient("""
             {
               "value": [
@@ -37,7 +38,7 @@ public sealed class AdapterTests
             """);
 
         var adapter = new MailSearchAdapter(new GraphHttpClient(httpClient));
-        var results = await adapter.SearchAsync("token", "budget", 10);
+        var results = await adapter.SearchAsync("token", "budget", 10, cancellationToken);
 
         Assert.Single(results);
         Assert.Equal(ContextSource.Mail, results[0].Source);
@@ -48,6 +49,7 @@ public sealed class AdapterTests
     [Fact]
     public async Task TeamsSearchAdapter_MapsSearchHitsToContextItems()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = CreateClient("""
             {
               "value": [
@@ -73,7 +75,7 @@ public sealed class AdapterTests
             """);
 
         var adapter = new TeamsSearchAdapter(new GraphHttpClient(httpClient));
-        var results = await adapter.SearchAsync("token", "decision", 10);
+        var results = await adapter.SearchAsync("token", "decision", 10, cancellationToken);
 
         Assert.Single(results);
         Assert.Equal("Bob — Sprint Review", results[0].Title);
@@ -83,6 +85,7 @@ public sealed class AdapterTests
     [Fact]
     public async Task RetrievalSearchAdapter_FiltersSharePointAndOneDriveByUrl()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         const string responseJson = """
             {
               "value": [
@@ -122,9 +125,9 @@ public sealed class AdapterTests
         using var oneDriveClient = CreateClient(responseJson);
 
         var sharePointResults = await new RetrievalSearchAdapter(RetrievalDataSource.SharePoint, new GraphHttpClient(sharePointClient))
-            .SearchAsync("token", "architecture", 10);
+            .SearchAsync("token", "architecture", 10, cancellationToken);
         var oneDriveResults = await new RetrievalSearchAdapter(RetrievalDataSource.OneDriveBusiness, new GraphHttpClient(oneDriveClient))
-            .SearchAsync("token", "plan", 10);
+            .SearchAsync("token", "plan", 10, cancellationToken);
 
         Assert.Single(sharePointResults);
         Assert.Equal(ContextSource.SharePoint, sharePointResults[0].Source);
@@ -135,6 +138,7 @@ public sealed class AdapterTests
     [Fact]
     public async Task RetrievalSearchAdapter_MapsExternalItemsToConnectors()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = CreateClient("""
             {
               "retrievalHits": [
@@ -154,7 +158,7 @@ public sealed class AdapterTests
             """);
 
         var adapter = new RetrievalSearchAdapter(RetrievalDataSource.ExternalItem, new GraphHttpClient(httpClient));
-        var results = await adapter.SearchAsync("token", "ticket", 10);
+        var results = await adapter.SearchAsync("token", "ticket", 10, cancellationToken);
 
         Assert.Single(results);
         Assert.Equal(ContextSource.Connectors, results[0].Source);
@@ -165,6 +169,7 @@ public sealed class AdapterTests
     [Fact]
     public async Task CopilotChatAdapter_ReturnsAssistantReply()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = new HttpClient(new QueueHttpMessageHandler(
             CreateResponse(HttpStatusCode.OK, """{ "id": "conversation-1" }"""),
             CreateResponse(HttpStatusCode.OK, """
@@ -177,7 +182,7 @@ public sealed class AdapterTests
                 """)));
 
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
-        var reply = await adapter.AskAsync("token", "Summarize the pinned docs.");
+        var reply = await adapter.AskAsync("token", "Summarize the pinned docs.", cancellationToken);
 
         Assert.Equal("Here is the assistant reply.", reply);
     }
@@ -185,13 +190,14 @@ public sealed class AdapterTests
     [Fact]
     public async Task GraphHttpClient_RetriesOnThrottle()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = new HttpClient(new QueueHttpMessageHandler(
             CreateResponse((HttpStatusCode)429, """{ "error": { "code": "TooManyRequests" } }""", retryAfterSeconds: 0),
             CreateResponse(HttpStatusCode.OK, """{ "value": [] }""")));
 
         var logger = new RecordingGraphLogger();
         var client = new GraphHttpClient(httpClient, logger);
-        using var response = await client.SendWithRetryAsync("https://graph.microsoft.com/v1.0/me", "token", HttpMethod.Get);
+        using var response = await client.SendWithRetryAsync("https://graph.microsoft.com/v1.0/me", "token", HttpMethod.Get, cancellationToken: cancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains(logger.Messages, message => message.Contains("throttled", StringComparison.OrdinalIgnoreCase));

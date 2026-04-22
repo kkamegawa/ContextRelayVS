@@ -1,0 +1,57 @@
+<UserControl x:Class="ContextRelay.VSExtension.Options.Controls.GraphApiOptionsControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignWidth="460" d:DesignHeight="480">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="12">
+            <TextBlock x:Name="PageTitleText" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
+
+            <!-- Cloud environment -->
+            <TextBlock x:Name="CloudEnvironmentLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock x:Name="CloudEnvironmentDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+            <ComboBox x:Name="CloudEnvironmentComboBox" Width="240" HorizontalAlignment="Left" Padding="4,3"
+                      SelectionChanged="CloudEnvironmentComboBox_SelectionChanged" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Custom Graph endpoint (visible only for Custom) -->
+            <StackPanel x:Name="CustomEndpointPanel" Visibility="Collapsed">
+                <TextBlock x:Name="CustomGraphEndpointLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <TextBlock x:Name="CustomGraphEndpointDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+                <TextBox x:Name="CustomGraphEndpointTextBox" Padding="4,3"
+                         TextChanged="CustomEndpointTextBox_TextChanged" />
+
+                <Separator Margin="0,12" />
+
+                <!-- Custom auth endpoint -->
+                <TextBlock x:Name="CustomAuthEndpointLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <TextBlock x:Name="CustomAuthEndpointDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+                <TextBox x:Name="CustomAuthEndpointTextBox" Padding="4,3"
+                         TextChanged="CustomEndpointTextBox_TextChanged" />
+
+                <Separator Margin="0,12" />
+            </StackPanel>
+
+            <!-- Effective endpoints (read-only) -->
+            <TextBlock x:Name="EffectiveGraphEndpointLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBox x:Name="EffectiveGraphEndpointTextBox" IsReadOnly="True" Padding="4,3"
+                     Background="Transparent" BorderThickness="0" />
+
+            <TextBlock x:Name="EffectiveAuthEndpointLabelText" FontWeight="SemiBold" Margin="0,8,0,4" />
+            <TextBox x:Name="EffectiveAuthEndpointTextBox" IsReadOnly="True" Padding="4,3"
+                     Background="Transparent" BorderThickness="0" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Required scopes (read-only) -->
+            <TextBlock x:Name="RequiredScopesLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock x:Name="RequiredScopesDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+            <TextBox x:Name="RequiredScopesTextBox" IsReadOnly="True" TextWrapping="Wrap" Padding="4,3"
+                     Background="Transparent" BorderThickness="0" MinHeight="60" AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

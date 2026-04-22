@@ -6,7 +6,7 @@ namespace ContextRelay.Core.Auth;
 
 public static class AuthScopeCatalog
 {
-    public const string GraphResource = "https://graph.microsoft.com";
+    public const string DefaultGraphResource = "https://graph.microsoft.com";
 
     private static readonly IReadOnlyList<string> OidcScopes = new[] { "offline_access", "openid", "profile" };
     private static readonly IReadOnlyList<string> DefaultGraphScopes = new[] { "User.Read" };
@@ -62,7 +62,7 @@ public static class AuthScopeCatalog
         return scopes.OrderBy(scope => scope, StringComparer.Ordinal).ToArray();
     }
 
-    public static IReadOnlyList<string> BuildQualifiedGraphScopes(ContextRelayFeatureOptions featureOptions, bool includeOidcScopes = false)
+    public static IReadOnlyList<string> BuildQualifiedGraphScopes(ContextRelayFeatureOptions featureOptions, bool includeOidcScopes = false, string? graphResource = null)
     {
         var scopes = new HashSet<string>(BuildRequiredScopes(featureOptions), StringComparer.Ordinal);
         if (includeOidcScopes)
@@ -70,13 +70,14 @@ public static class AuthScopeCatalog
             scopes.UnionWith(OidcScopes);
         }
 
+        var resource = string.IsNullOrWhiteSpace(graphResource) ? DefaultGraphResource : graphResource!;
         return scopes
-            .Select(QualifyGraphScope)
+            .Select(scope => QualifyGraphScope(scope, resource))
             .OrderBy(scope => scope, StringComparer.Ordinal)
             .ToArray();
     }
 
-    public static string QualifyGraphScope(string scope)
+    public static string QualifyGraphScope(string scope, string? graphResource = null)
     {
         if (string.IsNullOrWhiteSpace(scope))
         {
@@ -88,9 +89,10 @@ public static class AuthScopeCatalog
             return scope;
         }
 
+        var resource = string.IsNullOrWhiteSpace(graphResource) ? DefaultGraphResource : graphResource!;
         return scope.Contains("://", StringComparison.Ordinal)
             ? scope
-            : $"{GraphResource}/{scope}";
+            : $"{resource}/{scope}";
     }
 
     public static string GetMissingClientIdConfigurationMessage()

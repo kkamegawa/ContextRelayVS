@@ -15,7 +15,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 - **Soft Copilot handoff** — copy a generated prompt to the clipboard, append selected results to `HANDOFF.md`, and open GitHub Copilot Chat in Visual Studio when the command is available.
 - **`/ask` editor preview** — requires pinned snippets, caps the forwarded context, sends it to Microsoft 365 Copilot, saves the reply to shared chat history, and opens the response in a format-aware editor document.
 - **Localized WPF tool window UI** — English/Japanese labels, status/help text, result-card context actions, and debug-log access.
-- **DialogPage options** — General, Authentication, Cache, and Adapters settings pages.
+- **DialogPage options** — General, Authentication, Graph API, Cache, and Adapters settings pages with modern WPF controls and sovereign cloud support.
 - **MSAL.NET + WAM authentication** with DPAPI-backed token cache.
 - **TTL + LRU cache** with workspace persistence.
 - **Cross-editor session sharing** — snippets, chat history, and handoff pointers are shared with the VS Code extension via `%LocalAppData%\ContextRelay\shared\`. See [docs/shared-session-schema.md](docs/shared-session-schema.md).
