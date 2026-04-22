@@ -68,6 +68,13 @@ public sealed class CloudEndpointsTests
     }
 
     [Fact]
+    public void Custom_GraphEndpoint_StripsPathAndPreservesPort()
+    {
+        var endpoint = CloudEndpoints.GetGraphEndpoint(CloudEnvironment.Custom, "https://localhost:8443/v1.0/me");
+        Assert.Equal("https://localhost:8443", endpoint);
+    }
+
+    [Fact]
     public void GetDisplayName_ReturnsReadableNames()
     {
         Assert.Equal("Global (Public)", CloudEndpoints.GetDisplayName(CloudEnvironment.Global));

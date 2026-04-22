@@ -16,6 +16,8 @@ public partial class GraphApiOptionsControl : UserControl
         PopulateCloudEnvironments();
     }
 
+    public Func<CloudEnvironment, string, string, string>? RequiredScopesProvider { get; set; }
+
     public CloudEnvironment CloudEnvironment
     {
         get
@@ -47,7 +49,7 @@ public partial class GraphApiOptionsControl : UserControl
             }
 
             UpdateCustomEndpointVisibility();
-            UpdateEffectiveEndpoints();
+            UpdateComputedValues();
         }
     }
 
@@ -57,7 +59,7 @@ public partial class GraphApiOptionsControl : UserControl
         set
         {
             CustomGraphEndpointTextBox.Text = value ?? string.Empty;
-            UpdateEffectiveEndpoints();
+            UpdateComputedValues();
         }
     }
 
@@ -67,7 +69,7 @@ public partial class GraphApiOptionsControl : UserControl
         set
         {
             CustomAuthEndpointTextBox.Text = value ?? string.Empty;
-            UpdateEffectiveEndpoints();
+            UpdateComputedValues();
         }
     }
 
@@ -114,7 +116,12 @@ public partial class GraphApiOptionsControl : UserControl
         }
 
         UpdateCustomEndpointVisibility();
-        UpdateEffectiveEndpoints();
+        UpdateComputedValues();
+    }
+
+    private void CustomEndpointTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateComputedValues();
     }
 
     private void UpdateCustomEndpointVisibility()
@@ -130,6 +137,20 @@ public partial class GraphApiOptionsControl : UserControl
             CloudEnvironment, CustomGraphEndpointTextBox.Text);
         EffectiveAuthEndpointTextBox.Text = CloudEndpoints.GetAuthEndpoint(
             CloudEnvironment, CustomAuthEndpointTextBox.Text);
+    }
+
+    private void UpdateRequiredScopes()
+    {
+        RequiredScopesTextBox.Text = RequiredScopesProvider?.Invoke(
+            CloudEnvironment,
+            CustomGraphEndpointTextBox.Text,
+            CustomAuthEndpointTextBox.Text) ?? string.Empty;
+    }
+
+    private void UpdateComputedValues()
+    {
+        UpdateEffectiveEndpoints();
+        UpdateRequiredScopes();
     }
 
     private sealed class CloudEnvironmentItem

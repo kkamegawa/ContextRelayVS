@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.Linq;
 using System.Windows;
 using ContextRelay.Core.Auth;
 using ContextRelay.VSExtension.Options.Controls;
@@ -25,20 +24,22 @@ public sealed class ContextRelayGraphApiOptionsPage : UIElementDialogPage
 
     protected override void OnActivate(CancelEventArgs e)
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
         base.OnActivate(e);
         if (control is null)
         {
             return;
         }
 
+        control.RequiredScopesProvider = BuildScopeSummary;
         control.CloudEnvironment = CloudEnvironment;
         control.CustomGraphEndpoint = CustomGraphEndpoint;
         control.CustomAuthEndpoint = CustomAuthEndpoint;
-        control.RequiredScopes = BuildScopeSummary();
     }
 
     protected override void OnApply(PageApplyEventArgs e)
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
         if (e.ApplyBehavior == ApplyKind.Apply && control is not null)
         {
             CloudEnvironment = control.CloudEnvironment;
@@ -49,7 +50,7 @@ public sealed class ContextRelayGraphApiOptionsPage : UIElementDialogPage
         base.OnApply(e);
     }
 
-    private string BuildScopeSummary()
+    private string BuildScopeSummary(CloudEnvironment cloudEnvironment, string customGraphEndpoint, string customAuthEndpoint)
     {
         try
         {
@@ -72,7 +73,7 @@ public sealed class ContextRelayGraphApiOptionsPage : UIElementDialogPage
                 ChatPreviewEnabled = general.EnableChatPreview
             };
 
-            var graphEndpoint = CloudEndpoints.GetGraphEndpoint(CloudEnvironment, CustomGraphEndpoint);
+            var graphEndpoint = CloudEndpoints.GetGraphEndpoint(cloudEnvironment, customGraphEndpoint);
             var scopes = AuthScopeCatalog.BuildQualifiedGraphScopes(featureOptions, graphResource: graphEndpoint);
             return string.Join(Environment.NewLine, scopes);
         }

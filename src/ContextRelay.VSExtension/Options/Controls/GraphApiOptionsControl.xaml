@@ -21,14 +21,16 @@
             <StackPanel x:Name="CustomEndpointPanel" Visibility="Collapsed">
                 <TextBlock x:Name="CustomGraphEndpointLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
                 <TextBlock x:Name="CustomGraphEndpointDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
-                <TextBox x:Name="CustomGraphEndpointTextBox" Padding="4,3" />
+                <TextBox x:Name="CustomGraphEndpointTextBox" Padding="4,3"
+                         TextChanged="CustomEndpointTextBox_TextChanged" />
 
                 <Separator Margin="0,12" />
 
                 <!-- Custom auth endpoint -->
                 <TextBlock x:Name="CustomAuthEndpointLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
                 <TextBlock x:Name="CustomAuthEndpointDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
-                <TextBox x:Name="CustomAuthEndpointTextBox" Padding="4,3" />
+                <TextBox x:Name="CustomAuthEndpointTextBox" Padding="4,3"
+                         TextChanged="CustomEndpointTextBox_TextChanged" />
 
                 <Separator Margin="0,12" />
             </StackPanel>

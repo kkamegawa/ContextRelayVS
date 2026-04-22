@@ -14,12 +14,14 @@ public sealed class MsalAuthProviderTests
     [Fact]
     public async Task TryGetAccessTokenSilentAsync_ReturnsNullWhenNoAccountExists()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var facade = new FakeMsalPublicClientFacade();
         var provider = new MsalAuthProvider(new FakeMsalPublicClientFacadeFactory(facade));
 
         var result = await provider.TryGetAccessTokenSilentAsync(
             new ContextRelayAuthSettings { ClientId = "client-id" },
-            new ContextRelayFeatureOptions());
+            new ContextRelayFeatureOptions(),
+            cancellationToken);
 
         Assert.Null(result);
         Assert.Equal(0, facade.InteractiveAcquireCalls);
@@ -28,6 +30,7 @@ public sealed class MsalAuthProviderTests
     [Fact]
     public async Task GetAccessTokenAsync_FallsBackToInteractiveWhenSilentRequiresUi()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var facade = new FakeMsalPublicClientFacade
         {
             Accounts = new[] { new ContextRelayAccountInfo { HomeAccountId = "account-1", Username = "user@contoso.com" } },
@@ -38,7 +41,8 @@ public sealed class MsalAuthProviderTests
 
         var token = await provider.GetAccessTokenAsync(
             new ContextRelayAuthSettings { ClientId = "client-id" },
-            new ContextRelayFeatureOptions());
+            new ContextRelayFeatureOptions(),
+            cancellationToken);
 
         Assert.Equal("interactive-token", token.AccessToken);
         Assert.Equal(1, facade.SilentAcquireCalls);
@@ -48,10 +52,11 @@ public sealed class MsalAuthProviderTests
     [Fact]
     public async Task GetAccessTokenAsync_ThrowsHelpfulErrorWhenClientIdIsMissing()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var provider = new MsalAuthProvider(new FakeMsalPublicClientFacadeFactory(new FakeMsalPublicClientFacade()));
 
         var exception = await Assert.ThrowsAsync<ContextRelayAuthenticationException>(() =>
-            provider.GetAccessTokenAsync(new ContextRelayAuthSettings(), new ContextRelayFeatureOptions()));
+            provider.GetAccessTokenAsync(new ContextRelayAuthSettings(), new ContextRelayFeatureOptions(), cancellationToken));
 
         Assert.Equal(ContextRelayAuthenticationErrorCode.MissingClientId, exception.ErrorCode);
         Assert.Contains("contextRelay.auth.clientId", exception.Message);

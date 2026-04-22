@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Utilities;
@@ -23,6 +24,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
     [Fact]
     public async Task UpsertSnippetsAsync_UsesLastWriterWinsAndPrunesExpiredTombstones()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var store = CreateStore();
 
         await store.UpsertSnippetsAsync(new[]
@@ -46,7 +48,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 Source = "teams",
                 Snippet = "deleted"
             }
-        });
+        }, cancellationToken);
 
         var result = await store.UpsertSnippetsAsync(new[]
         {
@@ -59,7 +61,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 Source = "mail",
                 Snippet = "second"
             }
-        });
+        }, cancellationToken);
 
         Assert.Single(result);
         Assert.Equal("new", result[0].Name);
@@ -69,6 +71,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
     [Fact]
     public async Task AppendChatHistoryAsync_DeduplicatesAndTrimsToRetention()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var store = CreateStore(retentionCount: 3);
 
         var result = await store.AppendChatHistoryAsync(new[]
@@ -78,7 +81,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
             CreateChatItem("2", "2026-04-19T00:00:03Z", "second-updated"),
             CreateChatItem("3", "2026-04-19T00:00:04Z", "third"),
             CreateChatItem("4", "2026-04-19T00:00:05Z", "fourth")
-        });
+        }, cancellationToken);
 
         Assert.Equal(new[] { "2", "3", "4" }, result.Select(item => item.Id).ToArray());
         Assert.Equal("second-updated", result[0].Text);
@@ -87,6 +90,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
     [Fact]
     public async Task UpsertHandoffIndexAsync_UsesWorkspaceScopedLastWriterWins()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var store = CreateStore();
 
         await store.UpsertHandoffIndexAsync(new[]
@@ -97,7 +101,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 UpdatedAt = "2026-04-18T00:00:00Z",
                 Docs = new HandoffDocumentPaths { Plan = ".contextrelay/PLAN-old.md" }
             }
-        });
+        }, cancellationToken);
 
         var result = await store.UpsertHandoffIndexAsync(new[]
         {
@@ -107,7 +111,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 UpdatedAt = "2026-04-19T00:00:00Z",
                 Docs = new HandoffDocumentPaths { Plan = @".contextrelay\PLAN.md" }
             }
-        });
+        }, cancellationToken);
 
         Assert.Single(result);
         Assert.Equal(@"D:\GitHub\kkamegawa\oss\ContextRelayVS", result[0].WorkspaceRoot);
@@ -117,6 +121,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
     [Fact]
     public async Task UpsertSnippetsAsync_WritesSchemaFile()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var store = CreateStore();
 
         await store.UpsertSnippetsAsync(new[]
@@ -130,12 +135,12 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 Source = "mail",
                 Snippet = "hello"
             }
-        });
+        }, cancellationToken);
 
         var schemaPath = Path.Combine(tempDirectory, "schema.json");
         Assert.True(File.Exists(schemaPath));
 
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(schemaPath));
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(schemaPath, cancellationToken));
         Assert.Equal(1, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("vs", document.RootElement.GetProperty("updatedBy").GetString());
         Assert.Contains(
@@ -146,6 +151,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
     [Fact]
     public async Task UpsertSnippetsAsync_PreservesUnknownEnvelopeFields()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         Directory.CreateDirectory(tempDirectory);
         var snippetsPath = Path.Combine(tempDirectory, "snippets.json");
         await File.WriteAllTextAsync(
@@ -169,7 +175,8 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 }
               ]
             }
-            """);
+            """,
+            cancellationToken);
 
         var store = CreateStore();
         await store.UpsertSnippetsAsync(new[]
@@ -183,9 +190,9 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 Source = "mail",
                 Snippet = "after"
             }
-        });
+        }, cancellationToken);
 
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(snippetsPath));
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(snippetsPath, cancellationToken));
         Assert.True(document.RootElement.TryGetProperty("futureField", out var futureField));
         Assert.True(futureField.GetProperty("enabled").GetBoolean());
     }
@@ -193,12 +200,13 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
     [Fact]
     public async Task GetSnippetsAsync_QuarantinesCorruptJsonAndReturnsEmptyList()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         Directory.CreateDirectory(tempDirectory);
         var snippetsPath = Path.Combine(tempDirectory, "snippets.json");
-        await File.WriteAllTextAsync(snippetsPath, "{ not valid json");
+        await File.WriteAllTextAsync(snippetsPath, "{ not valid json", cancellationToken);
 
         var store = CreateStore();
-        var result = await store.GetSnippetsAsync();
+        var result = await store.GetSnippetsAsync(cancellationToken);
 
         Assert.Empty(result);
         Assert.True(File.Exists(snippetsPath));
