@@ -50,7 +50,7 @@ jobs:
           "vsix_path=$($vsix.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ContextRelayVS-vsix
           path: src\ContextRelay.VSExtension\bin\Release\net472\*.vsix
