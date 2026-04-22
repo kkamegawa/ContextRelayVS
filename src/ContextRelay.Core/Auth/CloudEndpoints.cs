@@ -77,7 +77,7 @@ public static class CloudEndpoints
 
         if (!string.IsNullOrEmpty(uri.PathAndQuery.TrimStart('/')))
         {
-            return $"{uri.Scheme}://{uri.Host}";
+            return $"{uri.Scheme}://{uri.Authority}";
         }
 
         return trimmed;

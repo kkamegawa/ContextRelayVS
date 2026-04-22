@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Handoff;
 using ContextRelay.Core.SharedStore;
@@ -22,6 +23,7 @@ public sealed class HandoffDocumentGeneratorTests : IDisposable
     [Fact]
     public async Task GenerateAsync_WritesAllDocumentsAndUpdatesSharedStoreIndex()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var workspaceRoot = Path.Combine(tempDirectory, "workspace");
         var store = CreateStore();
         var generator = new HandoffDocumentGenerator(store, clock);
@@ -46,14 +48,15 @@ public sealed class HandoffDocumentGeneratorTests : IDisposable
             new HandoffGenerationOptions
             {
                 WorkspaceRoot = workspaceRoot
-            });
+            },
+            cancellationToken);
 
         Assert.Equal(Path.Combine(workspaceRoot, ".contextrelay"), result.OutputDirectory);
         Assert.Equal(4, result.WrittenFiles.Count);
-        Assert.Contains("## Update (2026-04-19T14:15:00Z)", await File.ReadAllTextAsync(result.PlanPath));
-        Assert.Contains("### Saved Handoff Excerpts", await File.ReadAllTextAsync(result.HandoffPath!));
+        Assert.Contains("## Update (2026-04-19T14:15:00Z)", await File.ReadAllTextAsync(result.PlanPath, cancellationToken));
+        Assert.Contains("### Saved Handoff Excerpts", await File.ReadAllTextAsync(result.HandoffPath!, cancellationToken));
 
-        var index = await store.GetHandoffIndexAsync();
+        var index = await store.GetHandoffIndexAsync(cancellationToken);
         Assert.Single(index);
         Assert.Equal(Path.GetFullPath(workspaceRoot), index[0].WorkspaceRoot);
         Assert.Equal(".contextrelay/PLAN.md", index[0].Docs.Plan);
@@ -65,6 +68,7 @@ public sealed class HandoffDocumentGeneratorTests : IDisposable
     [Fact]
     public async Task GenerateAsync_AppendsUpdatesWhenFilesAlreadyExist()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var generator = new HandoffDocumentGenerator(clock: clock);
         var outputDirectory = Path.Combine(tempDirectory, "handoff");
 
@@ -74,13 +78,13 @@ public sealed class HandoffDocumentGeneratorTests : IDisposable
             IncludeHandoffDocument = false
         };
 
-        await generator.GenerateAsync(new HandoffContext(), options);
+        await generator.GenerateAsync(new HandoffContext(), options, cancellationToken);
         await generator.GenerateAsync(new HandoffContext
         {
             SearchSummary = "Second update"
-        }, options);
+        }, options, cancellationToken);
 
-        var planContents = await File.ReadAllTextAsync(Path.Combine(outputDirectory, "PLAN.md"));
+        var planContents = await File.ReadAllTextAsync(Path.Combine(outputDirectory, "PLAN.md"), cancellationToken);
         Assert.Equal(2, CountOccurrences(planContents, "## Update (2026-04-19T14:15:00Z)"));
         Assert.Equal(3, Directory.GetFiles(outputDirectory).Length);
         Assert.Contains("_No snippets saved._", planContents);

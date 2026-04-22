@@ -49,4 +49,24 @@ public sealed class GraphHttpClientTests
         client.BaseUrl = "https://dod-graph.microsoft.us";
         Assert.Equal("https://dod-graph.microsoft.us", client.BaseUrl);
     }
+
+    [Fact]
+    public void BaseUrl_Setter_NormalizesWhitespaceAndTrailingSlash()
+    {
+        var client = new GraphHttpClient();
+
+        client.BaseUrl = "  https://graph.microsoft.us/  ";
+
+        Assert.Equal("https://graph.microsoft.us", client.BaseUrl);
+    }
+
+    [Fact]
+    public void BaseUrl_Setter_FallsBackWhenInsecure()
+    {
+        var client = new GraphHttpClient();
+
+        client.BaseUrl = "http://graph.microsoft.us";
+
+        Assert.Equal("https://graph.microsoft.com", client.BaseUrl);
+    }
 }
