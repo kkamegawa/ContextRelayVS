@@ -30,7 +30,7 @@ public sealed class GraphServiceClientFactory : IGraphServiceClientFactory
 
         var scopes = AuthScopeCatalog.BuildRequiredScopes(featureOptions);
         var credential = new ContextRelayTokenCredential(authProvider, settings, featureOptions);
-        return new GraphServiceClient(credential, scopes);
+        return new GraphServiceClient(credential, scopes, settings.GraphEndpoint);
     }
 
     private sealed class ContextRelayTokenCredential : TokenCredential

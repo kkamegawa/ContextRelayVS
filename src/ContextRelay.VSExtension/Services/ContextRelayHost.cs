@@ -110,6 +110,7 @@ internal sealed class ContextRelayHost : IDisposable
 
             var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging);
+            graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
             await EnsureCacheReadyAsync(settings, cancellationToken).ConfigureAwait(false);
             var enabledSources = GetEnabledSources(route, settings);
             if (enabledSources.Count == 0 && route.Target != RouteTarget.Ask)
@@ -901,7 +902,7 @@ internal sealed class ContextRelayHost : IDisposable
 
         using var response = await graphClient
             .SendWithRetryAsync(
-                $"{GraphHttpClient.GraphBase}/v1.0/me/messages/{Uri.EscapeDataString(messageId)}?$select=body",
+                $"{graphClient.BaseUrl}/v1.0/me/messages/{Uri.EscapeDataString(messageId)}?$select=body",
                 accessToken,
                 HttpMethod.Get,
                 cancellationToken: cancellationToken)
@@ -979,7 +980,7 @@ internal sealed class ContextRelayHost : IDisposable
         CancellationToken cancellationToken)
     {
         var suffix = string.IsNullOrWhiteSpace(format) ? string.Empty : $"?format={format}";
-        var url = $"{GraphHttpClient.GraphBase}/v1.0/drives/{Uri.EscapeDataString(driveId)}/items/{Uri.EscapeDataString(itemId)}/content{suffix}";
+        var url = $"{graphClient.BaseUrl}/v1.0/drives/{Uri.EscapeDataString(driveId)}/items/{Uri.EscapeDataString(itemId)}/content{suffix}";
         var response = await graphClient
             .SendWithRetryAsync(url, accessToken, HttpMethod.Get, cancellationToken: cancellationToken)
             .ConfigureAwait(false);

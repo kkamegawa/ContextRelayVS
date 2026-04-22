@@ -1,27 +1,52 @@
 using System.ComponentModel;
+using System.Windows;
+using ContextRelay.VSExtension.Options.Controls;
 using Microsoft.VisualStudio.Shell;
 
 namespace ContextRelay.VSExtension.Options;
 
-public sealed class ContextRelayGeneralOptionsPage : DialogPage
+public sealed class ContextRelayGeneralOptionsPage : UIElementDialogPage
 {
-    [Category("General")]
-    [DisplayName("Max results")]
-    [Description("Maximum number of results returned per source search.")]
+    private GeneralOptionsControl? control;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public int MaxResults { get; set; } = 10;
 
-    [Category("General")]
-    [DisplayName("Output directory")]
-    [Description("Relative or absolute directory used for generated handoff documents.")]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public string OutputDirectory { get; set; } = ".contextrelay";
 
-    [Category("General")]
-    [DisplayName("Enable chat preview")]
-    [Description("Enable /ask against the Microsoft 365 Copilot chat preview API.")]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public bool EnableChatPreview { get; set; } = true;
 
-    [Category("General")]
-    [DisplayName("Enable Graph debug logging")]
-    [Description("Write Graph request/response summaries to the ContextRelay Debug output pane.")]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public bool EnableGraphDebugLogging { get; set; }
+
+    protected override UIElement Child => control ??= new GeneralOptionsControl();
+
+    protected override void OnActivate(CancelEventArgs e)
+    {
+        base.OnActivate(e);
+        if (control is null)
+        {
+            return;
+        }
+
+        control.MaxResults = MaxResults;
+        control.OutputDirectory = OutputDirectory;
+        control.EnableChatPreview = EnableChatPreview;
+        control.EnableGraphDebugLogging = EnableGraphDebugLogging;
+    }
+
+    protected override void OnApply(PageApplyEventArgs e)
+    {
+        if (e.ApplyBehavior == ApplyKind.Apply && control is not null)
+        {
+            MaxResults = control.MaxResults;
+            OutputDirectory = control.OutputDirectory;
+            EnableChatPreview = control.EnableChatPreview;
+            EnableGraphDebugLogging = control.EnableGraphDebugLogging;
+        }
+
+        base.OnApply(e);
+    }
 }

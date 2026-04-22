@@ -1,0 +1,33 @@
+<UserControl x:Class="ContextRelay.VSExtension.Options.Controls.CacheOptionsControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignWidth="460" d:DesignHeight="320">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="12">
+            <TextBlock x:Name="PageTitleText" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16" />
+
+            <!-- TTL seconds -->
+            <TextBlock x:Name="TtlSecondsLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock x:Name="TtlSecondsDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+            <TextBox x:Name="TtlSecondsTextBox" Width="80" HorizontalAlignment="Left" Padding="4,3" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Max entries -->
+            <TextBlock x:Name="MaxEntriesLabelText" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock x:Name="MaxEntriesDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,4" />
+            <TextBox x:Name="MaxEntriesTextBox" Width="80" HorizontalAlignment="Left" Padding="4,3" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Persist workspace state -->
+            <CheckBox x:Name="PersistWorkspaceStateCheckBox" Margin="0,0,0,4">
+                <TextBlock x:Name="PersistWorkspaceStateLabelText" FontWeight="SemiBold" />
+            </CheckBox>
+            <TextBlock x:Name="PersistWorkspaceStateDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="20,0,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

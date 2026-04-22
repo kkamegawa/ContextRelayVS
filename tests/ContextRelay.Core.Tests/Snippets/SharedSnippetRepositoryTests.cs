@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Snippets;
@@ -22,6 +23,7 @@ public sealed class SharedSnippetRepositoryTests : IDisposable
     [Fact]
     public async Task SaveAsync_PersistsSnippetInSharedStore()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var repository = CreateRepository();
 
         var saved = await repository.SaveAsync(new SaveSnippetRequest
@@ -30,9 +32,9 @@ public sealed class SharedSnippetRepositoryTests : IDisposable
             Source = SnippetSource.SharePoint,
             Snippet = "Important design note",
             SourceUrl = "https://contoso.sharepoint.com/sites/engineering"
-        });
+        }, cancellationToken);
 
-        var all = await repository.GetAllAsync();
+        var all = await repository.GetAllAsync(cancellationToken: cancellationToken);
 
         Assert.Single(all);
         Assert.Equal(saved.Id, all[0].Id);
@@ -42,18 +44,19 @@ public sealed class SharedSnippetRepositoryTests : IDisposable
     [Fact]
     public async Task DeleteAsync_WritesTombstoneAndHidesSnippetFromDefaultReads()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var repository = CreateRepository();
         var saved = await repository.SaveAsync(new SaveSnippetRequest
         {
             Name = "Mail snippet",
             Source = SnippetSource.Mail,
             Snippet = "Budget decision"
-        });
+        }, cancellationToken);
 
-        var deleted = await repository.DeleteAsync(saved.Id);
+        var deleted = await repository.DeleteAsync(saved.Id, cancellationToken);
 
-        var active = await repository.GetAllAsync();
-        var withDeleted = await repository.GetAllAsync(includeDeleted: true);
+        var active = await repository.GetAllAsync(cancellationToken: cancellationToken);
+        var withDeleted = await repository.GetAllAsync(includeDeleted: true, cancellationToken);
 
         Assert.True(deleted);
         Assert.Empty(active);
@@ -64,17 +67,18 @@ public sealed class SharedSnippetRepositoryTests : IDisposable
     [Fact]
     public async Task ClearAsync_RemovesAllSnippets()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var repository = CreateRepository();
         await repository.SaveAsync(new SaveSnippetRequest
         {
             Name = "OneDrive snippet",
             Source = SnippetSource.OneDrive,
             Snippet = "Quarterly report"
-        });
+        }, cancellationToken);
 
-        await repository.ClearAsync();
+        await repository.ClearAsync(cancellationToken);
 
-        Assert.Empty(await repository.GetAllAsync(includeDeleted: true));
+        Assert.Empty(await repository.GetAllAsync(includeDeleted: true, cancellationToken));
     }
 
     public void Dispose()
