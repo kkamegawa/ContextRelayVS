@@ -32,3 +32,4 @@ Thumbs.db
 
 ## Local ContextRelay artifacts (must never be committed)
 .contextrelay/
+*.lscache
