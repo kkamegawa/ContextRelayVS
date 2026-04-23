@@ -88,6 +88,18 @@ internal static class OptionsLocalizedStrings
     public static string ConnectorsDescription => UseJapanese
         ? "Graph コネクタの外部項目の取得を有効にします。"
         : "Enable external-item retrieval for Graph connectors.";
+    public static string OneNoteLabel => "OneNote";
+    public static string OneNoteDescription => UseJapanese
+        ? "OneNote ページ検索を有効にします。"
+        : "Enable OneNote page search.";
+    public static string PlannerLabel => "Planner";
+    public static string PlannerDescription => UseJapanese
+        ? "Planner タスク検索を有効にします。"
+        : "Enable Planner task search.";
+    public static string TodoLabel => UseJapanese ? "To Do" : "To Do";
+    public static string TodoDescription => UseJapanese
+        ? "Microsoft To Do タスク検索を有効にします。"
+        : "Enable Microsoft To Do task search.";
 
     public static string GetCloudEnvironmentDisplayName(CloudEnvironment environment)
     {

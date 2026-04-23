@@ -40,6 +40,24 @@ public partial class AdaptersOptionsControl : UserControl
         set => ConnectorsCheckBox.IsChecked = value;
     }
 
+    public bool OneNote
+    {
+        get => OneNoteCheckBox.IsChecked == true;
+        set => OneNoteCheckBox.IsChecked = value;
+    }
+
+    public bool Planner
+    {
+        get => PlannerCheckBox.IsChecked == true;
+        set => PlannerCheckBox.IsChecked = value;
+    }
+
+    public bool Todo
+    {
+        get => TodoCheckBox.IsChecked == true;
+        set => TodoCheckBox.IsChecked = value;
+    }
+
     private void ApplyLocalization()
     {
         PageTitleText.Text = OptionsLocalizedStrings.AdaptersPageTitle;
@@ -53,5 +71,11 @@ public partial class AdaptersOptionsControl : UserControl
         OneDriveDescriptionText.Text = OptionsLocalizedStrings.OneDriveDescription;
         ConnectorsLabelText.Text = OptionsLocalizedStrings.ConnectorsLabel;
         ConnectorsDescriptionText.Text = OptionsLocalizedStrings.ConnectorsDescription;
+        OneNoteLabelText.Text = OptionsLocalizedStrings.OneNoteLabel;
+        OneNoteDescriptionText.Text = OptionsLocalizedStrings.OneNoteDescription;
+        PlannerLabelText.Text = OptionsLocalizedStrings.PlannerLabel;
+        PlannerDescriptionText.Text = OptionsLocalizedStrings.PlannerDescription;
+        TodoLabelText.Text = OptionsLocalizedStrings.TodoLabel;
+        TodoDescriptionText.Text = OptionsLocalizedStrings.TodoDescription;
     }
 }

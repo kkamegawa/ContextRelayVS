@@ -10,7 +10,10 @@ public static class SlashCommandRouter
         ContextSource.SharePoint,
         ContextSource.OneDrive,
         ContextSource.Mail,
-        ContextSource.Teams
+        ContextSource.Teams,
+        ContextSource.OneNote,
+        ContextSource.Planner,
+        ContextSource.Todo
     };
 
     private static readonly IReadOnlyList<string> SupportedSlashCommands = new[]
@@ -19,6 +22,8 @@ public static class SlashCommandRouter
         "/teams",
         "/sharepoint",
         "/onedrive",
+        "/onenote",
+        "/task",
         "/connectors",
         "/all",
         "/ask",
@@ -32,6 +37,8 @@ public static class SlashCommandRouter
             ["teams"] = RouteTarget.Teams,
             ["sharepoint"] = RouteTarget.SharePoint,
             ["onedrive"] = RouteTarget.OneDrive,
+            ["onenote"] = RouteTarget.OneNote,
+            ["task"] = RouteTarget.Task,
             ["connectors"] = RouteTarget.Connectors,
             ["all"] = RouteTarget.All,
             ["ask"] = RouteTarget.Ask,
@@ -45,6 +52,8 @@ public static class SlashCommandRouter
             ["teams"] = "Example: /teams sprint review\nExample: /teams from:bob mentions:me",
             ["sharepoint"] = "Example: /sharepoint VPN setup guide\nExample: /sharepoint architecture",
             ["onedrive"] = "Example: /onedrive architecture diagram\nExample: /onedrive Q3 report",
+            ["onenote"] = "Example: /onenote architecture decision log\nExample: /onenote section notebook architecture",
+            ["task"] = "Example: /task release checklist\nExample: /task metadata comments onboarding",
             ["connectors"] = "Example: /connectors incident tracker\nExample: /connectors external knowledge base",
             ["all"] = "Example: /all architecture decisions\nOr just type a query without a slash command.",
             ["ask"] = "Example: /ask 日本語に翻訳してmarkdownにして\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the Microsoft 365 Copilot response is opened in a new editor tab.",
@@ -129,6 +138,8 @@ public static class SlashCommandRouter
             RouteTarget.Teams => new[] { ContextSource.Teams },
             RouteTarget.SharePoint => new[] { ContextSource.SharePoint },
             RouteTarget.OneDrive => new[] { ContextSource.OneDrive },
+            RouteTarget.OneNote => new[] { ContextSource.OneNote },
+            RouteTarget.Task => new[] { ContextSource.Planner, ContextSource.Todo },
             RouteTarget.Connectors => new[] { ContextSource.Connectors },
             RouteTarget.All => SearchAllSources,
             _ => Array.Empty<ContextSource>()

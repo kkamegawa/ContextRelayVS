@@ -15,6 +15,8 @@ internal static class ContextRelayLocalizedStrings
             ["/teams"] = ("Search Teams messages.", "Teams メッセージを検索します。"),
             ["/sharepoint"] = ("Search SharePoint content.", "SharePoint コンテンツを検索します。"),
             ["/onedrive"] = ("Search OneDrive content.", "OneDrive コンテンツを検索します。"),
+            ["/onenote"] = ("Search OneNote pages.", "OneNote ページを検索します。"),
+            ["/task"] = ("Search Planner and To Do tasks.", "Planner と To Do のタスクを検索します。"),
             ["/connectors"] = ("Search connector content.", "コネクタのコンテンツを検索します。"),
             ["/all"] = ("Search all enabled Microsoft 365 sources.", "有効な Microsoft 365 ソース全体を検索します。"),
             ["/ask"] = ("Send the pinned context to Microsoft 365 Copilot.", "ピン留めしたコンテキストを Microsoft 365 Copilot に送信します。"),
@@ -52,8 +54,8 @@ internal static class ContextRelayLocalizedStrings
 
     public static string SearchToolTip =>
         UseJapanese
-            ? "/mail /teams /sharepoint /onedrive /connectors /all /ask /clear を使用できます"
-            : "Use /mail /teams /sharepoint /onedrive /connectors /all /ask /clear";
+            ? "/mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear を使用できます"
+            : "Use /mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear";
 
     public static string CommandPopupHeaderText => UseJapanese ? "スラッシュ コマンド" : "Slash commands";
 
@@ -178,6 +180,12 @@ internal static class ContextRelayLocalizedStrings
             "/onedrive" => UseJapanese
                 ? "例: /onedrive architecture diagram\n例: /onedrive Q3 report"
                 : "Example: /onedrive architecture diagram\nExample: /onedrive Q3 report",
+            "/onenote" => UseJapanese
+                ? "例: /onenote architecture decision log\n例: /onenote section notebook architecture"
+                : "Example: /onenote architecture decision log\nExample: /onenote section notebook architecture",
+            "/task" => UseJapanese
+                ? "例: /task release checklist\n例: /task metadata comments onboarding"
+                : "Example: /task release checklist\nExample: /task metadata comments onboarding",
             "/connectors" => UseJapanese
                 ? "例: /connectors incident tracker\n例: /connectors external knowledge base"
                 : "Example: /connectors incident tracker\nExample: /connectors external knowledge base",

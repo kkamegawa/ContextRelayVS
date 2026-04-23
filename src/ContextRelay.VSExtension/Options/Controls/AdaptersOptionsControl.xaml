@@ -46,6 +46,30 @@
                 <TextBlock x:Name="ConnectorsLabelText" FontWeight="SemiBold" />
             </CheckBox>
             <TextBlock x:Name="ConnectorsDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="20,0,0,0" />
+
+            <Separator Margin="0,12" />
+
+            <!-- OneNote -->
+            <CheckBox x:Name="OneNoteCheckBox" Margin="0,0,0,4">
+                <TextBlock x:Name="OneNoteLabelText" FontWeight="SemiBold" />
+            </CheckBox>
+            <TextBlock x:Name="OneNoteDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="20,0,0,0" />
+
+            <Separator Margin="0,12" />
+
+            <!-- Planner -->
+            <CheckBox x:Name="PlannerCheckBox" Margin="0,0,0,4">
+                <TextBlock x:Name="PlannerLabelText" FontWeight="SemiBold" />
+            </CheckBox>
+            <TextBlock x:Name="PlannerDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="20,0,0,0" />
+
+            <Separator Margin="0,12" />
+
+            <!-- To Do -->
+            <CheckBox x:Name="TodoCheckBox" Margin="0,0,0,4">
+                <TextBlock x:Name="TodoLabelText" FontWeight="SemiBold" />
+            </CheckBox>
+            <TextBlock x:Name="TodoDescriptionText" TextWrapping="Wrap" Opacity="0.7" Margin="20,0,0,0" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

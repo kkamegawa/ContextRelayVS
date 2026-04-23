@@ -6,5 +6,8 @@ public enum ContextSource
     Teams,
     SharePoint,
     OneDrive,
-    Connectors
+    Connectors,
+    OneNote,
+    Planner,
+    Todo
 }
