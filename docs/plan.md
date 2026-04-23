@@ -142,7 +142,7 @@ See [`shared-session-schema.md`](shared-session-schema.md) for the authoritative
 
 ## 13. Packaging / CI
 
-- VSIX targeting `[17.0,19.0)` with an installable manifest, pkgdef generation, compiled VSCT menu resources, and local `LICENSE.txt` packaging.
+- VSIX targeting Visual Studio 17.0+ with installable manifest entries for Community/Pro/Enterprise on both amd64 and arm64, plus pkgdef generation, compiled VSCT menu resources, and local `LICENSE.txt` packaging.
 - SDK-style VSIX packaging is enabled through `Microsoft.VsSDK.targets` imported via `CustomAfterMicrosoftCSharpTargets`, with `GeneratePkgDefFile=true` and CLI deployment disabled.
 - GitHub Actions (`windows-latest`) restores, runs the vulnerable/deprecated package audit, builds the solution, runs Core tests, and uploads the generated `.vsix` artifact.
 - The `vsix-skeleton` milestone is complete once the `.vsix` artifact is emitted by CLI build and the remaining work is only manual host validation.
