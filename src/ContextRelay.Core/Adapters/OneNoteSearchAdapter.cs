@@ -70,8 +70,22 @@ public sealed class OneNoteSearchAdapter : IContextSearchAdapter
         IReadOnlyList<OneNotePage> pages,
         CancellationToken cancellationToken)
     {
-        var tasks = pages.Select(page => FetchPagePreviewAsync(accessToken, page.Id!, cancellationToken)).ToArray();
-        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+        const int maxConcurrentRequests = 6;
+        var results = new string[pages.Count];
+
+        for (var offset = 0; offset < pages.Count; offset += maxConcurrentRequests)
+        {
+            var batchSize = Math.Min(maxConcurrentRequests, pages.Count - offset);
+            var batchTasks = new Task<string>[batchSize];
+            for (var index = 0; index < batchSize; index++)
+            {
+                batchTasks[index] = FetchPagePreviewAsync(accessToken, pages[offset + index].Id!, cancellationToken);
+            }
+
+            var batchResults = await Task.WhenAll(batchTasks).ConfigureAwait(false);
+            Array.Copy(batchResults, 0, results, offset, batchSize);
+        }
+
         return results;
     }
 
@@ -88,6 +102,10 @@ public sealed class OneNoteSearchAdapter : IContextSearchAdapter
                 .ConfigureAwait(false);
             var data = await graphClient.ReadJsonAsync<OneNotePagePreview>(response, cancellationToken).ConfigureAwait(false);
             return data.PreviewText?.Trim() ?? string.Empty;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {

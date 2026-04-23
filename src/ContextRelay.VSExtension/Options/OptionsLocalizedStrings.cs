@@ -96,7 +96,7 @@ internal static class OptionsLocalizedStrings
     public static string PlannerDescription => UseJapanese
         ? "Planner タスク検索を有効にします。"
         : "Enable Planner task search.";
-    public static string TodoLabel => UseJapanese ? "To Do" : "To Do";
+    public static string TodoLabel => "To Do";
     public static string TodoDescription => UseJapanese
         ? "Microsoft To Do タスク検索を有効にします。"
         : "Enable Microsoft To Do task search.";

@@ -25,13 +25,13 @@ public sealed class ContextRelayAdaptersOptionsPage : UIElementDialogPage
     public bool Connectors { get; set; }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
-    public bool OneNote { get; set; } = true;
+    public bool OneNote { get; set; }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
-    public bool Planner { get; set; } = true;
+    public bool Planner { get; set; }
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
-    public bool Todo { get; set; } = true;
+    public bool Todo { get; set; }
 
     protected override UIElement Child => control ??= new AdaptersOptionsControl();
 

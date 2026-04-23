@@ -15,7 +15,7 @@ public static class AuthScopeCatalog
     private static readonly IReadOnlyList<string> RetrievalScopes = new[] { "Files.Read.All", "Sites.Read.All" };
     private static readonly IReadOnlyList<string> ConnectorsScopes = new[] { "ExternalItem.Read.All" };
     private static readonly IReadOnlyList<string> OneNoteScopes = new[] { "Notes.Read" };
-    private static readonly IReadOnlyList<string> PlannerScopes = new[] { "Tasks.Read", "Group.Read.All" };
+    private static readonly IReadOnlyList<string> PlannerScopes = new[] { "Tasks.Read" };
     private static readonly IReadOnlyList<string> TodoScopes = new[] { "Tasks.Read" };
     private static readonly IReadOnlyList<string> ChatScopes = new[]
     {

@@ -84,17 +84,32 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
             .Select(task => task.Id!)
             .ToArray();
 
-        var detailTasks = detailTaskIds
-            .Select(taskId => FetchTaskDetailsAsync(accessToken, taskId, cancellationToken))
-            .ToArray();
-
-        var results = await Task.WhenAll(detailTasks).ConfigureAwait(false);
-        var map = new Dictionary<string, PlannerTaskDetails>();
-        for (var index = 0; index < detailTaskIds.Length; index++)
+        if (detailTaskIds.Length == 0)
         {
-            if (results[index] is not null)
+            return new Dictionary<string, PlannerTaskDetails>();
+        }
+
+        const int maxConcurrentDetailRequests = 8;
+        var map = new Dictionary<string, PlannerTaskDetails>();
+
+        for (var offset = 0; offset < detailTaskIds.Length; offset += maxConcurrentDetailRequests)
+        {
+            var batchTaskIds = detailTaskIds
+                .Skip(offset)
+                .Take(maxConcurrentDetailRequests)
+                .ToArray();
+
+            var batchTasks = batchTaskIds
+                .Select(taskId => FetchTaskDetailsAsync(accessToken, taskId, cancellationToken))
+                .ToArray();
+
+            var batchResults = await Task.WhenAll(batchTasks).ConfigureAwait(false);
+            for (var index = 0; index < batchTaskIds.Length; index++)
             {
-                map[detailTaskIds[index]] = results[index]!;
+                if (batchResults[index] is not null)
+                {
+                    map[batchTaskIds[index]] = batchResults[index]!;
+                }
             }
         }
 
@@ -114,6 +129,10 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
                 .ConfigureAwait(false);
             return await graphClient.ReadJsonAsync<PlannerTaskDetails>(response, cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch
         {
             return null;
@@ -125,20 +144,33 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
         IReadOnlyList<PlannerTask> tasks,
         CancellationToken cancellationToken)
     {
+        const int maxConcurrentPlanFetches = 10;
+
         var planIds = tasks
             .Select(task => task.PlanId)
             .Where(planId => !string.IsNullOrWhiteSpace(planId))
             .Distinct()
             .ToArray();
 
-        var planTasks = planIds.Select(planId => FetchPlanAsync(accessToken, planId!, cancellationToken)).ToArray();
-        var results = await Task.WhenAll(planTasks).ConfigureAwait(false);
         var map = new Dictionary<string, string>();
-        for (var index = 0; index < planIds.Length; index++)
+        for (var offset = 0; offset < planIds.Length; offset += maxConcurrentPlanFetches)
         {
-            if (!string.IsNullOrWhiteSpace(results[index]))
+            var batchPlanIds = planIds
+                .Skip(offset)
+                .Take(maxConcurrentPlanFetches)
+                .ToArray();
+
+            var planTasks = batchPlanIds
+                .Select(planId => FetchPlanAsync(accessToken, planId!, cancellationToken))
+                .ToArray();
+            var results = await Task.WhenAll(planTasks).ConfigureAwait(false);
+
+            for (var index = 0; index < batchPlanIds.Length; index++)
             {
-                map[planIds[index]!] = results[index]!;
+                if (!string.IsNullOrWhiteSpace(results[index]))
+                {
+                    map[batchPlanIds[index]!] = results[index]!;
+                }
             }
         }
 
@@ -159,6 +191,10 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
             var plan = await graphClient.ReadJsonAsync<PlannerPlan>(response, cancellationToken).ConfigureAwait(false);
             return plan.Title?.Trim();
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch
         {
             return null;
@@ -170,20 +206,33 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
         IReadOnlyList<PlannerTask> tasks,
         CancellationToken cancellationToken)
     {
+        const int maxConcurrentBucketFetches = 10;
+
         var bucketIds = tasks
             .Select(task => task.BucketId)
             .Where(bucketId => !string.IsNullOrWhiteSpace(bucketId))
             .Distinct()
             .ToArray();
 
-        var bucketTasks = bucketIds.Select(bucketId => FetchBucketAsync(accessToken, bucketId!, cancellationToken)).ToArray();
-        var results = await Task.WhenAll(bucketTasks).ConfigureAwait(false);
         var map = new Dictionary<string, string>();
-        for (var index = 0; index < bucketIds.Length; index++)
+        for (var offset = 0; offset < bucketIds.Length; offset += maxConcurrentBucketFetches)
         {
-            if (!string.IsNullOrWhiteSpace(results[index]))
+            var batchBucketIds = bucketIds
+                .Skip(offset)
+                .Take(maxConcurrentBucketFetches)
+                .ToArray();
+
+            var bucketTasks = batchBucketIds
+                .Select(bucketId => FetchBucketAsync(accessToken, bucketId!, cancellationToken))
+                .ToArray();
+            var results = await Task.WhenAll(bucketTasks).ConfigureAwait(false);
+
+            for (var index = 0; index < batchBucketIds.Length; index++)
             {
-                map[bucketIds[index]!] = results[index]!;
+                if (!string.IsNullOrWhiteSpace(results[index]))
+                {
+                    map[batchBucketIds[index]!] = results[index]!;
+                }
             }
         }
 
@@ -203,6 +252,10 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
                 .ConfigureAwait(false);
             var bucket = await graphClient.ReadJsonAsync<PlannerBucket>(response, cancellationToken).ConfigureAwait(false);
             return bucket.Name?.Trim();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {

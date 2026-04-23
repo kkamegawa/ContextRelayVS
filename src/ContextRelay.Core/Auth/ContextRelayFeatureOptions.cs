@@ -12,11 +12,11 @@ public sealed class ContextRelayFeatureOptions
 
     public bool ConnectorsEnabled { get; set; }
 
-    public bool OneNoteEnabled { get; set; } = true;
+    public bool OneNoteEnabled { get; set; }
 
-    public bool PlannerEnabled { get; set; } = true;
+    public bool PlannerEnabled { get; set; }
 
-    public bool TodoEnabled { get; set; } = true;
+    public bool TodoEnabled { get; set; }
 
     public bool ChatPreviewEnabled { get; set; } = true;
 }
