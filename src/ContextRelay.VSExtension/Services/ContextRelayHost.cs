@@ -66,7 +66,10 @@ internal sealed class ContextRelayHost : IDisposable
             [ContextSource.Teams] = new TeamsSearchAdapter(graphClient),
             [ContextSource.SharePoint] = new RetrievalSearchAdapter(RetrievalDataSource.SharePoint, graphClient),
             [ContextSource.OneDrive] = new RetrievalSearchAdapter(RetrievalDataSource.OneDriveBusiness, graphClient),
-            [ContextSource.Connectors] = new RetrievalSearchAdapter(RetrievalDataSource.ExternalItem, graphClient)
+            [ContextSource.Connectors] = new RetrievalSearchAdapter(RetrievalDataSource.ExternalItem, graphClient),
+            [ContextSource.OneNote] = new OneNoteSearchAdapter(graphClient),
+            [ContextSource.Planner] = new PlannerSearchAdapter(graphClient),
+            [ContextSource.Todo] = new TodoSearchAdapter(graphClient)
         };
         copilotChatAdapter = new CopilotChatAdapter(graphClient);
         handoffDocumentGenerator = new HandoffDocumentGenerator(sharedStore);
@@ -653,6 +656,9 @@ internal sealed class ContextRelayHost : IDisposable
             ContextSource.SharePoint => settings.SharePointEnabled,
             ContextSource.OneDrive => settings.OneDriveEnabled,
             ContextSource.Connectors => settings.ConnectorsEnabled,
+            ContextSource.OneNote => settings.OneNoteEnabled,
+            ContextSource.Planner => settings.PlannerEnabled,
+            ContextSource.Todo => settings.TodoEnabled,
             _ => false
         };
     }
@@ -714,6 +720,9 @@ internal sealed class ContextRelayHost : IDisposable
             ContextSource.SharePoint => SnippetSource.SharePoint,
             ContextSource.OneDrive => SnippetSource.OneDrive,
             ContextSource.Connectors => SnippetSource.Connectors,
+            ContextSource.OneNote => SnippetSource.OneNote,
+            ContextSource.Planner => SnippetSource.Planner,
+            ContextSource.Todo => SnippetSource.Todo,
             _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Unsupported snippet source.")
         };
     }
@@ -889,6 +898,7 @@ internal sealed class ContextRelayHost : IDisposable
             ContextSource.Mail => await HydrateMailItemAsync(accessToken, item, cancellationToken).ConfigureAwait(false),
             ContextSource.SharePoint => await HydrateDriveItemAsync(accessToken, item, cancellationToken).ConfigureAwait(false),
             ContextSource.OneDrive => await HydrateDriveItemAsync(accessToken, item, cancellationToken).ConfigureAwait(false),
+            ContextSource.OneNote => await HydrateOneNoteItemAsync(accessToken, item, cancellationToken).ConfigureAwait(false),
             _ => item
         };
     }
@@ -931,6 +941,29 @@ internal sealed class ContextRelayHost : IDisposable
             itemId,
             InferDriveContentMode(item.Title, mimeType),
             cancellationToken).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(content)
+            ? item
+            : CloneItemWithSnippet(item, content);
+    }
+
+    private async Task<ContextItem> HydrateOneNoteItemAsync(string accessToken, ContextItem item, CancellationToken cancellationToken)
+    {
+        if (!item.Metadata.TryGetValue("pageId", out var pageId) || string.IsNullOrWhiteSpace(pageId))
+        {
+            return item;
+        }
+
+        var url = $"{graphClient.BaseUrl}/v1.0/me/onenote/pages/{Uri.EscapeDataString(pageId)}/content";
+        using var response = await graphClient
+            .SendWithRetryAsync(url, accessToken, HttpMethod.Get, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return item;
+        }
+
+        var html = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var content = NormalizeHtmlToText(html);
         return string.IsNullOrWhiteSpace(content)
             ? item
             : CloneItemWithSnippet(item, content);
@@ -1047,7 +1080,8 @@ internal sealed class ContextRelayHost : IDisposable
     {
         return source == ContextSource.Mail ||
             source == ContextSource.SharePoint ||
-            source == ContextSource.OneDrive;
+            source == ContextSource.OneDrive ||
+            source == ContextSource.OneNote;
     }
 
     private static ContextItem CloneItemWithSnippet(ContextItem item, string snippet)

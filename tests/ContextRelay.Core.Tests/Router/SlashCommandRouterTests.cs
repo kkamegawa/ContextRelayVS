@@ -14,7 +14,7 @@ public sealed class SlashCommandRouterTests
         Assert.Equal(RouteTarget.All, result.Target);
         Assert.Equal("architecture decisions", result.Query);
         Assert.False(result.IsEmpty);
-        Assert.Equal(4, result.TargetSources.Count);
+        Assert.Equal(7, result.TargetSources.Count);
     }
 
     [Fact]
@@ -85,6 +85,56 @@ public sealed class SlashCommandRouterTests
         var commands = SlashCommandRouter.GetSupportedCommands();
 
         Assert.Contains("/connectors", commands);
+    }
+
+    [Fact]
+    public void Parse_OneNoteCommand_RoutesToOneNoteSource()
+    {
+        var result = SlashCommandRouter.Parse("/onenote architecture decision log");
+
+        Assert.Equal(RouteTarget.OneNote, result.Target);
+        Assert.Equal("/onenote", result.SlashCommandName);
+        Assert.Equal("architecture decision log", result.Query);
+        Assert.Single(result.TargetSources);
+        Assert.Equal(ContextSource.OneNote, result.TargetSources[0]);
+    }
+
+    [Fact]
+    public void Parse_TaskCommand_RoutesToPlannerAndTodoSources()
+    {
+        var result = SlashCommandRouter.Parse("/task release checklist");
+
+        Assert.Equal(RouteTarget.Task, result.Target);
+        Assert.Equal("/task", result.SlashCommandName);
+        Assert.Equal("release checklist", result.Query);
+        Assert.Equal(2, result.TargetSources.Count);
+        Assert.Contains(ContextSource.Planner, result.TargetSources);
+        Assert.Contains(ContextSource.Todo, result.TargetSources);
+    }
+
+    [Fact]
+    public void GetSupportedCommands_IncludesOneNoteAndTaskCommands()
+    {
+        var commands = SlashCommandRouter.GetSupportedCommands();
+
+        Assert.Contains("/onenote", commands);
+        Assert.Contains("/task", commands);
+    }
+
+    [Fact]
+    public void GetHelpText_ReturnsOneNoteExamples()
+    {
+        var help = SlashCommandRouter.GetHelpText("/onenote");
+
+        Assert.Contains("/onenote architecture decision log", help);
+    }
+
+    [Fact]
+    public void GetHelpText_ReturnsTaskExamples()
+    {
+        var help = SlashCommandRouter.GetHelpText("/task");
+
+        Assert.Contains("/task release checklist", help);
     }
 
     [Fact]

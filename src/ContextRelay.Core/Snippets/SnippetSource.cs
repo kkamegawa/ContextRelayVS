@@ -7,5 +7,8 @@ public enum SnippetSource
     SharePoint,
     OneDrive,
     Connectors,
+    OneNote,
+    Planner,
+    Todo,
     Chat
 }

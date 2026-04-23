@@ -166,6 +166,9 @@ public sealed class SharedSnippetRepository : ISnippetRepository
             SnippetSource.SharePoint => "sharepoint",
             SnippetSource.OneDrive => "onedrive",
             SnippetSource.Connectors => "connectors",
+            SnippetSource.OneNote => "onenote",
+            SnippetSource.Planner => "planner",
+            SnippetSource.Todo => "todo",
             SnippetSource.Chat => "chat",
             _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Unknown snippet source.")
         };

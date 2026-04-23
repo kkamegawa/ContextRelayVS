@@ -7,6 +7,8 @@ public enum RouteTarget
     SharePoint,
     OneDrive,
     Connectors,
+    OneNote,
+    Task,
     All,
     Ask,
     Clear

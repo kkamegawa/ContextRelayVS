@@ -71,7 +71,10 @@ public sealed class ContextRelayPackage : AsyncPackage
             TeamsEnabled = adapters.Teams,
             SharePointEnabled = adapters.SharePoint,
             OneDriveEnabled = adapters.OneDrive,
-            ConnectorsEnabled = adapters.Connectors
+            ConnectorsEnabled = adapters.Connectors,
+            OneNoteEnabled = adapters.OneNote,
+            PlannerEnabled = adapters.Planner,
+            TodoEnabled = adapters.Todo
         };
     }
 

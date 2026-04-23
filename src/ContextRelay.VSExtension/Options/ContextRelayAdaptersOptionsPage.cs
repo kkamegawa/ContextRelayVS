@@ -24,6 +24,15 @@ public sealed class ContextRelayAdaptersOptionsPage : UIElementDialogPage
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public bool Connectors { get; set; }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+    public bool OneNote { get; set; }
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+    public bool Planner { get; set; }
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+    public bool Todo { get; set; }
+
     protected override UIElement Child => control ??= new AdaptersOptionsControl();
 
     protected override void OnActivate(CancelEventArgs e)
@@ -39,6 +48,9 @@ public sealed class ContextRelayAdaptersOptionsPage : UIElementDialogPage
         control.SharePoint = SharePoint;
         control.OneDrive = OneDrive;
         control.Connectors = Connectors;
+        control.OneNote = OneNote;
+        control.Planner = Planner;
+        control.Todo = Todo;
     }
 
     protected override void OnApply(PageApplyEventArgs e)
@@ -50,6 +62,9 @@ public sealed class ContextRelayAdaptersOptionsPage : UIElementDialogPage
             SharePoint = control.SharePoint;
             OneDrive = control.OneDrive;
             Connectors = control.Connectors;
+            OneNote = control.OneNote;
+            Planner = control.Planner;
+            Todo = control.Todo;
         }
 
         base.OnApply(e);

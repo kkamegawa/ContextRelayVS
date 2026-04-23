@@ -14,6 +14,9 @@ public static class AuthScopeCatalog
     private static readonly IReadOnlyList<string> TeamsScopes = new[] { "Chat.Read", "ChannelMessage.Read.All" };
     private static readonly IReadOnlyList<string> RetrievalScopes = new[] { "Files.Read.All", "Sites.Read.All" };
     private static readonly IReadOnlyList<string> ConnectorsScopes = new[] { "ExternalItem.Read.All" };
+    private static readonly IReadOnlyList<string> OneNoteScopes = new[] { "Notes.Read" };
+    private static readonly IReadOnlyList<string> PlannerScopes = new[] { "Tasks.Read" };
+    private static readonly IReadOnlyList<string> TodoScopes = new[] { "Tasks.Read" };
     private static readonly IReadOnlyList<string> ChatScopes = new[]
     {
         "Sites.Read.All",
@@ -52,6 +55,21 @@ public static class AuthScopeCatalog
         if (featureOptions.ConnectorsEnabled)
         {
             scopes.UnionWith(ConnectorsScopes);
+        }
+
+        if (featureOptions.OneNoteEnabled)
+        {
+            scopes.UnionWith(OneNoteScopes);
+        }
+
+        if (featureOptions.PlannerEnabled)
+        {
+            scopes.UnionWith(PlannerScopes);
+        }
+
+        if (featureOptions.TodoEnabled)
+        {
+            scopes.UnionWith(TodoScopes);
         }
 
         if (featureOptions.ChatPreviewEnabled)
