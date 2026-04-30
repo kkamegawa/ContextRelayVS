@@ -92,6 +92,8 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     public string ReplaceAssistantButtonText => ContextRelayLocalizedStrings.ReplaceAssistantButtonText;
 
+    public string ContextLabelsPrefixText => ContextRelayLocalizedStrings.ContextLabelsPrefixText;
+
     public string QueryText
     {
         get => queryText;

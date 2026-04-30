@@ -149,6 +149,8 @@ internal static class ContextRelayLocalizedStrings
 
     public static string ReplaceAssistantButtonText => UseJapanese ? "置換" : "Replace";
 
+    public static string ContextLabelsPrefixText => UseJapanese ? "コンテキスト: " : "Context: ";
+
     public static string NoResultsFoundStatus => UseJapanese ? "結果が見つかりませんでした。" : "No results found.";
 
     public static string TypeQueryStatus => GenericHelpText;

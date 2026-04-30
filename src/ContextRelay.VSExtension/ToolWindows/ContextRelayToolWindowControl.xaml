@@ -182,8 +182,21 @@
                                         <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Text="{Binding Timestamp}" Opacity="0.7" />
                                     </DockPanel>
                                      <TextBlock Margin="0,4,0,0" Text="{Binding Text}" TextWrapping="Wrap" />
-                                    <TextBlock Margin="0,4,0,0" Text="{Binding ContextLabelsDisplay}" TextWrapping="Wrap" Opacity="0.7" />
-                                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                                     <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Opacity="0.7">
+                                         <TextBlock.Style>
+                                             <Style TargetType="TextBlock">
+                                                 <Setter Property="Visibility" Value="Collapsed" />
+                                                 <Style.Triggers>
+                                                     <DataTrigger Binding="{Binding HasContextLabels}" Value="True">
+                                                         <Setter Property="Visibility" Value="Visible" />
+                                                     </DataTrigger>
+                                                 </Style.Triggers>
+                                             </Style>
+                                         </TextBlock.Style>
+                                         <Run Text="{Binding ContextLabelsPrefixText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                         <Run Text="{Binding ContextLabelsJoinedDisplay}" />
+                                     </TextBlock>
+                                     <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
                                         <StackPanel.Style>
                                             <Style TargetType="StackPanel">
                                                 <Setter Property="Visibility" Value="Collapsed" />

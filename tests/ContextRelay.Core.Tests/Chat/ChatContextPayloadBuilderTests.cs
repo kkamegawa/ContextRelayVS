@@ -1,3 +1,4 @@
+using System;
 using ContextRelay.Core.Chat;
 using ContextRelay.Core.SharedStore;
 using Xunit;
@@ -34,6 +35,23 @@ public sealed class ChatContextPayloadBuilderTests
     }
 
     [Fact]
+    public void Build_TrimsFileResourceUrisBeforeSending()
+    {
+        var payload = ChatContextPayloadBuilder.Build(new[]
+        {
+            new SharedSnippetItem
+            {
+                Name = "Design doc",
+                Source = "sharepoint",
+                SourceUrl = "  https://contoso.sharepoint.com/sites/eng/Shared%20Documents/design.docx  ",
+                Snippet = "Design details"
+            }
+        });
+
+        Assert.Equal("https://contoso.sharepoint.com/sites/eng/Shared%20Documents/design.docx", payload.SendOptions.ContextualResources?.Files[0].Uri);
+    }
+
+    [Fact]
     public void Build_FallsBackToBoundedAdditionalContextForTextSnippetsAndSearchSummary()
     {
         var longText = new string('x', ChatContextPayloadBuilder.MaxChatContextChars + 100);
@@ -54,6 +72,24 @@ public sealed class ChatContextPayloadBuilderTests
         Assert.Null(payload.SendOptions.ContextualResources);
         Assert.Contains("Mail thread", payload.Labels);
         Assert.DoesNotContain("Latest ContextRelay search summary", payload.Labels);
+    }
+
+    [Fact]
+    public void Build_ReportsAccurateTruncatedCharacterCount()
+    {
+        var longText = new string('x', ChatContextPayloadBuilder.MaxChatContextChars + 100);
+        var payload = ChatContextPayloadBuilder.Build(System.Array.Empty<SharedSnippetItem>(), longText);
+        var truncated = payload.SendOptions.AdditionalContext[0].Text;
+        var markerIndex = truncated.IndexOf("\n[truncated ", StringComparison.Ordinal);
+
+        Assert.True(markerIndex > 0);
+
+        var marker = truncated.Substring(markerIndex);
+        var omittedCharsText = marker.Replace("\n[truncated ", string.Empty, StringComparison.Ordinal)
+            .Replace(" chars]", string.Empty, StringComparison.Ordinal);
+        var omittedChars = int.Parse(omittedCharsText, System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.Equal(longText.Length - omittedChars, markerIndex);
     }
 
     [Fact]

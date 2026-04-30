@@ -29,23 +29,27 @@ public sealed class SharedChatHistoryItem
             string.Equals(kind.GetString(), "ask", System.StringComparison.OrdinalIgnoreCase));
 
     [JsonIgnore]
-    public string ContextLabelsDisplay
-    {
-        get
-        {
-            if (!Metadata.TryGetValue("contextLabels", out var labels) ||
-                labels.ValueKind != JsonValueKind.Array)
-            {
-                return string.Empty;
-            }
+    public IReadOnlyList<string> ContextLabels => GetContextLabels();
 
-            var values = labels
-                .EnumerateArray()
-                .Where(label => label.ValueKind == JsonValueKind.String)
-                .Select(label => label.GetString())
-                .Where(label => !string.IsNullOrWhiteSpace(label))
-                .ToArray();
-            return values.Length == 0 ? string.Empty : $"Context: {string.Join(", ", values)}";
+    [JsonIgnore]
+    public bool HasContextLabels => ContextLabels.Count > 0;
+
+    [JsonIgnore]
+    public string ContextLabelsJoinedDisplay => string.Join(", ", ContextLabels);
+
+    private string[] GetContextLabels()
+    {
+        if (!Metadata.TryGetValue("contextLabels", out var labels) ||
+            labels.ValueKind != JsonValueKind.Array)
+        {
+            return [];
         }
+
+        return labels
+            .EnumerateArray()
+            .Where(label => label.ValueKind == JsonValueKind.String)
+            .Select(label => label.GetString())
+            .Where(label => !string.IsNullOrWhiteSpace(label))
+            .ToArray()!;
     }
 }

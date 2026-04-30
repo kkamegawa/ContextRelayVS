@@ -192,14 +192,15 @@ public sealed class AdapterTests
     public async Task CopilotChatAdapter_SendMessage_IncludesExplicitContextPayloads()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var httpClient = new HttpClient(new RecordingHttpMessageHandler(CreateResponse(HttpStatusCode.OK, """
+        var handler = new RecordingHttpMessageHandler(CreateResponse(HttpStatusCode.OK, """
             {
               "messages": [
                 { "text": "Use this context." },
                 { "text": "Context-aware reply." }
               ]
             }
-            """)));
+            """));
+        using var httpClient = new HttpClient(handler);
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
 
         var reply = await adapter.SendMessageAsync(
@@ -227,7 +228,7 @@ public sealed class AdapterTests
             cancellationToken);
 
         Assert.Equal("Context-aware reply.", reply);
-        var body = RecordingHttpMessageHandler.LastRequestBody;
+        var body = handler.LastRequestBody;
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
 
@@ -300,7 +301,7 @@ public sealed class AdapterTests
             this.response = response;
         }
 
-        public static string LastRequestBody { get; private set; } = string.Empty;
+        public string LastRequestBody { get; private set; } = string.Empty;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {

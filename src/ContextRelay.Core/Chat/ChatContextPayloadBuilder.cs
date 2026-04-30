@@ -23,16 +23,17 @@ public static class ChatContextPayloadBuilder
 
         foreach (var snippet in snippets)
         {
-            if (IsFileContextSnippet(snippet))
+            if (TryGetFileContextUri(snippet, out var fileContextUri))
             {
-                fileResources.Add(new CopilotContextualFileResource { Uri = snippet.SourceUrl! });
+                fileResources.Add(new CopilotContextualFileResource { Uri = fileContextUri });
                 labels.Add(GetSnippetLabel(snippet));
                 continue;
             }
 
-            var source = string.IsNullOrWhiteSpace(snippet.SourceUrl)
+            var sourceUrl = snippet.SourceUrl?.Trim();
+            var source = string.IsNullOrWhiteSpace(sourceUrl)
                 ? snippet.Source
-                : $"{snippet.Source} ({snippet.SourceUrl})";
+                : $"{snippet.Source} ({sourceUrl})";
             var body = string.Join(
                 "\n",
                 $"Title: {GetSnippetLabel(snippet)}",
@@ -70,8 +71,9 @@ public static class ChatContextPayloadBuilder
         };
     }
 
-    private static bool IsFileContextSnippet(SharedSnippetItem snippet)
+    private static bool TryGetFileContextUri(SharedSnippetItem snippet, out string normalizedUri)
     {
+        normalizedUri = string.Empty;
         var sourceUrl = snippet.SourceUrl?.Trim();
         if (sourceUrl is null ||
             sourceUrl.Length == 0 ||
@@ -81,8 +83,14 @@ public static class ChatContextPayloadBuilder
             return false;
         }
 
-        return string.Equals(snippet.Source, "sharepoint", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(snippet.Source, "onedrive", StringComparison.OrdinalIgnoreCase);
+        if (!string.Equals(snippet.Source, "sharepoint", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(snippet.Source, "onedrive", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        normalizedUri = sourceUrl;
+        return true;
     }
 
     private static void AddTextContext(
@@ -130,12 +138,25 @@ public static class ChatContextPayloadBuilder
             return value;
         }
 
-        var suffix = $"\n[truncated {value.Length - budget} chars]";
-        if (suffix.Length >= budget)
+        var omittedChars = value.Length - budget;
+        while (true)
         {
-            return suffix.Substring(0, budget);
-        }
+            var suffix = $"\n[truncated {omittedChars} chars]";
+            var retainedChars = budget - suffix.Length;
+            if (retainedChars <= 0)
+            {
+                return suffix.Length <= budget
+                    ? suffix
+                    : suffix.Substring(0, budget);
+            }
 
-        return value.Substring(0, budget - suffix.Length) + suffix;
+            var adjustedOmittedChars = value.Length - retainedChars;
+            if (adjustedOmittedChars == omittedChars)
+            {
+                return value.Substring(0, retainedChars) + suffix;
+            }
+
+            omittedChars = adjustedOmittedChars;
+        }
     }
 }
