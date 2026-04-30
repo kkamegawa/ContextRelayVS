@@ -15,7 +15,7 @@
     <PackageReference Include="Microsoft.Identity.Client.Broker" Version="4.83.3" />
     <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.83.3" />
     <PackageReference Include="Microsoft.Graph" Version="5.104.0" />
-    <PackageReference Include="System.Text.Json" Version="10.0.6" />
+    <PackageReference Include="System.Text.Json" Version="10.0.7" />
   </ItemGroup>
 
 </Project>
