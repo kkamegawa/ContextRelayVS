@@ -15,6 +15,7 @@ using ContextRelay.Core.Adapters;
 using ContextRelay.Core.Auth;
 using ContextRelay.Core.Auth.Msal;
 using ContextRelay.Core.Cache;
+using ContextRelay.Core.Chat;
 using ContextRelay.Core.Handoff;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
@@ -42,6 +43,7 @@ internal sealed class ContextRelayHost : IDisposable
     private TtlLruCache<string, ContextItem[]> searchCache = new();
     private ContextRelayHostState state = new();
     private string? lastSearchSummary;
+    private string? copilotConversationId;
     private string? cacheWorkspaceRoot;
     private int cacheTtlSeconds = 300;
     private int cacheMaxEntries = 200;
@@ -102,7 +104,8 @@ internal sealed class ContextRelayHost : IDisposable
                 await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
                 await snippetRepository.ClearAsync(cancellationToken).ConfigureAwait(false);
                 currentSearchResults = Array.Empty<ContextItem>();
-                lastSearchSummary = ContextRelayLocalizedStrings.ChatAndSnippetsClearedStatus;
+                lastSearchSummary = null;
+                copilotConversationId = null;
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatAndSnippetsClearedStatus, trimmed, cancellationToken).ConfigureAwait(false);
             }
 
@@ -116,7 +119,7 @@ internal sealed class ContextRelayHost : IDisposable
             graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
             await EnsureCacheReadyAsync(settings, cancellationToken).ConfigureAwait(false);
             var enabledSources = GetEnabledSources(route, settings);
-            if (enabledSources.Count == 0 && route.Target != RouteTarget.Ask)
+            if (enabledSources.Count == 0 && route.Target != RouteTarget.Ask && route.Target != RouteTarget.Chat)
             {
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.RequestedSourceDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
             }
@@ -134,6 +137,16 @@ internal sealed class ContextRelayHost : IDisposable
                 return await RefreshStateCoreAsync(ex.Message, trimmed, cancellationToken).ConfigureAwait(false);
             }
 
+            if (route.Target == RouteTarget.Chat)
+            {
+                if (!settings.EnableChatPreview)
+                {
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatPreviewDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                }
+
+                return await HandleChatCommandAsync(trimmed, route.Query, token.AccessToken, cancellationToken).ConfigureAwait(false);
+            }
+
             if (route.Target == RouteTarget.Ask)
             {
                 if (!settings.EnableChatPreview)
@@ -147,16 +160,20 @@ internal sealed class ContextRelayHost : IDisposable
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresPinnedContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
 
-                var prompt = AskPromptBuilder.Build(route.Query, snippets);
-                var reply = await copilotChatAdapter.AskAsync(token.AccessToken, prompt, cancellationToken).ConfigureAwait(false);
-                var previewDocument = AskPreviewLanguageDetector.Detect(route.Query, reply);
-                await AppendChatHistoryAsync(route.Query, reply, cancellationToken).ConfigureAwait(false);
-                await OpenAskPreviewAsync(route.Query, previewDocument, settings, cancellationToken).ConfigureAwait(false);
-                currentSearchResults = Array.Empty<ContextItem>();
-                lastSearchSummary = reply;
+                var contextPayload = ChatContextPayloadBuilder.Build(snippets);
+                var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
+                var reply = await copilotChatAdapter
+                    .SendMessageAsync(token.AccessToken, conversationId, route.Query, contextPayload.SendOptions, cancellationToken)
+                    .ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(reply))
+                {
+                    throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
+                }
+
+                await AppendChatHistoryAsync(route.Query, reply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 return await RefreshStateCoreAsync(
-                    ContextRelayLocalizedStrings.GetAskPreviewOpenedStatus(previewDocument.LanguageId, snippets.Count),
+                    ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count),
                     trimmed,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -303,6 +320,7 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
+            copilotConversationId = null;
             return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -352,6 +370,27 @@ internal sealed class ContextRelayHost : IDisposable
         System.Windows.Clipboard.SetText(prompt);
         logger.LogInformation("Handoff prompt copied to clipboard.");
         await RefreshStateAsync(ContextRelayLocalizedStrings.HandoffPromptCopiedStatus).ConfigureAwait(false);
+    }
+
+    public async Task CopyAssistantTextAsync(string text, CancellationToken cancellationToken = default)
+    {
+        await CopyTextToClipboardAsync(text, ContextRelayLocalizedStrings.AssistantResponseCopiedStatus, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task AppendAssistantTextToEditorAsync(string text, CancellationToken cancellationToken = default)
+    {
+        var applied = await package.AppendToActiveDocumentAsync(text, cancellationToken).ConfigureAwait(false);
+        await RefreshStateAsync(applied
+            ? ContextRelayLocalizedStrings.AssistantResponseAppendedStatus
+            : ContextRelayLocalizedStrings.NoActiveEditorStatus).ConfigureAwait(false);
+    }
+
+    public async Task ReplaceEditorWithAssistantTextAsync(string text, CancellationToken cancellationToken = default)
+    {
+        var applied = await package.ReplaceActiveDocumentAsync(text, cancellationToken).ConfigureAwait(false);
+        await RefreshStateAsync(applied
+            ? ContextRelayLocalizedStrings.AssistantResponseReplacedStatus
+            : ContextRelayLocalizedStrings.NoActiveEditorStatus).ConfigureAwait(false);
     }
 
     public async Task OpenHandoffDocumentAsync(CancellationToken cancellationToken = default)
@@ -538,22 +577,82 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task AppendChatHistoryAsync(string userPrompt, string assistantReply, CancellationToken cancellationToken)
     {
+        await AppendChatHistoryAsync(userPrompt, assistantReply, kind: null, contextLabels: Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task AppendChatHistoryAsync(
+        string userPrompt,
+        string assistantReply,
+        string? kind,
+        IReadOnlyList<string> contextLabels,
+        CancellationToken cancellationToken)
+    {
         await sharedStore.AppendChatHistoryAsync(new[]
         {
             CreateChatItem("user", userPrompt),
-            CreateChatItem("assistant", assistantReply)
+            CreateChatItem("assistant", assistantReply, kind, contextLabels)
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private SharedChatHistoryItem CreateChatItem(string role, string text)
+    private SharedChatHistoryItem CreateChatItem(string role, string text, string? kind = null, IReadOnlyList<string>? contextLabels = null)
     {
+        var metadata = new Dictionary<string, JsonElement>();
+        if (!string.IsNullOrWhiteSpace(kind))
+        {
+            metadata["kind"] = JsonSerializer.SerializeToElement(kind);
+        }
+
+        if (contextLabels is { Count: > 0 })
+        {
+            metadata["contextLabels"] = JsonSerializer.SerializeToElement(contextLabels);
+        }
+
         return new SharedChatHistoryItem
         {
             Id = Guid.NewGuid().ToString("N"),
             Role = role,
             Text = text,
-            Timestamp = DateTimeOffset.UtcNow.ToString("O")
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            Metadata = metadata
         };
+    }
+
+    private async Task<ContextRelayHostState> HandleChatCommandAsync(
+        string originalInput,
+        string message,
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var contextPayload = ChatContextPayloadBuilder.Build(snippets, lastSearchSummary);
+        var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
+        var reply = await copilotChatAdapter
+            .SendMessageAsync(accessToken, conversationId, message, contextPayload.SendOptions, cancellationToken)
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(reply))
+        {
+            throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
+        }
+
+        await AppendChatHistoryAsync(message, reply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("Handled plain chat with Microsoft 365 Copilot.");
+        return await RefreshStateCoreAsync(
+            contextPayload.Labels.Count == 0
+                ? ContextRelayLocalizedStrings.ChatReplyShownStatus
+                : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(contextPayload.Labels.Count),
+            originalInput,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> EnsureCopilotConversationAsync(string accessToken, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(copilotConversationId))
+        {
+            return copilotConversationId!;
+        }
+
+        copilotConversationId = await copilotChatAdapter.CreateConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
+        return copilotConversationId;
     }
 
     private async Task OpenAskPreviewAsync(

@@ -20,7 +20,8 @@ License: **MIT**.
 
 | VS Code feature | VS implementation |
 |---|---|
-| Keyword / slash-command search (`/mail` `/teams` `/sharepoint` `/onedrive` `/connectors` `/all` `/ask` `/clear`) | Ported 1:1 (same grammar) |
+| Plain Microsoft 365 Copilot chat | Plain text without a slash command starts or continues chat without implicit source search context |
+| Keyword / slash-command search (`/mail` `/teams` `/sharepoint` `/onedrive` `/onenote` `/task` `/connectors` `/all` `/ask` `/clear`) | Slash commands remain explicit search or context operations |
 | Snippet pinning (persisted across sessions) | Cross-editor shared store (`%LocalAppData%\ContextRelay\shared\snippets.json`) |
 | Handoff docs (`PLAN.md` / `TASKS.md` / `TEST_PLAN.md` / `HANDOFF.md`) | Written under solution root `.contextrelay/` (fallback `%USERPROFILE%\.contextrelay\`) |
 | Chat tab (Copilot Chat API /beta) | Phase 2 (feature flag off in Phase 1) |
@@ -31,7 +32,7 @@ License: **MIT**.
 
 - **Phase 0**: Repo/solution scaffold, MIT LICENSE, CI, empty VSIX launches.
 - **Phase 1 (MVP)**: Auth + Mail/SharePoint/OneDrive/Teams search + slash router + snippet pinning + handoff docs + settings + cache + debug log + cross-editor shared store.
-- **Phase 2**: Copilot Chat API (`/ask`), connectors, deeper Copilot-for-VS handoff, Japanese UI, slash-command discovery, and result context actions.
+- **Phase 2**: Copilot Chat API (plain chat and `/ask`), connectors, deeper Copilot-for-VS handoff, Japanese UI, slash-command discovery, result context actions, and explicit assistant reply editor actions.
 - **Phase 3**: Marketplace publish, auto-update, opt-in telemetry.
 
 ## 2. Target environment

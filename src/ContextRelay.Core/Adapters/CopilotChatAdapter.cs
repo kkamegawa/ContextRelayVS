@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,6 +10,11 @@ namespace ContextRelay.Core.Adapters;
 
 public sealed class CopilotChatAdapter : ICopilotChatAdapter
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly GraphHttpClient graphClient;
 
     public CopilotChatAdapter(GraphHttpClient? graphClient = null)
@@ -19,7 +25,7 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
     public async Task<string> AskAsync(string accessToken, string prompt, CancellationToken cancellationToken = default)
     {
         var conversationId = await CreateConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
-        var reply = await SendMessageAsync(accessToken, conversationId, prompt, cancellationToken).ConfigureAwait(false);
+        var reply = await SendMessageAsync(accessToken, conversationId, prompt, options: null, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(reply))
         {
             throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
@@ -28,7 +34,7 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         return reply;
     }
 
-    private async Task<string> CreateConversationAsync(string accessToken, CancellationToken cancellationToken)
+    public async Task<string> CreateConversationAsync(string accessToken, CancellationToken cancellationToken = default)
     {
         using var response = await graphClient
             .SendWithRetryAsync($"{graphClient.BaseUrl}/beta/copilot/conversations", accessToken, HttpMethod.Post, "{}", cancellationToken: cancellationToken)
@@ -42,13 +48,31 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         return data.Id;
     }
 
-    private async Task<string> SendMessageAsync(string accessToken, string conversationId, string message, CancellationToken cancellationToken)
+    public async Task<string> SendMessageAsync(
+        string accessToken,
+        string conversationId,
+        string message,
+        CopilotChatSendOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
-        var body = JsonSerializer.Serialize(new
+        var request = new CopilotChatRequest
         {
-            message = new { text = message },
-            locationHint = new { timeZone = ResolveTimeZone() }
-        });
+            Message = new CopilotChatRequestMessage { Text = message },
+            LocationHint = new CopilotLocationHint { TimeZone = ResolveTimeZone() }
+        };
+
+        if (options?.AdditionalContext is { Count: > 0 })
+        {
+            request.AdditionalContext = options.AdditionalContext;
+        }
+
+        if (options?.ContextualResources is { } contextualResources &&
+            contextualResources.Files is { Count: > 0 })
+        {
+            request.ContextualResources = contextualResources;
+        }
+
+        var body = JsonSerializer.Serialize(request, SerializerOptions);
 
         using var response = await graphClient
             .SendWithRetryAsync($"{graphClient.BaseUrl}/beta/copilot/conversations/{conversationId}/chat", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
@@ -98,4 +122,59 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         [JsonPropertyName("text")]
         public string? Text { get; set; }
     }
+
+    private sealed class CopilotChatRequest
+    {
+        [JsonPropertyName("message")]
+        public CopilotChatRequestMessage Message { get; set; } = new();
+
+        [JsonPropertyName("locationHint")]
+        public CopilotLocationHint LocationHint { get; set; } = new();
+
+        [JsonPropertyName("additionalContext")]
+        public IReadOnlyList<CopilotContextMessage>? AdditionalContext { get; set; }
+
+        [JsonPropertyName("contextualResources")]
+        public CopilotContextualResources? ContextualResources { get; set; }
+    }
+
+    private sealed class CopilotChatRequestMessage
+    {
+        [JsonPropertyName("text")]
+        public string Text { get; set; } = string.Empty;
+    }
+
+    private sealed class CopilotLocationHint
+    {
+        [JsonPropertyName("timeZone")]
+        public string TimeZone { get; set; } = string.Empty;
+    }
+}
+
+public sealed class CopilotChatSendOptions
+{
+    public IReadOnlyList<CopilotContextMessage> AdditionalContext { get; set; } = Array.Empty<CopilotContextMessage>();
+
+    public CopilotContextualResources? ContextualResources { get; set; }
+}
+
+public sealed class CopilotContextMessage
+{
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+}
+
+public sealed class CopilotContextualResources
+{
+    [JsonPropertyName("files")]
+    public IReadOnlyList<CopilotContextualFileResource> Files { get; set; } = Array.Empty<CopilotContextualFileResource>();
+}
+
+public sealed class CopilotContextualFileResource
+{
+    [JsonPropertyName("uri")]
+    public string Uri { get; set; } = string.Empty;
 }

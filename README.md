@@ -2,18 +2,20 @@
 
 ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that surfaces relevant Microsoft 365 context (Exchange Mail, Microsoft Teams, SharePoint, OneDrive) in a tool window while you design and code. It ports the feature set of the VS Code extension [ContextRelay](https://github.com/kkamegawa/ContextRelay) to the Visual Studio platform, and can share pinned snippets, chat history, and handoff-document pointers with the VS Code version on the same machine.
 
-> **Status**: Implemented preview. The repository builds an installable VSIX locally and now includes the planned in-repo UX features: localized tool-window text, slash-command discovery, result actions, `/connectors`, and `/ask` editor previews. Manual Experimental Instance validation is still required before marketplace release.
+> **Status**: Implemented preview. The repository builds an installable VSIX locally and now includes the planned in-repo UX features: localized tool-window text, slash-command discovery, result actions, `/connectors`, plain Microsoft 365 Copilot chat, and `/ask` context chat. Manual Experimental Instance validation is still required before marketplace release.
 
 ## Implemented features
 
-- **Keyword-first search** across Exchange Mail, Teams, SharePoint, and OneDrive via Microsoft Graph.
-- **Slash-command source targeting** — `/mail`, `/teams`, `/sharepoint`, `/onedrive`, `/connectors`, `/all`, `/ask`, `/clear`.
+- **Plain Copilot chat** — input without a slash command starts or continues a Microsoft 365 Copilot conversation without implicit ContextRelay search context.
+- **Explicit source search** across Exchange Mail, Teams, SharePoint, OneDrive, OneNote, Planner/To Do, and connectors via Microsoft Graph slash commands.
+- **Slash-command source targeting** — `/mail`, `/teams`, `/sharepoint`, `/onedrive`, `/onenote`, `/task`, `/connectors`, `/all`, `/ask`, `/clear`.
 - **Slash-command discovery popup** — keyboard-navigable suggestions appear as you type `/...`.
 - **Snippet pinning** — persist results as named snippets in the cross-editor shared store.
 - **Shared chat history** — append/search history shared with the VS Code extension.
 - **Timestamped handoff documents** — generate `PLAN.md`, `TASKS.md`, `TEST_PLAN.md`, and optional `HANDOFF.md` for GitHub Copilot handoff.
 - **Soft Copilot handoff** — copy a generated prompt to the clipboard, append selected results to `HANDOFF.md`, and open GitHub Copilot Chat in Visual Studio when the command is available.
-- **`/ask` editor preview** — requires pinned snippets, caps the forwarded context, sends it to Microsoft 365 Copilot, saves the reply to shared chat history, and opens the response in a format-aware editor document.
+- **Copilot reply actions** — Copilot answers remain visible in the tool window with explicit Copy, Append to active editor, and Replace selection/document actions.
+- **`/ask` context chat** — requires pinned snippets, caps the forwarded context, sends it to Microsoft 365 Copilot, and saves the reply to shared chat history without automatically editing or opening a document.
 - **Localized WPF tool window UI** — English/Japanese labels, status/help text, result-card context actions, and debug-log access.
 - **DialogPage options** — General, Authentication, Graph API, Cache, and Adapters settings pages with modern WPF controls and sovereign cloud support.
 - **MSAL.NET + WAM authentication** with DPAPI-backed token cache.

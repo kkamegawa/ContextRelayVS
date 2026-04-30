@@ -32,11 +32,14 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 ## Search and shared state
 
 1. Sign in with a valid Entra ID work/school account.
-2. Run `/mail test`, `/teams test`, `/sharepoint test`, `/onedrive test`, `/all test`, `/ask summarize`, and `/clear`.
-3. Verify the source filter, help text, result rendering, and clear behavior match the VS Code grammar.
-4. Pin a snippet and confirm it appears in `%LocalAppData%\ContextRelay\shared\snippets.json`.
-5. Submit a query and confirm history appears in `%LocalAppData%\ContextRelay\shared\chat-history.json`.
-6. With the VS Code extension running, verify snippet/history changes propagate both directions.
+2. Run plain text such as `Summarize my current planning context`, then run `/mail test`, `/teams test`, `/sharepoint test`, `/onedrive test`, `/all test`, `/ask summarize`, and `/clear`.
+3. Verify plain text produces a Microsoft 365 Copilot chat reply without source-search result cards.
+4. Verify slash commands use the requested source filter, help text, result rendering, and clear behavior match the VS Code grammar.
+5. Pin a snippet and confirm it appears in `%LocalAppData%\ContextRelay\shared\snippets.json`.
+6. Submit a chat turn after pinning context and confirm the assistant message shows the context labels.
+7. Use assistant reply **Copy**, **Append**, and **Replace** actions and confirm no editor content changes until one of these actions is clicked.
+8. Submit a query and confirm history appears in `%LocalAppData%\ContextRelay\shared\chat-history.json`.
+9. With the VS Code extension running, verify snippet/history changes propagate both directions.
 
 ## Handoff flow
 
