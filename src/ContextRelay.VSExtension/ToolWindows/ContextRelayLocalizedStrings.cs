@@ -19,7 +19,7 @@ internal static class ContextRelayLocalizedStrings
             ["/task"] = ("Search Planner and To Do tasks.", "Planner と To Do のタスクを検索します。"),
             ["/connectors"] = ("Search connector content.", "コネクタのコンテンツを検索します。"),
             ["/all"] = ("Search all enabled Microsoft 365 sources.", "有効な Microsoft 365 ソース全体を検索します。"),
-            ["/ask"] = ("Send the pinned context to Microsoft 365 Copilot.", "ピン留めしたコンテキストを Microsoft 365 Copilot に送信します。"),
+            ["/ask"] = ("Chat with Microsoft 365 Copilot using pinned context.", "ピン留めしたコンテキストを使って Microsoft 365 Copilot とチャットします。"),
             ["/clear"] = ("Clear the current chat transcript and pinned snippets.", "現在のチャット履歴とピン留めスニペットをクリアします。")
         };
 
@@ -44,7 +44,7 @@ internal static class ContextRelayLocalizedStrings
 
     public static string DebugLogButtonText => UseJapanese ? "デバッグ ログ" : "Debug log";
 
-    public static string SearchButtonText => UseJapanese ? "検索" : "Search";
+    public static string SearchButtonText => UseJapanese ? "送信" : "Send";
 
     public static string SearchResultsHeaderText => UseJapanese ? "検索結果" : "Search results";
 
@@ -54,8 +54,8 @@ internal static class ContextRelayLocalizedStrings
 
     public static string SearchToolTip =>
         UseJapanese
-            ? "/mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear を使用できます"
-            : "Use /mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear";
+            ? "通常の文章で Copilot とチャットし、/mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear で検索します"
+            : "Type plain text to chat with Copilot, or use /mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear to search";
 
     public static string CommandPopupHeaderText => UseJapanese ? "スラッシュ コマンド" : "Slash commands";
 
@@ -74,7 +74,7 @@ internal static class ContextRelayLocalizedStrings
     public static string ReadyStatus => UseJapanese ? "ContextRelay の準備ができました。" : "ContextRelay is ready.";
 
     public static string GenericHelpText =>
-        UseJapanese ? "クエリを入力して Microsoft 365 コンテンツを検索します。" : "Type a query to search Microsoft 365 content.";
+        UseJapanese ? "通常の文章で Microsoft 365 Copilot とチャットします。検索するには /all などのスラッシュ コマンドを使用します。" : "Type a message to chat with Microsoft 365 Copilot. Use slash commands such as /all to search Microsoft 365 content.";
 
     public static string SignedOutText =>
         UseJapanese
@@ -86,6 +86,9 @@ internal static class ContextRelayLocalizedStrings
 
     public static string AskDisabledStatus =>
         UseJapanese ? "/ask は無効です。ContextRelay のオプションで chat preview を有効にしてください。" : "/ask is disabled. Enable chat preview in ContextRelay options.";
+
+    public static string ChatPreviewDisabledStatus =>
+        UseJapanese ? "Copilot チャットは無効です。ContextRelay のオプションで chat preview を有効にしてください。" : "Copilot chat is disabled. Enable chat preview in ContextRelay options.";
 
     public static string AskRequiresPinnedContextStatus =>
         UseJapanese
@@ -130,6 +133,22 @@ internal static class ContextRelayLocalizedStrings
 
     public static string AppendedToHandoffStatus => UseJapanese ? "結果を HANDOFF.md に追記しました。" : "Result appended to HANDOFF.md.";
 
+    public static string ChatReplyShownStatus => UseJapanese ? "Microsoft 365 Copilot の応答をパネルに表示しました。" : "Microsoft 365 Copilot response shown in the panel.";
+
+    public static string AssistantResponseCopiedStatus => UseJapanese ? "Copilot の応答をクリップボードにコピーしました。" : "Copilot response copied to clipboard.";
+
+    public static string AssistantResponseAppendedStatus => UseJapanese ? "Copilot の応答をアクティブなエディターに挿入しました。" : "Copilot response inserted into the active editor.";
+
+    public static string AssistantResponseReplacedStatus => UseJapanese ? "アクティブなエディターの選択範囲または文書を Copilot の応答で置き換えました。" : "Active editor selection or document replaced with the Copilot response.";
+
+    public static string NoActiveEditorStatus => UseJapanese ? "アクティブなテキスト エディターがありません。" : "No active text editor is available.";
+
+    public static string CopyAssistantButtonText => UseJapanese ? "コピー" : "Copy";
+
+    public static string AppendAssistantButtonText => UseJapanese ? "エディターに挿入" : "Append";
+
+    public static string ReplaceAssistantButtonText => UseJapanese ? "置換" : "Replace";
+
     public static string NoResultsFoundStatus => UseJapanese ? "結果が見つかりませんでした。" : "No results found.";
 
     public static string TypeQueryStatus => GenericHelpText;
@@ -150,6 +169,16 @@ internal static class ContextRelayLocalizedStrings
             ? $"Microsoft 365 Copilot の応答を新しいエディター タブで開きました ({languageName})。{snippetCount} 件のピン留めスニペットをコンテキストとして使用し、共有チャット履歴にも保存しました。"
             : $"Opened the Microsoft 365 Copilot response in a new editor tab ({languageName}). Used {snippetCount} pinned snippet(s) as context and saved the reply to chat.";
     }
+
+    public static string GetAskReplyShownStatus(int snippetCount) =>
+        UseJapanese
+            ? $"Microsoft 365 Copilot の応答をパネルに表示しました。{snippetCount} 件のピン留めスニペットをコンテキストとして使用しました。"
+            : $"Microsoft 365 Copilot response shown in the panel. Used {snippetCount} pinned snippet(s) as context.";
+
+    public static string GetChatReplyShownWithContextStatus(int contextCount) =>
+        UseJapanese
+            ? $"Microsoft 365 Copilot の応答をパネルに表示しました。{contextCount} 件の明示的な ContextRelay コンテキストを使用しました。"
+            : $"Microsoft 365 Copilot response shown in the panel. Used {contextCount} explicit ContextRelay context item(s).";
 
     public static string GetAskPreviewDocumentTitle(string query, string extension) =>
         string.IsNullOrWhiteSpace(query)
@@ -190,11 +219,11 @@ internal static class ContextRelayLocalizedStrings
                 ? "例: /connectors incident tracker\n例: /connectors external knowledge base"
                 : "Example: /connectors incident tracker\nExample: /connectors external knowledge base",
             "/all" => UseJapanese
-                ? "例: /all architecture decisions\nまたはスラッシュ コマンドなしでクエリを入力してください。"
-                : "Example: /all architecture decisions\nOr just type a query without a slash command.",
+                ? "例: /all architecture decisions\nスラッシュ コマンドなしの文章は Microsoft 365 Copilot チャットとして送信されます。"
+                : "Example: /all architecture decisions\nPlain text without a slash command starts or continues Microsoft 365 Copilot chat.",
             "/ask" => UseJapanese
-                ? "例: /ask 日本語に翻訳して markdown にして\n例: /ask ピン留めした情報を箇条書きで要約して\nピン留めスニペットをコンテキストとして使用し、応答は新しいエディター タブで開きます。"
-                : "Example: /ask Translate this to Japanese and format as markdown\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the response is opened in a new editor tab.",
+                ? "例: /ask 日本語に翻訳して markdown にして\n例: /ask ピン留めした情報を箇条書きで要約して\nピン留めスニペットをコンテキストとして使用し、応答はパネルに表示されます。"
+                : "Example: /ask Translate this to Japanese and format as markdown\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the response is shown in the panel.",
             "/clear" => UseJapanese
                 ? "例: /clear\n現在のチャット履歴とピン留めスニペットを破棄します。"
                 : "Example: /clear\nClears the current chat transcript and discards all pinned snippets.",

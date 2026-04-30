@@ -181,10 +181,40 @@
                                         <TextBlock DockPanel.Dock="Left" FontWeight="Bold" Text="{Binding Role}" />
                                         <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Text="{Binding Timestamp}" Opacity="0.7" />
                                     </DockPanel>
-                                    <TextBlock Margin="0,4,0,0" Text="{Binding Text}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
+                                     <TextBlock Margin="0,4,0,0" Text="{Binding Text}" TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,4,0,0" Text="{Binding ContextLabelsDisplay}" TextWrapping="Wrap" Opacity="0.7" />
+                                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActionableAssistant}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
+                                        <Button Margin="0,0,8,0"
+                                                Padding="8,2"
+                                                Content="{Binding CopyAssistantButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                IsEnabled="{Binding IsNotBusy, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Tag="{Binding Text}"
+                                                Click="CopyAssistantButton_Click" />
+                                        <Button Margin="0,0,8,0"
+                                                Padding="8,2"
+                                                Content="{Binding AppendAssistantButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                IsEnabled="{Binding IsNotBusy, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Tag="{Binding Text}"
+                                                Click="AppendAssistantButton_Click" />
+                                        <Button Padding="8,2"
+                                                Content="{Binding ReplaceAssistantButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                IsEnabled="{Binding IsNotBusy, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Tag="{Binding Text}"
+                                                Click="ReplaceAssistantButton_Click" />
+                                    </StackPanel>
+                                 </StackPanel>
+                             </Border>
+                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
             </GroupBox>

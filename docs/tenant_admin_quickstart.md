@@ -40,12 +40,12 @@ Open **API permissions** > **Add a permission** > **Microsoft Graph** > **Delega
 | Teams search | `Chat.Read`, `ChannelMessage.Read.All` |
 | SharePoint / OneDrive retrieval | `Files.Read.All`, `Sites.Read.All` |
 | Connectors | `ExternalItem.Read.All` |
-| `/ask` chat preview | `Mail.Read`, `Sites.Read.All`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`, `ExternalItem.Read.All` |
+| Plain Copilot chat and `/ask` context chat preview | `Mail.Read`, `Sites.Read.All`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`, `ExternalItem.Read.All` |
 
 Notes:
 
 - Some permissions overlap across features; duplicates do not matter.
-- If you leave **Enable chat preview** off, you do not need the extra `/ask` preview permissions.
+- If you leave **Enable chat preview** off, you do not need the extra Copilot chat preview permissions.
 - `offline_access`, `openid`, and `profile` are requested by MSAL during sign-in and do not need to be added as Microsoft Graph API permissions.
 
 ## 5. Grant tenant consent
@@ -83,7 +83,7 @@ The token cache is stored at:
 1. Open the ContextRelay tool window.
 2. Sign in when prompted.
 3. Run a simple command such as `/mail test` or `/all test`.
-4. If you enabled chat preview, also test `/ask summarize`.
+4. If you enabled chat preview, also test a plain chat message and `/ask summarize`.
 5. Follow the broader host validation steps in [e2e_checklist.md](e2e_checklist.md).
 
 ## 8. Troubleshooting

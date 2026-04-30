@@ -86,6 +86,12 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
 
     public string CommandPopupHeaderText => ContextRelayLocalizedStrings.CommandPopupHeaderText;
 
+    public string CopyAssistantButtonText => ContextRelayLocalizedStrings.CopyAssistantButtonText;
+
+    public string AppendAssistantButtonText => ContextRelayLocalizedStrings.AppendAssistantButtonText;
+
+    public string ReplaceAssistantButtonText => ContextRelayLocalizedStrings.ReplaceAssistantButtonText;
+
     public string QueryText
     {
         get => queryText;
@@ -440,6 +446,30 @@ public sealed partial class ContextRelayToolWindowControl : UserControl, INotify
         if (TryGetTag(sender, out SharedSnippetItem? item) && item is not null)
         {
             _ = RunBusyAsync(async () => await host.DeleteSnippetAsync(item.Id).ConfigureAwait(false));
+        }
+    }
+
+    private void CopyAssistantButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetTag(sender, out string? text) && text is not null)
+        {
+            _ = RunBusyAsync(async () => await host.CopyAssistantTextAsync(text).ConfigureAwait(false));
+        }
+    }
+
+    private void AppendAssistantButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetTag(sender, out string? text) && text is not null)
+        {
+            _ = RunBusyAsync(async () => await host.AppendAssistantTextToEditorAsync(text).ConfigureAwait(false));
+        }
+    }
+
+    private void ReplaceAssistantButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (TryGetTag(sender, out string? text) && text is not null)
+        {
+            _ = RunBusyAsync(async () => await host.ReplaceEditorWithAssistantTextAsync(text).ConfigureAwait(false));
         }
     }
 

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Adapters;
@@ -188,6 +189,55 @@ public sealed class AdapterTests
     }
 
     [Fact]
+    public async Task CopilotChatAdapter_SendMessage_IncludesExplicitContextPayloads()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var httpClient = new HttpClient(new RecordingHttpMessageHandler(CreateResponse(HttpStatusCode.OK, """
+            {
+              "messages": [
+                { "text": "Use this context." },
+                { "text": "Context-aware reply." }
+              ]
+            }
+            """)));
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync(
+            "token",
+            "conversation-1",
+            "Use this context.",
+            new CopilotChatSendOptions
+            {
+                AdditionalContext = new[]
+                {
+                    new CopilotContextMessage
+                    {
+                        Description = "Pinned doc",
+                        Text = "Pinned content"
+                    }
+                },
+                ContextualResources = new CopilotContextualResources
+                {
+                    Files = new[]
+                    {
+                        new CopilotContextualFileResource { Uri = "https://contoso.sharepoint.com/sites/docs/file.docx" }
+                    }
+                }
+            },
+            cancellationToken);
+
+        Assert.Equal("Context-aware reply.", reply);
+        var body = RecordingHttpMessageHandler.LastRequestBody;
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+
+        Assert.Equal("Use this context.", root.GetProperty("message").GetProperty("text").GetString());
+        Assert.Equal("Pinned content", root.GetProperty("additionalContext")[0].GetProperty("text").GetString());
+        Assert.Equal("Pinned doc", root.GetProperty("additionalContext")[0].GetProperty("description").GetString());
+        Assert.Equal("https://contoso.sharepoint.com/sites/docs/file.docx", root.GetProperty("contextualResources").GetProperty("files")[0].GetProperty("uri").GetString());
+    }
+
+    [Fact]
     public async Task GraphHttpClient_RetriesOnThrottle()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -238,6 +288,26 @@ public sealed class AdapterTests
             var current = responses[Math.Min(index, responses.Length - 1)];
             index++;
             return Task.FromResult(current);
+        }
+    }
+
+    private sealed class RecordingHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly HttpResponseMessage response;
+
+        public RecordingHttpMessageHandler(HttpResponseMessage response)
+        {
+            this.response = response;
+        }
+
+        public static string LastRequestBody { get; private set; } = string.Empty;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastRequestBody = request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return response;
         }
     }
 

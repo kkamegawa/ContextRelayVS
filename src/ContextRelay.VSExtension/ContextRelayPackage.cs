@@ -105,6 +105,62 @@ public sealed class ContextRelayPackage : AsyncPackage
         dte?.ItemOperations?.OpenFile(filePath);
     }
 
+    internal async Task<bool> AppendToActiveDocumentAsync(string text, CancellationToken cancellationToken = default)
+    {
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        var dte = await GetServiceAsync(typeof(DTE)).ConfigureAwait(true) as DTE2;
+        TextSelection? selection;
+        try
+        {
+            selection = dte?.ActiveDocument?.Selection as TextSelection;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+
+        if (selection is null)
+        {
+            return false;
+        }
+
+        if (!selection.IsEmpty)
+        {
+            selection.MoveToPoint(selection.ActivePoint);
+        }
+
+        selection.Insert(text);
+        return true;
+    }
+
+    internal async Task<bool> ReplaceActiveDocumentAsync(string text, CancellationToken cancellationToken = default)
+    {
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        var dte = await GetServiceAsync(typeof(DTE)).ConfigureAwait(true) as DTE2;
+        TextSelection? selection;
+        try
+        {
+            selection = dte?.ActiveDocument?.Selection as TextSelection;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+
+        if (selection is null)
+        {
+            return false;
+        }
+
+        if (selection.IsEmpty)
+        {
+            selection.SelectAll();
+        }
+
+        selection.Insert(text);
+        return true;
+    }
+
     internal async Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default)
     {
         await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);

@@ -7,9 +7,20 @@ namespace ContextRelay.Core.Tests.Router;
 public sealed class SlashCommandRouterTests
 {
     [Fact]
-    public void Parse_WithoutSlashCommand_RoutesToAllSources()
+    public void Parse_WithoutSlashCommand_RoutesToChat()
     {
         var result = SlashCommandRouter.Parse("  architecture   decisions  ");
+
+        Assert.Equal(RouteTarget.Chat, result.Target);
+        Assert.Equal("architecture decisions", result.Query);
+        Assert.False(result.IsEmpty);
+        Assert.Empty(result.TargetSources);
+    }
+
+    [Fact]
+    public void Parse_AllCommand_RoutesToAllSources()
+    {
+        var result = SlashCommandRouter.Parse("/all architecture decisions");
 
         Assert.Equal(RouteTarget.All, result.Target);
         Assert.Equal("architecture decisions", result.Query);
@@ -62,13 +73,14 @@ public sealed class SlashCommandRouterTests
     }
 
     [Fact]
-    public void Parse_UnknownSlashCommand_FallsBackToAll()
+    public void Parse_UnknownSlashCommand_FallsBackToChat()
     {
         var result = SlashCommandRouter.Parse("/unknown test value");
 
-        Assert.Equal(RouteTarget.All, result.Target);
+        Assert.Equal(RouteTarget.Chat, result.Target);
         Assert.Equal("/unknown test value", result.Query);
         Assert.False(result.IsEmpty);
+        Assert.Empty(result.TargetSources);
     }
 
     [Fact]

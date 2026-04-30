@@ -55,8 +55,8 @@ public static class SlashCommandRouter
             ["onenote"] = "Example: /onenote architecture decision log\nExample: /onenote section notebook architecture",
             ["task"] = "Example: /task release checklist\nExample: /task metadata comments onboarding",
             ["connectors"] = "Example: /connectors incident tracker\nExample: /connectors external knowledge base",
-            ["all"] = "Example: /all architecture decisions\nOr just type a query without a slash command.",
-            ["ask"] = "Example: /ask 日本語に翻訳してmarkdownにして\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the Microsoft 365 Copilot response is opened in a new editor tab.",
+            ["all"] = "Example: /all architecture decisions\nPlain text without a slash command starts or continues Microsoft 365 Copilot chat.",
+            ["ask"] = "Example: /ask 日本語に翻訳してmarkdownにして\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the Microsoft 365 Copilot response is shown in the panel.",
             ["clear"] = "Example: /clear\nClears the current chat transcript and discards all pinned snippets."
         };
 
@@ -92,10 +92,10 @@ public static class SlashCommandRouter
 
         return new SlashCommandParseResult
         {
-            Target = RouteTarget.All,
+            Target = RouteTarget.Chat,
             Query = normalized,
             IsEmpty = normalized.Length == 0,
-            TargetSources = SearchAllSources
+            TargetSources = Array.Empty<ContextSource>()
         };
     }
 
@@ -103,13 +103,13 @@ public static class SlashCommandRouter
     {
         if (string.IsNullOrWhiteSpace(command))
         {
-            return "Type a query to search Microsoft 365 content.";
+            return "Type a message to chat with Microsoft 365 Copilot, or use /all to search Microsoft 365 content.";
         }
 
         var normalized = command.StartsWith("/", StringComparison.Ordinal) ? command.Substring(1) : command;
         return HelpText.TryGetValue(normalized, out var help)
             ? help
-            : "Type a query to search Microsoft 365 content.";
+            : "Type a message to chat with Microsoft 365 Copilot, or use /all to search Microsoft 365 content.";
     }
 
     public static IReadOnlyList<string> GetSupportedCommands()
