@@ -7,6 +7,8 @@ namespace ContextRelay.Core.Auth;
 public static class AuthScopeCatalog
 {
     public const string DefaultGraphResource = "https://graph.microsoft.com";
+    public const string DefaultWorkIqResource = "api://workiq.svc.cloud.microsoft";
+    public const string WorkIqPermission = "WorkIQAgent.Ask";
 
     private static readonly IReadOnlyList<string> OidcScopes = new[] { "offline_access", "openid", "profile" };
     private static readonly IReadOnlyList<string> DefaultGraphScopes = new[] { "User.Read" };
@@ -108,9 +110,20 @@ public static class AuthScopeCatalog
         }
 
         var resource = string.IsNullOrWhiteSpace(graphResource) ? DefaultGraphResource : graphResource!;
-        return scope.Contains("://", StringComparison.Ordinal)
-            ? scope
-            : $"{resource}/{scope}";
+        return QualifyResourceScope(scope, resource);
+    }
+
+    public static IReadOnlyList<string> BuildWorkIqScopes(bool includeOidcScopes = false, string? workIqResource = null)
+    {
+        var scopes = new HashSet<string>(StringComparer.Ordinal);
+        if (includeOidcScopes)
+        {
+            scopes.UnionWith(OidcScopes);
+        }
+
+        var resource = string.IsNullOrWhiteSpace(workIqResource) ? DefaultWorkIqResource : workIqResource!;
+        scopes.Add(QualifyResourceScope(WorkIqPermission, resource));
+        return scopes.OrderBy(scope => scope, StringComparer.Ordinal).ToArray();
     }
 
     public static string GetMissingClientIdConfigurationMessage()
@@ -120,5 +133,12 @@ public static class AuthScopeCatalog
             "ContextRelay for Visual Studio requires contextRelay.auth.clientId to be configured.",
             "Use your own Entra app registration with Microsoft Graph delegated permissions,",
             "and optionally set contextRelay.auth.tenantId to pin sign-in to one tenant.");
+    }
+
+    private static string QualifyResourceScope(string scope, string resource)
+    {
+        return scope.Contains("://", StringComparison.Ordinal)
+            ? scope
+            : $"{resource}/{scope}";
     }
 }

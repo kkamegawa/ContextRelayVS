@@ -20,6 +20,7 @@ internal static class ContextRelayLocalizedStrings
             ["/connectors"] = ("Search connector content.", "コネクタのコンテンツを検索します。"),
             ["/all"] = ("Search all enabled Microsoft 365 sources.", "有効な Microsoft 365 ソース全体を検索します。"),
             ["/ask"] = ("Chat with Microsoft 365 Copilot using pinned context.", "ピン留めしたコンテキストを使って Microsoft 365 Copilot とチャットします。"),
+            ["/workiq"] = ("Query Work IQ for Microsoft 365 work intelligence.", "Work IQ に Microsoft 365 のワークインテリジェンスを問い合わせます。"),
             ["/clear"] = ("Clear the current chat transcript and pinned snippets.", "現在のチャット履歴とピン留めスニペットをクリアします。")
         };
 
@@ -54,8 +55,8 @@ internal static class ContextRelayLocalizedStrings
 
     public static string SearchToolTip =>
         UseJapanese
-            ? "通常の文章で Copilot とチャットし、/mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear で検索します"
-            : "Type plain text to chat with Copilot, or use /mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /clear to search";
+            ? "通常の文章で Copilot とチャットし、/mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /workiq /clear を使用できます"
+            : "Type plain text to chat with Copilot, or use /mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /workiq /clear";
 
     public static string CommandPopupHeaderText => UseJapanese ? "スラッシュ コマンド" : "Slash commands";
 
@@ -134,6 +135,8 @@ internal static class ContextRelayLocalizedStrings
     public static string AppendedToHandoffStatus => UseJapanese ? "結果を HANDOFF.md に追記しました。" : "Result appended to HANDOFF.md.";
 
     public static string ChatReplyShownStatus => UseJapanese ? "Microsoft 365 Copilot の応答をパネルに表示しました。" : "Microsoft 365 Copilot response shown in the panel.";
+
+    public static string WorkIqReplyShownStatus => UseJapanese ? "Work IQ の応答をパネルに表示しました。" : "Work IQ response shown in the panel.";
 
     public static string AssistantResponseCopiedStatus => UseJapanese ? "Copilot の応答をクリップボードにコピーしました。" : "Copilot response copied to clipboard.";
 
@@ -226,6 +229,9 @@ internal static class ContextRelayLocalizedStrings
             "/ask" => UseJapanese
                 ? "例: /ask 日本語に翻訳して markdown にして\n例: /ask ピン留めした情報を箇条書きで要約して\nピン留めスニペットをコンテキストとして使用し、応答はパネルに表示されます。"
                 : "Example: /ask Translate this to Japanese and format as markdown\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the response is shown in the panel.",
+            "/workiq" => UseJapanese
+                ? "例: /workiq Alice からの最近のメールを要約して\n例: /workiq 今日の会議を教えて\nWork IQ Gateway (A2A プロトコル) に自然言語クエリを送信します。Microsoft 365 Copilot ライセンスが必要です。"
+                : "Example: /workiq Summarize my recent emails from Alice\nExample: /workiq What meetings do I have today?\nSends a natural language query to the Work IQ Gateway (A2A protocol). Requires a Microsoft 365 Copilot license.",
             "/clear" => UseJapanese
                 ? "例: /clear\n現在のチャット履歴とピン留めスニペットを破棄します。"
                 : "Example: /clear\nClears the current chat transcript and discards all pinned snippets.",

@@ -39,11 +39,13 @@ internal sealed class ContextRelayHost : IDisposable
     private readonly GraphHttpClient graphClient;
     private readonly Dictionary<ContextSource, IContextSearchAdapter> adapters;
     private readonly ICopilotChatAdapter copilotChatAdapter;
+    private readonly WorkIqAdapter workIqAdapter;
     private readonly HandoffDocumentGenerator handoffDocumentGenerator;
     private TtlLruCache<string, ContextItem[]> searchCache = new();
     private ContextRelayHostState state = new();
     private string? lastSearchSummary;
     private string? copilotConversationId;
+    private string? workIqContextId;
     private string? cacheWorkspaceRoot;
     private int cacheTtlSeconds = 300;
     private int cacheMaxEntries = 200;
@@ -74,6 +76,7 @@ internal sealed class ContextRelayHost : IDisposable
             [ContextSource.Todo] = new TodoSearchAdapter(graphClient)
         };
         copilotChatAdapter = new CopilotChatAdapter(graphClient);
+        workIqAdapter = new WorkIqAdapter(new System.Net.Http.HttpClient(), logger, ownsHttpClient: true);
         handoffDocumentGenerator = new HandoffDocumentGenerator(sharedStore);
     }
 
@@ -106,6 +109,7 @@ internal sealed class ContextRelayHost : IDisposable
                 currentSearchResults = Array.Empty<ContextItem>();
                 lastSearchSummary = null;
                 copilotConversationId = null;
+                workIqContextId = null;
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatAndSnippetsClearedStatus, trimmed, cancellationToken).ConfigureAwait(false);
             }
 
@@ -115,16 +119,24 @@ internal sealed class ContextRelayHost : IDisposable
             }
 
             var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
-            logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging);
+            logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
             await EnsureCacheReadyAsync(settings, cancellationToken).ConfigureAwait(false);
             var enabledSources = GetEnabledSources(route, settings);
-            if (enabledSources.Count == 0 && route.Target != RouteTarget.Ask && route.Target != RouteTarget.Chat)
+            if (enabledSources.Count == 0 &&
+                route.Target != RouteTarget.Ask &&
+                route.Target != RouteTarget.Chat &&
+                route.Target != RouteTarget.WorkIq)
             {
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.RequestedSourceDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
             }
 
             var authSettings = settings.ToAuthSettings();
+            if (route.Target == RouteTarget.WorkIq)
+            {
+                return await HandleWorkIqCommandAsync(trimmed, route.Query, authSettings, cancellationToken).ConfigureAwait(false);
+            }
+
             var featureOptions = settings.ToFeatureOptions();
             ContextRelayAccessToken token;
             try
@@ -321,6 +333,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
             copilotConversationId = null;
+            workIqContextId = null;
             return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -336,7 +349,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             searchCache.Clear();
             var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
-            logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging);
+            logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Search cache cleared.");
             return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SearchCacheClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
@@ -439,6 +452,7 @@ internal sealed class ContextRelayHost : IDisposable
     public void Dispose()
     {
         watcher.Changed -= OnSharedStoreChanged;
+        workIqAdapter.Dispose();
         snippetRepository.Dispose();
         watcher.Dispose();
         gate.Dispose();
@@ -543,7 +557,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var workspaceRoot = await package.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
-        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var fallbackRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return await handoffDocumentGenerator.GenerateAsync(
@@ -642,6 +656,41 @@ internal sealed class ContextRelayHost : IDisposable
                 : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(contextPayload.Labels.Count),
             originalInput,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ContextRelayHostState> HandleWorkIqCommandAsync(
+        string originalInput,
+        string query,
+        ContextRelayAuthSettings authSettings,
+        CancellationToken cancellationToken)
+    {
+        ContextRelayAccessToken token;
+        try
+        {
+            token = await authProvider.GetWorkIqAccessTokenAsync(authSettings, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContextRelayAuthenticationException ex)
+        {
+            logger.LogError("Work IQ authentication failed.", ex);
+            return await RefreshStateCoreAsync(ex.Message, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        var reply = await workIqAdapter
+            .SendMessageAsync(token.AccessToken, query, workIqContextId, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(reply.Text))
+        {
+            throw new InvalidOperationException("Work IQ returned an empty response.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(reply.ContextId))
+        {
+            workIqContextId = reply.ContextId;
+        }
+
+        await AppendChatHistoryAsync(query, reply.Text.Trim(), "workiq", Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("Handled /workiq with Work IQ.");
+        return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.WorkIqReplyShownStatus, originalInput, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<string> EnsureCopilotConversationAsync(string accessToken, CancellationToken cancellationToken)

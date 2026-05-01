@@ -51,6 +51,16 @@ public sealed class SlashCommandRouterTests
     }
 
     [Fact]
+    public void Parse_WorkIqCommand_PreservesInstructionShape()
+    {
+        var result = SlashCommandRouter.Parse("/workiq  Summarize this\nfor today  ");
+
+        Assert.Equal(RouteTarget.WorkIq, result.Target);
+        Assert.Equal("Summarize this\nfor today", result.Query);
+        Assert.True(result.TargetSources.Count == 0);
+    }
+
+    [Fact]
     public void Parse_ConnectorsCommand_RoutesToConnectorSource()
     {
         var result = SlashCommandRouter.Parse("/connectors incident tracker");
@@ -97,6 +107,7 @@ public sealed class SlashCommandRouterTests
         var commands = SlashCommandRouter.GetSupportedCommands();
 
         Assert.Contains("/connectors", commands);
+        Assert.Contains("/workiq", commands);
     }
 
     [Fact]
@@ -147,6 +158,14 @@ public sealed class SlashCommandRouterTests
         var help = SlashCommandRouter.GetHelpText("/task");
 
         Assert.Contains("/task release checklist", help);
+    }
+
+    [Fact]
+    public void GetHelpText_ReturnsWorkIqExamples()
+    {
+        var help = SlashCommandRouter.GetHelpText("/workiq");
+
+        Assert.Contains("/workiq Summarize my recent emails from Alice", help);
     }
 
     [Fact]

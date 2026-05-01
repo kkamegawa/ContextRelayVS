@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using ContextRelay.Core.Auth;
 using ContextRelay.VSExtension.Options.Controls;
@@ -70,12 +71,20 @@ public sealed class ContextRelayGraphApiOptionsPage : UIElementDialogPage
                 SharePointEnabled = adapters.SharePoint,
                 OneDriveEnabled = adapters.OneDrive,
                 ConnectorsEnabled = adapters.Connectors,
+                OneNoteEnabled = adapters.OneNote,
+                PlannerEnabled = adapters.Planner,
+                TodoEnabled = adapters.Todo,
                 ChatPreviewEnabled = general.EnableChatPreview
             };
 
             var graphEndpoint = CloudEndpoints.GetGraphEndpoint(cloudEnvironment, customGraphEndpoint);
-            var scopes = AuthScopeCatalog.BuildQualifiedGraphScopes(featureOptions, graphResource: graphEndpoint);
-            return string.Join(Environment.NewLine, scopes);
+            var graphScopes = AuthScopeCatalog.BuildQualifiedGraphScopes(featureOptions, graphResource: graphEndpoint);
+            var workIqScopes = AuthScopeCatalog.BuildWorkIqScopes();
+            return string.Join(
+                Environment.NewLine,
+                graphScopes
+                    .Concat(new[] { string.Empty, OptionsLocalizedStrings.WorkIqScopesSectionLabel })
+                    .Concat(workIqScopes));
         }
         catch
         {

@@ -26,6 +26,10 @@ internal static class OptionsLocalizedStrings
     public static string EnableGraphDebugLoggingDescription => UseJapanese
         ? "Graph 要求/応答の概要を ContextRelay デバッグ出力ペインに書き込みます。"
         : "Write Graph request/response summaries to the ContextRelay Debug output pane.";
+    public static string EnableWorkIqDebugLoggingLabel => UseJapanese ? "Work IQ デバッグ ログを有効にする" : "Enable Work IQ debug logging";
+    public static string EnableWorkIqDebugLoggingDescription => UseJapanese
+        ? "Work IQ 要求/応答の構造メタデータを ContextRelay デバッグ出力ペインに書き込みます。本文はログに残しません。"
+        : "Write Work IQ request/response structural metadata to the ContextRelay Debug output pane without logging message bodies.";
 
     // --- Authentication ---
     public static string AuthenticationPageTitle => UseJapanese ? "認証" : "Authentication";
@@ -56,8 +60,9 @@ internal static class OptionsLocalizedStrings
     public static string EffectiveAuthEndpointLabel => UseJapanese ? "有効な認証エンドポイント" : "Effective auth endpoint";
     public static string RequiredScopesLabel => UseJapanese ? "要求されるスコープ" : "Required scopes";
     public static string RequiredScopesDescription => UseJapanese
-        ? "有効なアダプターに基づいて計算された Microsoft Graph 委任アクセス許可。"
-        : "Microsoft Graph delegated permissions computed from enabled adapters.";
+        ? "有効なアダプターと Work IQ に基づいて計算された委任アクセス許可。"
+        : "Delegated permissions computed from enabled adapters and Work IQ.";
+    public static string WorkIqScopesSectionLabel => UseJapanese ? "Work IQ スコープ" : "Work IQ scopes";
 
     // --- Cache ---
     public static string CachePageTitle => UseJapanese ? "キャッシュ" : "Cache";

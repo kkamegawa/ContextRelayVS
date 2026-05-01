@@ -12,6 +12,8 @@ internal sealed class ContextRelaySettingsSnapshot
 
     public bool EnableGraphDebugLogging { get; set; }
 
+    public bool EnableWorkIqDebugLogging { get; set; }
+
     public string ClientId { get; set; } = string.Empty;
 
     public string TenantId { get; set; } = "organizations";

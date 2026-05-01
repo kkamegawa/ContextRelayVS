@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Auth;
@@ -62,6 +63,24 @@ public sealed class MsalAuthProviderTests
         Assert.Contains("contextRelay.auth.clientId", exception.Message);
     }
 
+    [Fact]
+    public async Task GetWorkIqAccessTokenAsync_UsesDedicatedWorkIqScopes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var facade = new FakeMsalPublicClientFacade
+        {
+            InteractiveToken = new ContextRelayAccessToken { AccessToken = "workiq-token" }
+        };
+        var provider = new MsalAuthProvider(new FakeMsalPublicClientFacadeFactory(facade));
+
+        var token = await provider.GetWorkIqAccessTokenAsync(
+            new ContextRelayAuthSettings { ClientId = "client-id" },
+            cancellationToken);
+
+        Assert.Equal("workiq-token", token.AccessToken);
+        Assert.Equal(AuthScopeCatalog.BuildWorkIqScopes(includeOidcScopes: true), facade.LastInteractiveScopes);
+    }
+
     private sealed class FakeMsalPublicClientFacadeFactory : IMsalPublicClientFacadeFactory
     {
         private readonly IMsalPublicClientFacade facade;
@@ -91,6 +110,10 @@ public sealed class MsalAuthProviderTests
 
         public int InteractiveAcquireCalls { get; private set; }
 
+        public IReadOnlyList<string> LastSilentScopes { get; private set; } = Array.Empty<string>();
+
+        public IReadOnlyList<string> LastInteractiveScopes { get; private set; } = Array.Empty<string>();
+
         public Task<IReadOnlyList<ContextRelayAccountInfo>> GetAccountsAsync(CancellationToken cancellationToken)
         {
             return Task.FromResult(Accounts);
@@ -102,6 +125,7 @@ public sealed class MsalAuthProviderTests
             CancellationToken cancellationToken)
         {
             SilentAcquireCalls++;
+            LastSilentScopes = scopes.ToArray();
             if (SilentException is not null)
             {
                 throw SilentException;
@@ -115,6 +139,7 @@ public sealed class MsalAuthProviderTests
             CancellationToken cancellationToken)
         {
             InteractiveAcquireCalls++;
+            LastInteractiveScopes = scopes.ToArray();
             return Task.FromResult(InteractiveToken);
         }
     }

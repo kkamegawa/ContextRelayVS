@@ -6,14 +6,15 @@ using Microsoft.VisualStudio.Shell.Interop;
 
 namespace ContextRelay.VSExtension.Services;
 
-internal sealed class ContextRelayOutputLogger : IGraphLogger
+internal sealed class ContextRelayOutputLogger : IGraphLogger, IWorkIqLogger
 {
     private static readonly Guid OutputPaneGuid = new("955732fc-d13a-4c6b-8a1f-e3a525f2d4f0");
     private static readonly Guid DebugPaneGuid = new("ffcb490d-b2b1-49c0-a5ef-24d89848c283");
     private readonly ContextRelayPackage package;
     private IVsOutputWindowPane? outputPane;
     private IVsOutputWindowPane? debugPane;
-    private volatile bool debugLoggingEnabled;
+    private volatile bool graphDebugLoggingEnabled;
+    private volatile bool workIqDebugLoggingEnabled;
 
     public ContextRelayOutputLogger(ContextRelayPackage package)
     {
@@ -38,7 +39,17 @@ internal sealed class ContextRelayOutputLogger : IGraphLogger
 
     public void Log(string message)
     {
-        if (!debugLoggingEnabled)
+        if (!graphDebugLoggingEnabled)
+        {
+            return;
+        }
+
+        WriteDebug($"[{DateTimeOffset.UtcNow:O}] {message}");
+    }
+
+    public void LogWorkIq(string message)
+    {
+        if (!workIqDebugLoggingEnabled)
         {
             return;
         }
@@ -77,9 +88,10 @@ internal sealed class ContextRelayOutputLogger : IGraphLogger
         });
     }
 
-    public void SetDebugLoggingEnabled(bool enabled)
+    public void SetDebugLoggingEnabled(bool graphEnabled, bool workIqEnabled)
     {
-        debugLoggingEnabled = enabled;
+        graphDebugLoggingEnabled = graphEnabled;
+        workIqDebugLoggingEnabled = workIqEnabled;
     }
 
     private void WriteOutput(string message)

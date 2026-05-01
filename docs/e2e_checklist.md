@@ -26,20 +26,21 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 ## Options pages
 
 1. Open **Tools > Options > ContextRelay**.
-2. Verify the **General**, **Authentication**, **Cache**, and **Adapters** pages render.
+2. Verify the **General**, **Authentication**, **Graph API**, **Cache**, and **Adapters** pages render.
 3. Change values, save, reopen the dialog, and confirm persistence.
 
 ## Search and shared state
 
 1. Sign in with a valid Entra ID work/school account.
-2. Run plain text such as `Summarize my current planning context`, then run `/mail test`, `/teams test`, `/sharepoint test`, `/onedrive test`, `/all test`, `/ask summarize`, and `/clear`.
+2. Run plain text such as `Summarize my current planning context`, then run `/mail test`, `/teams test`, `/sharepoint test`, `/onedrive test`, `/all test`, `/ask summarize`, `/workiq What meetings do I have today?`, and `/clear`.
 3. Verify plain text produces a Microsoft 365 Copilot chat reply without source-search result cards.
 4. Verify slash commands use the requested source filter, help text, result rendering, and clear behavior match the VS Code grammar.
-5. Pin a snippet and confirm it appears in `%LocalAppData%\ContextRelay\shared\snippets.json`.
-6. Submit a chat turn after pinning context and confirm the assistant message shows the context labels.
-7. Use assistant reply **Copy**, **Append**, and **Replace** actions and confirm no editor content changes until one of these actions is clicked.
-8. Submit a query and confirm history appears in `%LocalAppData%\ContextRelay\shared\chat-history.json`.
-9. With the VS Code extension running, verify snippet/history changes propagate both directions.
+5. Verify consecutive `/workiq` turns preserve Work IQ context until `/clear` or **Clear Chat** is used.
+6. Pin a snippet and confirm it appears in `%LocalAppData%\ContextRelay\shared\snippets.json`.
+7. Submit a chat turn after pinning context and confirm the assistant message shows the context labels.
+8. Use assistant reply **Copy**, **Append**, and **Replace** actions for both Copilot and Work IQ replies, and confirm no editor content changes until one of these actions is clicked.
+9. Submit a query and confirm history appears in `%LocalAppData%\ContextRelay\shared\chat-history.json`.
+10. With the VS Code extension running, verify snippet/history changes propagate both directions.
 
 ## Handoff flow
 
@@ -53,7 +54,8 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 
 1. Open **ContextRelay Debug** output pane.
 2. Enable graph debug logging and verify request/response summaries are written without secrets.
-3. Force an auth or API failure and confirm the error is surfaced to the user and logged.
+3. Enable Work IQ debug logging and verify only structural metadata (status, task ID, context ID) is written, not prompt or reply bodies.
+4. Force an auth or API failure and confirm the error is surfaced to the user and logged.
 
 ## Result
 
