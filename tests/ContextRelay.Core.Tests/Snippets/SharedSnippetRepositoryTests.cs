@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.SharedStore;
@@ -81,6 +82,18 @@ public sealed class SharedSnippetRepositoryTests : IDisposable
         Assert.Empty(await repository.GetAllAsync(includeDeleted: true, cancellationToken));
     }
 
+    [Fact]
+    public void Constructor_WiresOwnedWatcherIntoStore()
+    {
+        using var repository = CreateRepository();
+
+        var repositoryWatcher = ReadPrivateField<SharedStoreWatcher>(repository, "watcher");
+        var sharedSessionStore = ReadPrivateField<ISharedSessionStore>(repository, "sharedSessionStore");
+        var storeWatcher = ReadPrivateField<SharedStoreWatcher>(sharedSessionStore, "watcher");
+
+        Assert.Same(repositoryWatcher, storeWatcher);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempDirectory))
@@ -99,6 +112,12 @@ public sealed class SharedSnippetRepositoryTests : IDisposable
         };
 
         return new SharedSnippetRepository(options, clock);
+    }
+
+    private static T ReadPrivateField<T>(object instance, string fieldName)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
+        return Assert.IsAssignableFrom<T>(field!.GetValue(instance));
     }
 
     private sealed class FakeClock : IClock
