@@ -21,6 +21,9 @@ public sealed class ContextRelayGeneralOptionsPage : UIElementDialogPage
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
     public bool EnableGraphDebugLogging { get; set; }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+    public bool EnableWorkIqDebugLogging { get; set; }
+
     protected override UIElement Child => control ??= new GeneralOptionsControl();
 
     protected override void OnActivate(CancelEventArgs e)
@@ -35,6 +38,7 @@ public sealed class ContextRelayGeneralOptionsPage : UIElementDialogPage
         control.OutputDirectory = OutputDirectory;
         control.EnableChatPreview = EnableChatPreview;
         control.EnableGraphDebugLogging = EnableGraphDebugLogging;
+        control.EnableWorkIqDebugLogging = EnableWorkIqDebugLogging;
     }
 
     protected override void OnApply(PageApplyEventArgs e)
@@ -45,6 +49,7 @@ public sealed class ContextRelayGeneralOptionsPage : UIElementDialogPage
             OutputDirectory = control.OutputDirectory;
             EnableChatPreview = control.EnableChatPreview;
             EnableGraphDebugLogging = control.EnableGraphDebugLogging;
+            EnableWorkIqDebugLogging = control.EnableWorkIqDebugLogging;
         }
 
         base.OnApply(e);

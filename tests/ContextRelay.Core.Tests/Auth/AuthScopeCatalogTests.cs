@@ -76,4 +76,24 @@ public sealed class AuthScopeCatalogTests
         var qualified = AuthScopeCatalog.QualifyGraphScope("https://graph.microsoft.com/User.Read", "https://graph.microsoft.us");
         Assert.Equal("https://graph.microsoft.com/User.Read", qualified);
     }
+
+    [Fact]
+    public void BuildWorkIqScopes_IncludesQualifiedWorkIqScope()
+    {
+        var scopes = AuthScopeCatalog.BuildWorkIqScopes().ToArray();
+
+        Assert.Single(scopes);
+        Assert.Contains("api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask", scopes);
+    }
+
+    [Fact]
+    public void BuildWorkIqScopes_CanIncludeOidcScopes()
+    {
+        var scopes = AuthScopeCatalog.BuildWorkIqScopes(includeOidcScopes: true).ToArray();
+
+        Assert.Contains("offline_access", scopes);
+        Assert.Contains("openid", scopes);
+        Assert.Contains("profile", scopes);
+        Assert.Contains("api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask", scopes);
+    }
 }

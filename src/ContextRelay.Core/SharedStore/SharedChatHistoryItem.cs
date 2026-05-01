@@ -26,7 +26,8 @@ public sealed class SharedChatHistoryItem
         Metadata.TryGetValue("kind", out var kind) &&
         kind.ValueKind == JsonValueKind.String &&
         (string.Equals(kind.GetString(), "chat", System.StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(kind.GetString(), "ask", System.StringComparison.OrdinalIgnoreCase));
+            string.Equals(kind.GetString(), "ask", System.StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(kind.GetString(), "workiq", System.StringComparison.OrdinalIgnoreCase));
 
     [JsonIgnore]
     public IReadOnlyList<string> ContextLabels => GetContextLabels();

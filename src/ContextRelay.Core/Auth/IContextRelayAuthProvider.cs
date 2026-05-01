@@ -18,6 +18,10 @@ public interface IContextRelayAuthProvider
         ContextRelayFeatureOptions featureOptions,
         CancellationToken cancellationToken = default);
 
+    Task<ContextRelayAccessToken> GetWorkIqAccessTokenAsync(
+        ContextRelayAuthSettings settings,
+        CancellationToken cancellationToken = default);
+
     Task<ContextRelayAccountInfo?> GetAccountAsync(
         ContextRelayAuthSettings settings,
         CancellationToken cancellationToken = default);

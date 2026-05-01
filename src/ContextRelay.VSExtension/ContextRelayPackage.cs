@@ -59,6 +59,7 @@ public sealed class ContextRelayPackage : AsyncPackage
             OutputDirectory = general.OutputDirectory,
             EnableChatPreview = general.EnableChatPreview,
             EnableGraphDebugLogging = general.EnableGraphDebugLogging,
+            EnableWorkIqDebugLogging = general.EnableWorkIqDebugLogging,
             ClientId = auth.ClientId,
             TenantId = auth.TenantId,
             CloudEnvironment = graphApi.CloudEnvironment,

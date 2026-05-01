@@ -31,4 +31,19 @@ public sealed class SharedChatHistoryItemTests
         Assert.False(item.HasContextLabels);
         Assert.Equal(string.Empty, item.ContextLabelsJoinedDisplay);
     }
+
+    [Fact]
+    public void IsActionableAssistant_ReturnsTrueForWorkIqReplies()
+    {
+        var item = new SharedChatHistoryItem
+        {
+            Role = "assistant",
+            Metadata = new()
+            {
+                ["kind"] = JsonSerializer.SerializeToElement("workiq")
+            }
+        };
+
+        Assert.True(item.IsActionableAssistant);
+    }
 }

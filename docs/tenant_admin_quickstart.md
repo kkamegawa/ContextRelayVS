@@ -41,12 +41,34 @@ Open **API permissions** > **Add a permission** > **Microsoft Graph** > **Delega
 | SharePoint / OneDrive retrieval | `Files.Read.All`, `Sites.Read.All` |
 | Connectors | `ExternalItem.Read.All` |
 | Plain Copilot chat and `/ask` context chat preview | `Mail.Read`, `Sites.Read.All`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`, `ExternalItem.Read.All` |
+| `/workiq` Work IQ queries | `api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask` |
 
 Notes:
 
 - Some permissions overlap across features; duplicates do not matter.
 - If you leave **Enable chat preview** off, you do not need the extra Copilot chat preview permissions.
 - `offline_access`, `openid`, and `profile` are requested by MSAL during sign-in and do not need to be added as Microsoft Graph API permissions.
+
+## 4b. Add Work IQ delegated permission (optional, required for `/workiq`)
+
+`WorkIQAgent.Ask` is **not** a Microsoft Graph permission. It belongs to the separate Work IQ resource endpoint used by `/workiq`.
+
+1. Provision the Work IQ service principal in your tenant if it does not already exist:
+
+   ```http
+   POST https://graph.microsoft.com/v1.0/servicePrincipals
+   Content-Type: application/json
+
+   {
+     "appId": "fdcc1f02-fc51-4226-8753-f668596af7f7"
+   }
+   ```
+
+2. In **Microsoft Entra admin center** > **App registrations** > your ContextRelay app > **API permissions** > **Add a permission** > **APIs my organization uses**, search for **Work IQ**.
+3. Add the delegated permission **WorkIQAgent.Ask**.
+4. Grant tenant admin consent.
+
+Users also need a **Microsoft 365 Copilot license** before `/workiq` queries can succeed.
 
 ## 5. Grant tenant consent
 
@@ -84,6 +106,7 @@ The token cache is stored at:
 2. Sign in when prompted.
 3. Run a simple command such as `/mail test` or `/all test`.
 4. If you enabled chat preview, also test a plain chat message and `/ask summarize`.
+5. If you granted `WorkIQAgent.Ask`, also test `/workiq What meetings do I have today?`.
 5. Follow the broader host validation steps in [e2e_checklist.md](e2e_checklist.md).
 
 ## 8. Troubleshooting
@@ -94,11 +117,12 @@ If ContextRelay reports that `contextRelay.auth.clientId` is missing, fill in th
 
 ### Consent or permission failures
 
-If you see `AADSTS65001`, `AADSTS65002`, or a Graph permission error:
+If you see `AADSTS65001`, `AADSTS65002`, a Graph permission error, or `/workiq` returns `403 Forbidden`:
 
 - verify the required delegated permissions were added
 - verify admin consent was granted where your tenant requires it
 - verify the enabled ContextRelay features match the permissions granted
+- verify Work IQ users have a Microsoft 365 Copilot license
 
 ### Broker or interactive sign-in failures
 

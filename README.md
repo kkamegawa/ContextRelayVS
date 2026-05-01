@@ -2,13 +2,13 @@
 
 ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that surfaces relevant Microsoft 365 context (Exchange Mail, Microsoft Teams, SharePoint, OneDrive) in a tool window while you design and code. It ports the feature set of the VS Code extension [ContextRelay](https://github.com/kkamegawa/ContextRelay) to the Visual Studio platform, and can share pinned snippets, chat history, and handoff-document pointers with the VS Code version on the same machine.
 
-> **Status**: Implemented preview. The repository builds an installable VSIX locally and now includes the planned in-repo UX features: localized tool-window text, slash-command discovery, result actions, `/connectors`, plain Microsoft 365 Copilot chat, and `/ask` context chat. Manual Experimental Instance validation is still required before marketplace release.
+> **Status**: Implemented preview. The repository builds an installable VSIX locally and now includes the planned in-repo UX features: localized tool-window text, slash-command discovery, result actions, `/connectors`, plain Microsoft 365 Copilot chat, `/ask` context chat, and `/workiq`. Manual Experimental Instance validation is still required before marketplace release.
 
 ## Implemented features
 
 - **Plain Copilot chat** — input without a slash command starts or continues a Microsoft 365 Copilot conversation without implicit ContextRelay search context.
 - **Explicit source search** across Exchange Mail, Teams, SharePoint, OneDrive, OneNote, Planner/To Do, and connectors via Microsoft Graph slash commands.
-- **Slash-command source targeting** — `/mail`, `/teams`, `/sharepoint`, `/onedrive`, `/onenote`, `/task`, `/connectors`, `/all`, `/ask`, `/clear`.
+- **Slash-command source targeting** — `/mail`, `/teams`, `/sharepoint`, `/onedrive`, `/onenote`, `/task`, `/connectors`, `/all`, `/ask`, `/workiq`, `/clear`.
 - **Slash-command discovery popup** — keyboard-navigable suggestions appear as you type `/...`.
 - **Snippet pinning** — persist results as named snippets in the cross-editor shared store.
 - **Shared chat history** — append/search history shared with the VS Code extension.
@@ -16,6 +16,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 - **Soft Copilot handoff** — copy a generated prompt to the clipboard, append selected results to `HANDOFF.md`, and open GitHub Copilot Chat in Visual Studio when the command is available.
 - **Copilot reply actions** — Copilot answers remain visible in the tool window with explicit Copy, Append to active editor, and Replace selection/document actions.
 - **`/ask` context chat** — requires pinned snippets, caps the forwarded context, sends it to Microsoft 365 Copilot, and saves the reply to shared chat history without automatically editing or opening a document.
+- **`/workiq` natural language work intelligence** — sends A2A v1.0 queries to the Work IQ Gateway with a dedicated token audience, keeps a separate Work IQ conversation context, and resets that context on `/clear`.
 - **Localized WPF tool window UI** — English/Japanese labels, status/help text, result-card context actions, and debug-log access.
 - **DialogPage options** — General, Authentication, Graph API, Cache, and Adapters settings pages with modern WPF controls and sovereign cloud support.
 - **MSAL.NET + WAM authentication** with DPAPI-backed token cache.
@@ -27,7 +28,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 - Visual Studio 2022 17.8 or later, or Visual Studio 2026 (including Insider).
 - .NET Framework 4.7.2 runtime (bundled with Visual Studio).
 - A Microsoft 365 work/school account (Microsoft Entra ID). Personal Microsoft accounts are not supported.
-- Microsoft Entra app registration with public-client flow enabled and delegated Microsoft Graph permissions (same scope set as the VS Code version). See [docs/tenant_admin_quickstart.md](docs/tenant_admin_quickstart.md).
+- Microsoft Entra app registration with public-client flow enabled, delegated Microsoft Graph permissions, and optional `WorkIQAgent.Ask` consent for `/workiq`. See [docs/tenant_admin_quickstart.md](docs/tenant_admin_quickstart.md).
 
 ```powershell
 pwsh -File build\Invoke-PackageAudit.ps1 -SolutionPath .\ContextRelayVS.sln
@@ -67,6 +68,24 @@ UI is native WPF bound to `VsBrushes` / `EnvironmentColors` so it follows the VS
 - The VS Code repository still needs its separate shared-store migration PR.
 - Prompt injection into GitHub Copilot Chat is still clipboard-based in Visual Studio; unlike VS Code, there is no supported prompt-prefill API wired into this extension.
 
+## Work IQ
+
+`/workiq` sends natural language queries to the Work IQ Gateway over the A2A (Agent-to-Agent) v1.0 protocol:
+
+- Endpoint: `https://workiq.svc.cloud.microsoft/a2a/`
+- Delegated permission: `api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask`
+- Prerequisites: Microsoft 365 Copilot license, tenant admin consent, and Work IQ service-principal provisioning
+
+Use `/workiq` for questions such as:
+
+```text
+/workiq Summarize my recent emails from Alice
+/workiq What meetings do I have today?
+/workiq Find documents about the Q3 budget review
+```
+
+Consecutive `/workiq` turns reuse the returned Work IQ `contextId`. `/clear` resets both the Microsoft 365 Copilot conversation and the Work IQ conversation state. See [docs/work_iq.md](docs/work_iq.md) for setup details.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
@@ -77,4 +96,5 @@ MIT. See [LICENSE](LICENSE).
 - Design plan: [docs/plan.md](docs/plan.md)
 - Marketplace/release guide: [docs/marketplace_release.md](docs/marketplace_release.md)
 - Tenant admin quickstart: [docs/tenant_admin_quickstart.md](docs/tenant_admin_quickstart.md)
+- Work IQ setup: [docs/work_iq.md](docs/work_iq.md)
 - Shared-session schema: [docs/shared-session-schema.md](docs/shared-session-schema.md)

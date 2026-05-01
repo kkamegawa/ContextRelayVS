@@ -27,6 +27,7 @@ public static class SlashCommandRouter
         "/connectors",
         "/all",
         "/ask",
+        "/workiq",
         "/clear"
     };
 
@@ -42,6 +43,7 @@ public static class SlashCommandRouter
             ["connectors"] = RouteTarget.Connectors,
             ["all"] = RouteTarget.All,
             ["ask"] = RouteTarget.Ask,
+            ["workiq"] = RouteTarget.WorkIq,
             ["clear"] = RouteTarget.Clear
         };
 
@@ -57,6 +59,7 @@ public static class SlashCommandRouter
             ["connectors"] = "Example: /connectors incident tracker\nExample: /connectors external knowledge base",
             ["all"] = "Example: /all architecture decisions\nPlain text without a slash command starts or continues Microsoft 365 Copilot chat.",
             ["ask"] = "Example: /ask 日本語に翻訳してmarkdownにして\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the Microsoft 365 Copilot response is shown in the panel.",
+            ["workiq"] = "Example: /workiq Summarize my recent emails from Alice\nExample: /workiq What meetings do I have today?\nSends a natural language query to the Work IQ Gateway (A2A protocol). Requires Microsoft 365 Copilot license.",
             ["clear"] = "Example: /clear\nClears the current chat transcript and discards all pinned snippets."
         };
 
@@ -73,7 +76,7 @@ public static class SlashCommandRouter
 
             if (SlashCommands.TryGetValue(command, out var target))
             {
-                var query = target == RouteTarget.Ask
+                var query = target == RouteTarget.Ask || target == RouteTarget.WorkIq
                     ? rawQuery.Trim()
                     : target == RouteTarget.Clear
                         ? string.Empty

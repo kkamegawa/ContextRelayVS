@@ -34,6 +34,12 @@ public partial class GeneralOptionsControl : UserControl
         set => EnableGraphDebugLoggingCheckBox.IsChecked = value;
     }
 
+    public bool EnableWorkIqDebugLogging
+    {
+        get => EnableWorkIqDebugLoggingCheckBox.IsChecked == true;
+        set => EnableWorkIqDebugLoggingCheckBox.IsChecked = value;
+    }
+
     private void ApplyLocalization()
     {
         PageTitleText.Text = OptionsLocalizedStrings.GeneralPageTitle;
@@ -45,5 +51,7 @@ public partial class GeneralOptionsControl : UserControl
         EnableChatPreviewDescriptionText.Text = OptionsLocalizedStrings.EnableChatPreviewDescription;
         EnableGraphDebugLoggingLabelText.Text = OptionsLocalizedStrings.EnableGraphDebugLoggingLabel;
         EnableGraphDebugLoggingDescriptionText.Text = OptionsLocalizedStrings.EnableGraphDebugLoggingDescription;
+        EnableWorkIqDebugLoggingLabelText.Text = OptionsLocalizedStrings.EnableWorkIqDebugLoggingLabel;
+        EnableWorkIqDebugLoggingDescriptionText.Text = OptionsLocalizedStrings.EnableWorkIqDebugLoggingDescription;
     }
 }

@@ -3,6 +3,7 @@ namespace ContextRelay.Core.Router;
 public enum RouteTarget
 {
     Chat,
+    WorkIq,
     Mail,
     Teams,
     SharePoint,
