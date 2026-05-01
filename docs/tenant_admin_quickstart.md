@@ -107,7 +107,7 @@ The token cache is stored at:
 3. Run a simple command such as `/mail test` or `/all test`.
 4. If you enabled chat preview, also test a plain chat message and `/ask summarize`.
 5. If you granted `WorkIQAgent.Ask`, also test `/workiq What meetings do I have today?`.
-5. Follow the broader host validation steps in [e2e_checklist.md](e2e_checklist.md).
+6. Follow the broader host validation steps in [e2e_checklist.md](e2e_checklist.md).
 
 ## 8. Troubleshooting
 

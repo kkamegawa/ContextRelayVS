@@ -62,6 +62,7 @@ internal static class OptionsLocalizedStrings
     public static string RequiredScopesDescription => UseJapanese
         ? "有効なアダプターと Work IQ に基づいて計算された委任アクセス許可。"
         : "Delegated permissions computed from enabled adapters and Work IQ.";
+    public static string WorkIqScopesSectionLabel => UseJapanese ? "Work IQ スコープ" : "Work IQ scopes";
 
     // --- Cache ---
     public static string CachePageTitle => UseJapanese ? "キャッシュ" : "Cache";

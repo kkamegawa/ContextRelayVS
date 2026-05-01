@@ -83,7 +83,7 @@ public sealed class ContextRelayGraphApiOptionsPage : UIElementDialogPage
             return string.Join(
                 Environment.NewLine,
                 graphScopes
-                    .Concat(new[] { string.Empty, "# Work IQ" })
+                    .Concat(new[] { string.Empty, OptionsLocalizedStrings.WorkIqScopesSectionLabel })
                     .Concat(workIqScopes));
         }
         catch
