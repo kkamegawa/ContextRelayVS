@@ -31,8 +31,9 @@ public sealed class FileSystemSharedSessionStore : ISharedSessionStore
 
     private readonly IClock clock;
     private readonly SharedStoreOptions options;
+    private readonly SharedStoreWatcher? watcher;
 
-    public FileSystemSharedSessionStore(SharedStoreOptions options, IClock? clock = null)
+    public FileSystemSharedSessionStore(SharedStoreOptions options, IClock? clock = null, SharedStoreWatcher? watcher = null)
     {
         this.options = options ?? throw new ArgumentNullException(nameof(options));
         if (string.IsNullOrWhiteSpace(options.RootDirectory))
@@ -41,6 +42,7 @@ public sealed class FileSystemSharedSessionStore : ISharedSessionStore
         }
 
         this.clock = clock ?? SystemClock.Instance;
+        this.watcher = watcher;
     }
 
     public async Task<IReadOnlyList<SharedSnippetItem>> GetSnippetsAsync(CancellationToken cancellationToken = default)
@@ -126,6 +128,7 @@ public sealed class FileSystemSharedSessionStore : ISharedSessionStore
         var nextItems = merge(current.Items);
         var envelope = CreateEnvelope(nextItems, current.ExtensionData);
         await WriteEnvelopeAsync(path, envelope, cancellationToken).ConfigureAwait(false);
+        watcher?.RegisterLastWriteHash(fileKind, envelope.ContentHash);
         await WriteSchemaFileAsync(cancellationToken).ConfigureAwait(false);
         return envelope;
     }

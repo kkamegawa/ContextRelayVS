@@ -58,9 +58,9 @@ internal sealed class ContextRelayHost : IDisposable
         authProvider = new MsalAuthProvider();
 
         var sharedStoreOptions = SharedStoreOptions.CreateDefault("vs", package.ExtensionVersion);
-        sharedStore = new FileSystemSharedSessionStore(sharedStoreOptions);
         watcher = new SharedStoreWatcher(sharedStoreOptions.RootDirectory, sharedStoreOptions.WatcherDebounceMilliseconds);
         watcher.Changed += OnSharedStoreChanged;
+        sharedStore = new FileSystemSharedSessionStore(sharedStoreOptions, watcher: watcher);
         snippetRepository = new SharedSnippetRepository(sharedStore, watcher, ownsWatcher: false);
 
         graphClient = new GraphHttpClient(new System.Net.Http.HttpClient(), logger);

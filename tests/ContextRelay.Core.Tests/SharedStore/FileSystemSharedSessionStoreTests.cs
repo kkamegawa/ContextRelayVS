@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -213,6 +215,81 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
         Assert.Single(Directory.GetFiles(tempDirectory, "snippets.json.bak.*"));
     }
 
+    [Fact]
+    public async Task UpsertSnippetsAsync_RegistersContentHashWithWatcher()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Directory.CreateDirectory(tempDirectory);
+
+        var options = new SharedStoreOptions
+        {
+            RootDirectory = tempDirectory,
+            ProducerId = "vs",
+            ProducerVersion = "0.1.0-test"
+        };
+
+        using var watcher = new SharedStoreWatcher(tempDirectory);
+        var store = new FileSystemSharedSessionStore(options, clock, watcher);
+
+        await store.UpsertSnippetsAsync(new[]
+        {
+            new SharedSnippetItem
+            {
+                Id = "s1",
+                CreatedAt = "2026-04-19T00:00:00Z",
+                UpdatedAt = "2026-04-19T00:00:00Z",
+                Name = "Test",
+                Source = "mail",
+                Snippet = "Hello"
+            }
+        }, cancellationToken);
+
+        var snippetsPath = Path.Combine(tempDirectory, "snippets.json");
+        var fileContentHash = ReadContentHashFromFile(snippetsPath);
+        var registeredHash = ReadLastWrittenHash(watcher, SharedStoreFileKind.Snippets);
+
+        Assert.NotNull(fileContentHash);
+        Assert.NotNull(registeredHash);
+        Assert.Equal(fileContentHash, registeredHash);
+    }
+
+    [Fact]
+    public async Task AppendChatHistoryAsync_RegistersContentHashWithWatcher()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Directory.CreateDirectory(tempDirectory);
+
+        var options = new SharedStoreOptions
+        {
+            RootDirectory = tempDirectory,
+            ProducerId = "vs",
+            ProducerVersion = "0.1.0-test"
+        };
+
+        using var watcher = new SharedStoreWatcher(tempDirectory);
+        var store = new FileSystemSharedSessionStore(options, clock, watcher);
+
+        await store.AppendChatHistoryAsync(new[]
+        {
+            new SharedChatHistoryItem
+            {
+                Id = "c1",
+                Timestamp = "2026-04-19T00:00:00Z",
+                Role = "user",
+                Text = "Hi",
+                Metadata = new Dictionary<string, JsonElement>()
+            }
+        }, cancellationToken);
+
+        var historyPath = Path.Combine(tempDirectory, "chat-history.json");
+        var fileContentHash = ReadContentHashFromFile(historyPath);
+        var registeredHash = ReadLastWrittenHash(watcher, SharedStoreFileKind.ChatHistory);
+
+        Assert.NotNull(fileContentHash);
+        Assert.NotNull(registeredHash);
+        Assert.Equal(fileContentHash, registeredHash);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(tempDirectory))
@@ -232,6 +309,25 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
                 ChatHistoryRetentionCount = retentionCount
             },
             clock);
+    }
+
+    private static string? ReadContentHashFromFile(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.TryGetProperty("contentHash", out var prop) ? prop.GetString() : null;
+    }
+
+    private static string? ReadLastWrittenHash(SharedStoreWatcher watcher, SharedStoreFileKind fileKind)
+    {
+        var field = typeof(SharedStoreWatcher)
+            .GetField("lastWrittenHashes", BindingFlags.NonPublic | BindingFlags.Instance);
+        var dict = (ConcurrentDictionary<SharedStoreFileKind, string>)field!.GetValue(watcher)!;
+        return dict.TryGetValue(fileKind, out var hash) ? hash : null;
     }
 
     private static SharedChatHistoryItem CreateChatItem(string id, string timestamp, string text)
