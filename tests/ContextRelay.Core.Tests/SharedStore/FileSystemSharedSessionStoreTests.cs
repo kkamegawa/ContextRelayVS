@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -246,7 +244,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
 
         var snippetsPath = Path.Combine(tempDirectory, "snippets.json");
         var fileContentHash = ReadContentHashFromFile(snippetsPath);
-        var registeredHash = ReadLastWrittenHash(watcher, SharedStoreFileKind.Snippets);
+        var registeredHash = watcher.TryGetLastWrittenHash(SharedStoreFileKind.Snippets);
 
         Assert.NotNull(fileContentHash);
         Assert.NotNull(registeredHash);
@@ -283,7 +281,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
 
         var historyPath = Path.Combine(tempDirectory, "chat-history.json");
         var fileContentHash = ReadContentHashFromFile(historyPath);
-        var registeredHash = ReadLastWrittenHash(watcher, SharedStoreFileKind.ChatHistory);
+        var registeredHash = watcher.TryGetLastWrittenHash(SharedStoreFileKind.ChatHistory);
 
         Assert.NotNull(fileContentHash);
         Assert.NotNull(registeredHash);
@@ -320,14 +318,6 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
 
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         return doc.RootElement.TryGetProperty("contentHash", out var prop) ? prop.GetString() : null;
-    }
-
-    private static string? ReadLastWrittenHash(SharedStoreWatcher watcher, SharedStoreFileKind fileKind)
-    {
-        var field = typeof(SharedStoreWatcher)
-            .GetField("lastWrittenHashes", BindingFlags.NonPublic | BindingFlags.Instance);
-        var dict = (ConcurrentDictionary<SharedStoreFileKind, string>)field!.GetValue(watcher)!;
-        return dict.TryGetValue(fileKind, out var hash) ? hash : null;
     }
 
     private static SharedChatHistoryItem CreateChatItem(string id, string timestamp, string text)

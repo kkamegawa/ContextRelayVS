@@ -41,6 +41,11 @@ public sealed class SharedStoreWatcher : IDisposable
         lastWrittenHashes[fileKind] = contentHash;
     }
 
+    internal string? TryGetLastWrittenHash(SharedStoreFileKind fileKind)
+    {
+        return lastWrittenHashes.TryGetValue(fileKind, out var hash) ? hash : null;
+    }
+
     private void OnFileSystemEvent(object sender, FileSystemEventArgs e)
     {
         if (!TryGetFileKind(e.FullPath, out var fileKind))
