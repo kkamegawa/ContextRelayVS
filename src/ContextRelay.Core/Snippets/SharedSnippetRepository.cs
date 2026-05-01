@@ -18,11 +18,7 @@ public sealed class SharedSnippetRepository : ISnippetRepository
     public SharedSnippetRepository(
         SharedStoreOptions sharedStoreOptions,
         IClock? clock = null)
-        : this(
-            new FileSystemSharedSessionStore(sharedStoreOptions, clock),
-            new SharedStoreWatcher(sharedStoreOptions.RootDirectory, sharedStoreOptions.WatcherDebounceMilliseconds),
-            clock,
-            ownsWatcher: true)
+        : this(CreateStoreAndWatcher(sharedStoreOptions, clock), clock)
     {
     }
 
@@ -45,6 +41,26 @@ public sealed class SharedSnippetRepository : ISnippetRepository
     }
 
     public event EventHandler? Changed;
+
+    private SharedSnippetRepository(
+        (FileSystemSharedSessionStore Store, SharedStoreWatcher Watcher) storeAndWatcher,
+        IClock? clock)
+        : this(storeAndWatcher.Store, storeAndWatcher.Watcher, clock, ownsWatcher: true)
+    {
+    }
+
+    private static (FileSystemSharedSessionStore Store, SharedStoreWatcher Watcher) CreateStoreAndWatcher(
+        SharedStoreOptions sharedStoreOptions,
+        IClock? clock)
+    {
+        if (sharedStoreOptions is null)
+        {
+            throw new ArgumentNullException(nameof(sharedStoreOptions));
+        }
+
+        var watcher = new SharedStoreWatcher(sharedStoreOptions.RootDirectory, sharedStoreOptions.WatcherDebounceMilliseconds);
+        return (new FileSystemSharedSessionStore(sharedStoreOptions, clock, watcher), watcher);
+    }
 
     public async Task<IReadOnlyList<SharedSnippetItem>> GetAllAsync(bool includeDeleted = false, CancellationToken cancellationToken = default)
     {
