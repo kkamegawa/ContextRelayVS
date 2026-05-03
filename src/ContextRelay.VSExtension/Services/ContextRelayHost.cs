@@ -23,13 +23,12 @@ using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Snippets;
 using ContextRelay.VSExtension.Options;
 using ContextRelay.VSExtension.ToolWindows;
-using Microsoft.VisualStudio.Shell;
 
 namespace ContextRelay.VSExtension.Services;
 
 internal sealed class ContextRelayHost : IDisposable
 {
-    private readonly ContextRelayPackage package;
+    private readonly IContextRelayPackageServices packageServices;
     private readonly ContextRelayOutputLogger logger;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly IContextRelayAuthProvider authProvider;
@@ -51,13 +50,13 @@ internal sealed class ContextRelayHost : IDisposable
     private int cacheMaxEntries = 200;
     private ContextItem[] currentSearchResults = Array.Empty<ContextItem>();
 
-    public ContextRelayHost(ContextRelayPackage package, ContextRelayOutputLogger logger)
+    public ContextRelayHost(IContextRelayPackageServices packageServices, ContextRelayOutputLogger logger)
     {
-        this.package = package;
+        this.packageServices = packageServices;
         this.logger = logger;
         authProvider = new MsalAuthProvider();
 
-        var sharedStoreOptions = SharedStoreOptions.CreateDefault("vs", package.ExtensionVersion);
+        var sharedStoreOptions = SharedStoreOptions.CreateDefault("vs", typeof(ContextRelayHost).Assembly.GetName().Version?.ToString() ?? "0.1.0");
         watcher = new SharedStoreWatcher(sharedStoreOptions.RootDirectory, sharedStoreOptions.WatcherDebounceMilliseconds);
         watcher.Changed += OnSharedStoreChanged;
         sharedStore = new FileSystemSharedSessionStore(sharedStoreOptions, watcher: watcher);
@@ -118,7 +117,7 @@ internal sealed class ContextRelayHost : IDisposable
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.TypeQueryStatus, trimmed, cancellationToken).ConfigureAwait(false);
             }
 
-            var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
             await EnsureCacheReadyAsync(settings, cancellationToken).ConfigureAwait(false);
@@ -348,7 +347,7 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             searchCache.Clear();
-            var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Search cache cleared.");
@@ -379,8 +378,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
         var prompt = BuildHandoffPrompt(handoffPath);
-        await package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-        System.Windows.Clipboard.SetText(prompt);
+        await packageServices.CopyTextToClipboardAsync(prompt, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handoff prompt copied to clipboard.");
         await RefreshStateAsync(ContextRelayLocalizedStrings.HandoffPromptCopiedStatus).ConfigureAwait(false);
     }
@@ -392,7 +390,7 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task AppendAssistantTextToEditorAsync(string text, CancellationToken cancellationToken = default)
     {
-        var applied = await package.AppendToActiveDocumentAsync(text, cancellationToken).ConfigureAwait(false);
+        var applied = await packageServices.AppendToActiveDocumentAsync(text, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(applied
             ? ContextRelayLocalizedStrings.AssistantResponseAppendedStatus
             : ContextRelayLocalizedStrings.NoActiveEditorStatus).ConfigureAwait(false);
@@ -400,7 +398,7 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task ReplaceEditorWithAssistantTextAsync(string text, CancellationToken cancellationToken = default)
     {
-        var applied = await package.ReplaceActiveDocumentAsync(text, cancellationToken).ConfigureAwait(false);
+        var applied = await packageServices.ReplaceActiveDocumentAsync(text, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(applied
             ? ContextRelayLocalizedStrings.AssistantResponseReplacedStatus
             : ContextRelayLocalizedStrings.NoActiveEditorStatus).ConfigureAwait(false);
@@ -409,14 +407,14 @@ internal sealed class ContextRelayHost : IDisposable
     public async Task OpenHandoffDocumentAsync(CancellationToken cancellationToken = default)
     {
         var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
-        await package.OpenDocumentAsync(handoffPath, cancellationToken).ConfigureAwait(false);
+        await packageServices.OpenDocumentAsync(handoffPath, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(ContextRelayLocalizedStrings.OpenedHandoffStatus).ConfigureAwait(false);
     }
 
     public async Task OpenCopilotChatWithPromptAsync(CancellationToken cancellationToken = default)
     {
         await CopyHandoffPromptAsync(cancellationToken).ConfigureAwait(false);
-        var opened = await package.TryOpenCopilotChatAsync(cancellationToken).ConfigureAwait(false);
+        var opened = await packageServices.TryOpenCopilotChatAsync(cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Soft handoff prepared for Copilot. Prompt copied to clipboard.");
         await RefreshStateAsync(
             opened
@@ -429,10 +427,9 @@ internal sealed class ContextRelayHost : IDisposable
         logger.ShowDebugPane();
     }
 
-    public void OpenSettings()
+    public async Task OpenSettingsAsync(CancellationToken cancellationToken = default)
     {
-        ThreadHelper.ThrowIfNotOnUIThread();
-        package.OpenSettings();
+        await packageServices.OpenSettingsFileAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public void OpenExternalUrl(string? url)
@@ -481,7 +478,7 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task EnsureCacheReadyAsync(ContextRelaySettingsSnapshot settings, CancellationToken cancellationToken)
     {
-        var workspaceRoot = settings.PersistWorkspaceState ? await package.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false) : null;
+        var workspaceRoot = settings.PersistWorkspaceState ? await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false) : null;
         if (searchCache.Count > 0 &&
             workspaceRoot == cacheWorkspaceRoot &&
             cacheTtlSeconds == settings.CacheTtlSeconds &&
@@ -555,8 +552,8 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task<HandoffGenerationResult> EnsureHandoffDocsAsync(CancellationToken cancellationToken)
     {
-        var workspaceRoot = await package.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
-        var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
+        var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
         logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var fallbackRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -716,7 +713,7 @@ internal sealed class ContextRelayHost : IDisposable
         var fileName = ContextRelayLocalizedStrings.GetAskPreviewDocumentTitle(query, fileExtension);
         var filePath = Path.Combine(outputDirectory, fileName);
         await WriteAllTextAsync(filePath, previewDocument.Content, cancellationToken).ConfigureAwait(false);
-        await package.OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
+        await packageServices.OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RefreshStateAsync(string statusMessage)
@@ -736,7 +733,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var chatHistory = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        var workspaceRoot = await package.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
+        var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var handoffIndex = await sharedStore.GetHandoffIndexAsync(cancellationToken).ConfigureAwait(false);
         var signedInUser = await TryGetSignedInUserAsync(cancellationToken).ConfigureAwait(false);
 
@@ -758,7 +755,7 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task<string?> TryGetSignedInUserAsync(CancellationToken cancellationToken)
     {
-        var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(settings.ClientId))
         {
             return null;
@@ -917,14 +914,13 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task CopyTextToClipboardAsync(string text, string statusMessage, CancellationToken cancellationToken)
     {
-        await package.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-        System.Windows.Clipboard.SetText(text);
+        await packageServices.CopyTextToClipboardAsync(text, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(statusMessage).ConfigureAwait(false);
     }
 
     private async Task<string> ResolveOutputDirectoryAsync(ContextRelaySettingsSnapshot settings, CancellationToken cancellationToken)
     {
-        var workspaceRoot = await package.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
+        var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var outputDirectory = string.IsNullOrWhiteSpace(settings.OutputDirectory) ? ".contextrelay" : settings.OutputDirectory;
         if (Path.IsPathRooted(outputDirectory))
         {
@@ -1000,7 +996,7 @@ internal sealed class ContextRelayHost : IDisposable
 
         try
         {
-            var settings = await package.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             var token = await authProvider
                 .GetAccessTokenAsync(settings.ToAuthSettings(), settings.ToFeatureOptions(), cancellationToken)
                 .ConfigureAwait(false);
@@ -1360,7 +1356,7 @@ internal sealed class ContextRelayHost : IDisposable
             return;
         }
 
-        _ = package.JoinableTaskFactory.RunAsync(async delegate
+        _ = Task.Run(async () =>
         {
             try
             {
