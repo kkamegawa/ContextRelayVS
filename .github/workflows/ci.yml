@@ -35,7 +35,7 @@ jobs:
       - name: Verify VSIX exists
         shell: pwsh
         run: |
-          $vsix = Get-ChildItem -Path .\src\ContextRelay.VSExtension\bin\Release\net472 -Filter *.vsix
+          $vsix = Get-ChildItem -Path .\src\ContextRelay.VSExtension\bin\Release -Filter *.vsix -Recurse
           if (-not $vsix) {
             throw "VSIX artifact was not generated."
           }
@@ -44,4 +44,4 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ContextRelayVS-vsix
-          path: src\ContextRelay.VSExtension\bin\Release\net472\*.vsix
+          path: src\ContextRelay.VSExtension\bin\Release\**\*.vsix

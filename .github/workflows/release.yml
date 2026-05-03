@@ -42,7 +42,7 @@ jobs:
         id: verify_vsix
         shell: pwsh
         run: |
-          $vsix = Get-ChildItem -Path .\src\ContextRelay.VSExtension\bin\Release\net472 -Filter *.vsix | Select-Object -First 1
+          $vsix = Get-ChildItem -Path .\src\ContextRelay.VSExtension\bin\Release -Filter *.vsix -Recurse | Select-Object -First 1
           if (-not $vsix) {
             throw "VSIX artifact was not generated."
           }
@@ -53,7 +53,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ContextRelayVS-vsix
-          path: src\ContextRelay.VSExtension\bin\Release\net472\*.vsix
+          path: src\ContextRelay.VSExtension\bin\Release\**\*.vsix
 
       - name: Publish to Visual Studio Marketplace
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_marketplace == 'true'

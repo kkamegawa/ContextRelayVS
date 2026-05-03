@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="ContextRelayVS.kkamegawa.11111111-2222-3333-4444-555555555555" Version="0.1.0.0" Language="en-US" Publisher="kkamegawa" />
+    <Identity Id="ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11" Version="0.2.0.0" Language="en-US" Publisher="kkamegawa" />
     <DisplayName>ContextRelay for Visual Studio</DisplayName>
-    <Description xml:space="preserve">Surface Microsoft 365 context (SharePoint, OneDrive, Teams, Mail) in a Visual Studio tool window. Companion to the VS Code extension ContextRelay.</Description>
+    <Description xml:space="preserve">Surface Microsoft 365 context (SharePoint, OneDrive, Teams, Mail) in a Visual Studio tool window. Out-of-process extension built with Microsoft.VisualStudio.Extensibility SDK.</Description>
     <MoreInfo>https://github.com/kkamegawa/ContextRelayVS</MoreInfo>
     <License>LICENSE.txt</License>
     <GettingStartedGuide>https://github.com/kkamegawa/ContextRelayVS#readme</GettingStartedGuide>
@@ -11,32 +11,28 @@
     <Preview>true</Preview>
   </Metadata>
   <Installation>
-    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.9,)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
-    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.9,)">
       <ProductArchitecture>arm64</ProductArchitecture>
     </InstallationTarget>
-    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.9,)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
-    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.9,)">
       <ProductArchitecture>arm64</ProductArchitecture>
     </InstallationTarget>
-    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.9,)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
-    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.9,)">
       <ProductArchitecture>arm64</ProductArchitecture>
     </InstallationTarget>
   </Installation>
-  <Dependencies>
-    <Dependency Id="Microsoft.Framework.NDP" DisplayName=".NET Framework" d:Source="Manual" Version="[4.7.2,)" />
-  </Dependencies>
+  <Dependencies />
   <Prerequisites>
-    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,)" DisplayName="Visual Studio core editor" />
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.9,)" DisplayName="Visual Studio core editor" />
   </Prerequisites>
-  <Assets>
-    <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%;PkgDefProjectOutputGroup|" />
-  </Assets>
+  <Assets />
 </PackageManifest>
