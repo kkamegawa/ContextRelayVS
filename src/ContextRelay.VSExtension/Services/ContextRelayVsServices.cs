@@ -58,15 +58,33 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         return Task.FromResult(false);
     }
 
-    public Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default)
+    public async Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
 #pragma warning disable CA1416 // net8.0-windows target — clipboard STA thread is Windows-only
-        var thread = new Thread(() => System.Windows.Clipboard.SetText(text));
+        var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellationRegistration = cancellationToken.Register(
+            () => completion.TrySetCanceled(cancellationToken));
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                System.Windows.Clipboard.SetText(text);
+                completion.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(ex);
+            }
+        });
         thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
         thread.Start();
-        thread.Join();
+
+        await completion.Task.ConfigureAwait(false);
 #pragma warning restore CA1416
-        return Task.CompletedTask;
     }
 
     public async Task OpenSettingsFileAsync(CancellationToken cancellationToken = default)

@@ -78,7 +78,7 @@
             <ListBox ItemsSource="{Binding SearchResults}">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="#33000000">
+                        <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}">
                             <Border.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="{Binding PinButtonText}" Command="{Binding PinCommand}" />
@@ -121,7 +121,7 @@
                 <ListBox ItemsSource="{Binding Snippets}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="#33000000">
+                            <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}">
                                 <StackPanel>
                                     <TextBlock FontWeight="Bold" Text="{Binding Name}" />
                                     <TextBlock Margin="0,2,0,0" Text="{Binding Snippet}" TextWrapping="Wrap" />
@@ -141,7 +141,7 @@
                 <ListBox ItemsSource="{Binding ChatHistory}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="#33000000">
+                            <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}">
                                 <StackPanel>
                                     <DockPanel>
                                         <TextBlock DockPanel.Dock="Left" FontWeight="Bold" Text="{Binding Role}" />

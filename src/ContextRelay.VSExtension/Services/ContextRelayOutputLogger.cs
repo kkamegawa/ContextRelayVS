@@ -99,17 +99,48 @@ internal sealed class ContextRelayOutputLogger : IGraphLogger, IWorkIqLogger
         workIqDebugLoggingEnabled = workIqEnabled;
     }
 
-    private void WriteOutput(string message) => WriteLineToChannel(outputChannel, message);
+    private void WriteOutput(string message) => WriteLineToChannel(() => outputChannel, message);
 
-    private void WriteDebug(string message) => WriteLineToChannel(debugChannel, message);
+    private void WriteDebug(string message) => WriteLineToChannel(() => debugChannel, message);
 
-    private static void WriteLineToChannel(OutputChannel? channel, string message)
+    private void WriteLineToChannel(Func<OutputChannel?> getChannel, string message)
     {
+        var channel = getChannel();
         if (channel is null)
+        {
+            ObserveFailures(InitializeAndWriteLineAsync(getChannel, message));
+            return;
+        }
+
+        ObserveFailures(WriteLineAsync(channel, message));
+    }
+
+    private async Task InitializeAndWriteLineAsync(Func<OutputChannel?> getChannel, string message)
+    {
+        await InitializeAsync().ConfigureAwait(false);
+        var channel = getChannel();
+        if (channel is not null)
+        {
+            await channel.WriteLineAsync(message).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task WriteLineAsync(OutputChannel channel, string message)
+    {
+        await channel.WriteLineAsync(message).ConfigureAwait(false);
+    }
+
+    private static void ObserveFailures(Task task)
+    {
+        if (task.IsCompletedSuccessfully)
         {
             return;
         }
 
-        _ = channel.WriteLineAsync(message);
+        _ = task.ContinueWith(
+            static faultedTask => System.Diagnostics.Debug.WriteLine(faultedTask.Exception),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }
