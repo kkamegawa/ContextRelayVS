@@ -26,6 +26,7 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
 
     public override async Task<IRemoteUserControl> GetContentAsync(CancellationToken cancellationToken)
     {
+        await host.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var viewModel = new ContextRelayWindowViewModel(host);
         await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
         return new ContextRelayWindowContent(viewModel);

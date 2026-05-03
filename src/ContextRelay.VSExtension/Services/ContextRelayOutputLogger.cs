@@ -10,6 +10,7 @@ namespace ContextRelay.VSExtension.Services;
 internal sealed class ContextRelayOutputLogger : IGraphLogger, IWorkIqLogger
 {
     private readonly VisualStudioExtensibility extensibility;
+    private readonly SemaphoreSlim initializationGate = new(1, 1);
     private OutputChannel? outputChannel;
     private OutputChannel? debugChannel;
     private volatile bool graphDebugLoggingEnabled;
@@ -22,10 +23,28 @@ internal sealed class ContextRelayOutputLogger : IGraphLogger, IWorkIqLogger
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        outputChannel = await extensibility.Views().Output.CreateOutputChannelAsync(
-            "ContextRelay", cancellationToken).ConfigureAwait(false);
-        debugChannel = await extensibility.Views().Output.CreateOutputChannelAsync(
-            "ContextRelay Debug", cancellationToken).ConfigureAwait(false);
+        if (outputChannel is not null && debugChannel is not null)
+        {
+            return;
+        }
+
+        await initializationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (outputChannel is not null && debugChannel is not null)
+            {
+                return;
+            }
+
+            outputChannel = await extensibility.Views().Output.CreateOutputChannelAsync(
+                "ContextRelay", cancellationToken).ConfigureAwait(false);
+            debugChannel = await extensibility.Views().Output.CreateOutputChannelAsync(
+                "ContextRelay Debug", cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            initializationGate.Release();
+        }
     }
 
     public void Log(string message)

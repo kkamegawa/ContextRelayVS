@@ -49,6 +49,7 @@ internal sealed class ContextRelayHost : IDisposable
     private int cacheTtlSeconds = 300;
     private int cacheMaxEntries = 200;
     private ContextItem[] currentSearchResults = Array.Empty<ContextItem>();
+    private bool initialized;
 
     public ContextRelayHost(IContextRelayPackageServices packageServices, ContextRelayOutputLogger logger)
     {
@@ -81,9 +82,24 @@ internal sealed class ContextRelayHost : IDisposable
 
     public event EventHandler<ContextRelayStateChangedEventArgs>? StateChanged;
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (initialized)
+            {
+                return;
+            }
+
+            await logger.InitializeAsync(cancellationToken).ConfigureAwait(false);
+            initialized = true;
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task<ContextRelayHostState> GetStateAsync()
