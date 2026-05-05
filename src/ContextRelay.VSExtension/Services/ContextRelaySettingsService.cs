@@ -59,8 +59,9 @@ internal sealed class ContextRelaySettingsService
         }
         catch
         {
-            // Clean up the temp file if anything went wrong.
-            try { File.Delete(tempPath); } catch { /* ignore */ }
+            // Clean up the temp file if anything went wrong, then re-throw the original exception.
+            // Suppress any secondary failure from deletion — it does not affect correctness.
+            try { File.Delete(tempPath); } catch { /* best-effort cleanup; ignore secondary failures */ }
             throw;
         }
     }
