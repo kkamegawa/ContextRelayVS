@@ -1,6 +1,8 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.ToolWindows;
 using Microsoft.VisualStudio.RpcContracts.RemoteUI;
@@ -10,12 +12,13 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [VisualStudioContribution]
 internal sealed class ContextRelayToolWindowDef : ToolWindow
 {
-    private readonly ContextRelayHost host;
+    private readonly IServiceProvider serviceProvider;
+    private ContextRelayHost? host;
 
-    public ContextRelayToolWindowDef(VisualStudioExtensibility extensibility, ContextRelayHost host)
+    public ContextRelayToolWindowDef(VisualStudioExtensibility extensibility, IServiceProvider serviceProvider)
         : base(extensibility)
     {
-        this.host = host;
+        this.serviceProvider = serviceProvider;
         Title = "ContextRelay";
     }
 
@@ -26,9 +29,12 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
 
     public override async Task<IRemoteUserControl> GetContentAsync(CancellationToken cancellationToken)
     {
-        await host.InitializeAsync(cancellationToken).ConfigureAwait(false);
-        var viewModel = new ContextRelayWindowViewModel(host);
+        var hostInstance = host ??= serviceProvider.GetRequiredService<ContextRelayHost>();
+
+        await hostInstance.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var viewModel = new ContextRelayWindowViewModel(hostInstance);
         await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        hostInstance.StartDeferredSignedInUserResolution();
         return new ContextRelayWindowContent(viewModel);
     }
 }

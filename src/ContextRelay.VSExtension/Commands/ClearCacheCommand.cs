@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.Services;
 using Microsoft.VisualStudio.Extensibility;
@@ -17,7 +17,7 @@ internal sealed class ClearCacheCommand : Command
         this.host = host;
     }
 
-    public override CommandConfiguration CommandConfiguration => new("ContextRelay Clear Cache")
+    public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.ClearCache.DisplayName%")
     {
         Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };

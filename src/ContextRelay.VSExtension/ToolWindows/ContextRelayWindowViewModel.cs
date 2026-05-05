@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -27,27 +27,14 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private IReadOnlyList<SlashCommandSuggestion> commandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private SlashCommandSuggestion? selectedCommandSuggestion;
     private bool isApplyingState;
+    private string windowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
 
     public ContextRelayWindowViewModel(ContextRelayHost host)
     {
         this.host = host;
         host.StateChanged += OnHostStateChanged;
 
-        GenerateHandoffButtonText = ContextRelayLocalizedStrings.GenerateHandoffButtonText;
-        CopyPromptButtonText = ContextRelayLocalizedStrings.CopyPromptButtonText;
-        OpenHandoffButtonText = ContextRelayLocalizedStrings.OpenHandoffButtonText;
-        OpenCopilotButtonText = ContextRelayLocalizedStrings.OpenCopilotButtonText;
-        ClearChatButtonText = ContextRelayLocalizedStrings.ClearChatButtonText;
-        ClearSnippetsButtonText = ContextRelayLocalizedStrings.ClearSnippetsButtonText;
-        ClearCacheButtonText = ContextRelayLocalizedStrings.ClearCacheButtonText;
-        SettingsButtonText = ContextRelayLocalizedStrings.SettingsButtonText;
-        DebugLogButtonText = ContextRelayLocalizedStrings.DebugLogButtonText;
-        SearchButtonText = ContextRelayLocalizedStrings.SearchButtonText;
-        SearchResultsHeaderText = ContextRelayLocalizedStrings.SearchResultsHeaderText;
-        SnippetsHeaderText = ContextRelayLocalizedStrings.SnippetsHeaderText;
-        ChatHistoryHeaderText = ContextRelayLocalizedStrings.ChatHistoryHeaderText;
-        SearchToolTipText = ContextRelayLocalizedStrings.SearchToolTip;
-        CommandPopupHeaderText = ContextRelayLocalizedStrings.CommandPopupHeaderText;
+        RefreshLocalizedUiTexts();
 
         SearchCommand = new AsyncCommand(async (_, ct) => await SubmitAsync(ct).ConfigureAwait(false));
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
@@ -63,6 +50,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
+        UseEnglishCommand = new AsyncCommand(async (_, ct) => await ChangeUiLanguageAsync("en", ct).ConfigureAwait(false));
+        UseJapaneseCommand = new AsyncCommand(async (_, ct) => await ChangeUiLanguageAsync("ja", ct).ConfigureAwait(false));
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -71,21 +60,38 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ApplyState(state);
     }
 
-    [DataMember] public string GenerateHandoffButtonText { get; }
-    [DataMember] public string CopyPromptButtonText { get; }
-    [DataMember] public string OpenHandoffButtonText { get; }
-    [DataMember] public string OpenCopilotButtonText { get; }
-    [DataMember] public string ClearChatButtonText { get; }
-    [DataMember] public string ClearSnippetsButtonText { get; }
-    [DataMember] public string ClearCacheButtonText { get; }
-    [DataMember] public string SettingsButtonText { get; }
-    [DataMember] public string DebugLogButtonText { get; }
-    [DataMember] public string SearchButtonText { get; }
-    [DataMember] public string SearchResultsHeaderText { get; }
-    [DataMember] public string SnippetsHeaderText { get; }
-    [DataMember] public string ChatHistoryHeaderText { get; }
-    [DataMember] public string SearchToolTipText { get; }
-    [DataMember] public string CommandPopupHeaderText { get; }
+    [DataMember] public string GenerateHandoffButtonText { get; private set; } = string.Empty;
+    [DataMember] public string CopyPromptButtonText { get; private set; } = string.Empty;
+    [DataMember] public string OpenHandoffButtonText { get; private set; } = string.Empty;
+    [DataMember] public string OpenCopilotButtonText { get; private set; } = string.Empty;
+    [DataMember] public string ClearChatButtonText { get; private set; } = string.Empty;
+    [DataMember] public string ClearSnippetsButtonText { get; private set; } = string.Empty;
+    [DataMember] public string ClearCacheButtonText { get; private set; } = string.Empty;
+    [DataMember] public string SettingsButtonText { get; private set; } = string.Empty;
+    [DataMember] public string DebugLogButtonText { get; private set; } = string.Empty;
+    [DataMember] public string SearchButtonText { get; private set; } = string.Empty;
+    [DataMember] public string SearchResultsHeaderText { get; private set; } = string.Empty;
+    [DataMember] public string SnippetsHeaderText { get; private set; } = string.Empty;
+    [DataMember] public string ChatHistoryHeaderText { get; private set; } = string.Empty;
+    [DataMember] public string SearchToolTipText { get; private set; } = string.Empty;
+    [DataMember] public string CommandPopupHeaderText { get; private set; } = string.Empty;
+
+    [DataMember]
+    public string WindowTitleText
+    {
+        get => windowTitleText;
+        private set
+        {
+            if (windowTitleText != value)
+            {
+                windowTitleText = value;
+                RaiseNotifyPropertyChangedEvent(nameof(WindowTitleText));
+            }
+        }
+    }
+
+    [DataMember] public string UseEnglishButtonText => ContextRelayLocalizedStrings.UseEnglishButtonText;
+    [DataMember] public string UseJapaneseButtonText => ContextRelayLocalizedStrings.UseJapaneseButtonText;
 
     [DataMember] public AsyncCommand SearchCommand { get; }
     [DataMember] public AsyncCommand GenerateHandoffCommand { get; }
@@ -101,6 +107,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
     [DataMember] public AsyncCommand CloseCommandPopupCommand { get; }
+    [DataMember] public AsyncCommand UseEnglishCommand { get; }
+    [DataMember] public AsyncCommand UseJapaneseCommand { get; }
 
     [DataMember]
     public string QueryText
@@ -320,6 +328,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             QueryText = state.QueryText;
             HelpText = state.HelpText;
             StatusMessage = state.StatusMessage;
+            RefreshLocalizedUiTexts();
             SignedInUserText = string.IsNullOrWhiteSpace(state.SignedInUser)
                 ? ContextRelayLocalizedStrings.SignedOutText
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
@@ -409,6 +418,49 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         HelpText = IsCommandPopupOpen && selectedCommandSuggestion is not null
             ? selectedCommandSuggestion.Description
             : ContextRelayLocalizedStrings.GetHelpTextForQuery(QueryText);
+    }
+
+    private void RefreshLocalizedUiTexts()
+    {
+        GenerateHandoffButtonText = ContextRelayLocalizedStrings.GenerateHandoffButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(GenerateHandoffButtonText));
+        CopyPromptButtonText = ContextRelayLocalizedStrings.CopyPromptButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(CopyPromptButtonText));
+        OpenHandoffButtonText = ContextRelayLocalizedStrings.OpenHandoffButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(OpenHandoffButtonText));
+        OpenCopilotButtonText = ContextRelayLocalizedStrings.OpenCopilotButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(OpenCopilotButtonText));
+        ClearChatButtonText = ContextRelayLocalizedStrings.ClearChatButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(ClearChatButtonText));
+        ClearSnippetsButtonText = ContextRelayLocalizedStrings.ClearSnippetsButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(ClearSnippetsButtonText));
+        ClearCacheButtonText = ContextRelayLocalizedStrings.ClearCacheButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(ClearCacheButtonText));
+        SettingsButtonText = ContextRelayLocalizedStrings.SettingsButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(SettingsButtonText));
+        DebugLogButtonText = ContextRelayLocalizedStrings.DebugLogButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(DebugLogButtonText));
+        SearchButtonText = ContextRelayLocalizedStrings.SearchButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(SearchButtonText));
+        SearchResultsHeaderText = ContextRelayLocalizedStrings.SearchResultsHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(SearchResultsHeaderText));
+        SnippetsHeaderText = ContextRelayLocalizedStrings.SnippetsHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(SnippetsHeaderText));
+        ChatHistoryHeaderText = ContextRelayLocalizedStrings.ChatHistoryHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(ChatHistoryHeaderText));
+        SearchToolTipText = ContextRelayLocalizedStrings.SearchToolTip;
+        RaiseNotifyPropertyChangedEvent(nameof(SearchToolTipText));
+        CommandPopupHeaderText = ContextRelayLocalizedStrings.CommandPopupHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
+        WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+        RaiseNotifyPropertyChangedEvent(nameof(UseEnglishButtonText));
+        RaiseNotifyPropertyChangedEvent(nameof(UseJapaneseButtonText));
+    }
+
+    private async Task ChangeUiLanguageAsync(string languageCode, CancellationToken ct)
+    {
+        var state = await host.UpdateUiLanguageAsync(languageCode, ct).ConfigureAwait(false);
+        ApplyState(state);
     }
 
     private void CloseCommandPopup()

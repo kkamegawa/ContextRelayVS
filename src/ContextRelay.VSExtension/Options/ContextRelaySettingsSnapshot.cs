@@ -1,4 +1,4 @@
-using ContextRelay.Core.Auth;
+﻿using ContextRelay.Core.Auth;
 
 namespace ContextRelay.VSExtension.Options;
 
@@ -9,6 +9,8 @@ internal sealed class ContextRelaySettingsSnapshot
     public string OutputDirectory { get; set; } = ".contextrelay";
 
     public bool EnableChatPreview { get; set; } = true;
+
+    public string UiLanguage { get; set; } = "auto";
 
     public bool EnableGraphDebugLogging { get; set; }
 
@@ -23,6 +25,8 @@ internal sealed class ContextRelaySettingsSnapshot
     public string CustomGraphEndpoint { get; set; } = string.Empty;
 
     public string CustomAuthEndpoint { get; set; } = string.Empty;
+
+    public bool UseBroker { get; set; } = false;
 
     public int CacheTtlSeconds { get; set; } = 300;
 
@@ -54,7 +58,8 @@ internal sealed class ContextRelaySettingsSnapshot
             TenantId = string.IsNullOrWhiteSpace(TenantId) ? "organizations" : TenantId,
             CloudEnvironment = CloudEnvironment,
             CustomGraphEndpoint = CustomGraphEndpoint ?? string.Empty,
-            CustomAuthEndpoint = CustomAuthEndpoint ?? string.Empty
+            CustomAuthEndpoint = CustomAuthEndpoint ?? string.Empty,
+            UseBroker = UseBroker
         };
     }
 

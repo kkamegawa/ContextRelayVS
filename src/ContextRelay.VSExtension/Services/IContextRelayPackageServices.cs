@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.Options;
 
@@ -14,4 +14,5 @@ internal interface IContextRelayPackageServices
     Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default);
     Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default);
     Task OpenSettingsFileAsync(CancellationToken cancellationToken = default);
+    Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default);
 }

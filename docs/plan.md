@@ -1,4 +1,4 @@
-_See the session plan at the project root (`plan.md` snapshot)._
+﻿_See the session plan at the project root (`plan.md` snapshot)._
 
 This file mirrors the design plan stored during planning so that downstream work can reference it from the repository. Keep it in sync with session notes when major decisions change.
 
@@ -61,7 +61,7 @@ ContextRelayVS/
 ## 4. UI
 
 - One `ToolWindowPane` hosting a WPF `UserControl` via MVVM.
-- Bound to `VsBrushes` / `EnvironmentColors` for automatic theme follow.
+- Bound to `VsBrushes` / `EnvironmentColors` for automatic theme follow. For `RemoteUserControl`, apply Visual Studio theme resources explicitly in XAML instead of relying on default WPF control styling.
 - Single input with slash-command popup (keyboard-navigable `ListBox` in `Popup`).
 - Results rendered as source sections (Mail / Teams / SharePoint / OneDrive / Connectors) with `DataTemplate` per type.
 - Card context menu: Pin, Copy, Append to handoff, Open in browser.

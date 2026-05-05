@@ -1,4 +1,4 @@
-# ContextRelay for Visual Studio E2E Checklist
+﻿# ContextRelay for Visual Studio E2E Checklist
 
 Use this checklist against a Visual Studio Experimental Instance before publishing a release.
 
@@ -28,6 +28,13 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 1. Open **Tools > Options > ContextRelay**.
 2. Verify the **General**, **Authentication**, **Graph API**, **Cache**, and **Adapters** pages render.
 3. Change values, save, reopen the dialog, and confirm persistence.
+
+## Theme and visual consistency
+
+1. Switch Visual Studio themes (Light, Dark, Blue).
+2. Confirm ContextRelay buttons use the same visual style as native Visual Studio buttons, including hover, pressed, and disabled states.
+3. Confirm list controls, text box, tab headers, and border lines use Visual Studio theme colors and do not fall back to default WPF white backgrounds in Dark theme.
+4. Confirm no custom button/background color appears, and no button surface visually merges into the tool window background.
 
 ## Search and shared state
 

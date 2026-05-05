@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.Options;
+using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
 
 namespace ContextRelay.VSExtension.Services;
@@ -18,8 +19,12 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         this.settingsService = settingsService;
     }
 
-    public Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default)
-        => settingsService.LoadSettingsAsync(cancellationToken);
+    public async Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
+        return settings;
+    }
 
     public Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)
     {
@@ -92,13 +97,22 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         var filePath = settingsService.GetSettingsFilePath();
         var dir = Path.GetDirectoryName(filePath)!;
         Directory.CreateDirectory(dir);
+
+        // Only write default settings when the file does not yet exist.
+        // Avoid overwriting the file on every open so that a corrupted but
+        // potentially recoverable file is not silently lost.
         if (!File.Exists(filePath))
         {
-            var defaultSettings = new ContextRelaySettingsSnapshot();
-            var json = System.Text.Json.JsonSerializer.Serialize(defaultSettings, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(filePath, json, cancellationToken).ConfigureAwait(false);
+            var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+            await settingsService.SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
         }
 
         await OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
+    {
+        await settingsService.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
+        ContextRelayLocalizedStrings.SetUiLanguage(uiLanguage);
     }
 }
