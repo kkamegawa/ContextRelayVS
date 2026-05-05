@@ -20,7 +20,7 @@ internal sealed class ContextRelayWindowContent : RemoteUserControl
         var hasExpectedResource = assembly.GetManifestResourceNames().Contains(EmbeddedXamlResourceName, StringComparer.Ordinal);
         if (!hasExpectedResource)
         {
-            throw new InvalidOperationException($"埋め込みリソース '{EmbeddedXamlResourceName}' が見つかりませんでした。");
+            throw new InvalidOperationException($"Embedded resource '{EmbeddedXamlResourceName}' was not found. Ensure the XAML file is marked as an EmbeddedResource in the project.");
         }
     }
 }

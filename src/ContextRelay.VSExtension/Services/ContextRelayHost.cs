@@ -120,10 +120,11 @@ internal sealed class ContextRelayHost : IDisposable
         return state;
     }
 
-    public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
+    public async Task<ContextRelayHostState> UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
     {
         await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+        return state;
     }
 
     public void StartDeferredSignedInUserResolution()
@@ -138,6 +139,13 @@ internal sealed class ContextRelayHost : IDisposable
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(3), disposeCancellation.Token).ConfigureAwait(false);
+
+                // Guard against the host being disposed right after the delay completes.
+                if (disposeCancellation.IsCancellationRequested)
+                {
+                    return;
+                }
+
                 shouldResolveSignedInUser = true;
                 await RefreshStateAsync(state.StatusMessage).ConfigureAwait(false);
             }
@@ -801,6 +809,7 @@ internal sealed class ContextRelayHost : IDisposable
         string? signedInUser = state.SignedInUser;
         if (shouldResolveSignedInUser)
         {
+            shouldResolveSignedInUser = false;
             signedInUser = await TryGetSignedInUserAsync(cancellationToken).ConfigureAwait(false);
         }
 

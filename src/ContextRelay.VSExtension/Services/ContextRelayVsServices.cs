@@ -98,10 +98,14 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         var dir = Path.GetDirectoryName(filePath)!;
         Directory.CreateDirectory(dir);
 
-        // Always normalize and persist settings so newly added properties
-        // (e.g. UseBroker) are materialized in settings.json.
-        var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
-        await settingsService.SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
+        // Only write default settings when the file does not yet exist.
+        // Avoid overwriting the file on every open so that a corrupted but
+        // potentially recoverable file is not silently lost.
+        if (!File.Exists(filePath))
+        {
+            var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+            await settingsService.SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
+        }
 
         await OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }

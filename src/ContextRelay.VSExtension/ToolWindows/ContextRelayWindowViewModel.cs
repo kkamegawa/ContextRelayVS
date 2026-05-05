@@ -459,8 +459,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private async Task ChangeUiLanguageAsync(string languageCode, CancellationToken ct)
     {
-        await host.UpdateUiLanguageAsync(languageCode, ct).ConfigureAwait(false);
-        var state = await host.GetStateAsync().ConfigureAwait(false);
+        var state = await host.UpdateUiLanguageAsync(languageCode, ct).ConfigureAwait(false);
         ApplyState(state);
     }
 

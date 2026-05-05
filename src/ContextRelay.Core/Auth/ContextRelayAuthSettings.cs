@@ -12,7 +12,9 @@ public sealed class ContextRelayAuthSettings
 
     public string CustomAuthEndpoint { get; set; } = string.Empty;
 
-    public bool UseBroker { get; set; } = true;
+    // Defaults to false to opt out of the OS authentication broker by default.
+    // ContextRelaySettingsSnapshot.UseBroker also defaults to false; the two must stay aligned.
+    public bool UseBroker { get; set; } = false;
 
     public string GraphEndpoint =>
         CloudEndpoints.GetGraphEndpoint(CloudEnvironment, CustomGraphEndpoint);

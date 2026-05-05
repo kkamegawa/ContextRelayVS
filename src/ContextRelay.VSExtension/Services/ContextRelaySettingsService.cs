@@ -45,8 +45,24 @@ internal sealed class ContextRelaySettingsService
             Directory.CreateDirectory(directory);
         }
 
-        await using var stream = File.Create(SettingsFilePath);
-        await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken).ConfigureAwait(false);
+        // Write to a temporary file first and then atomically replace the
+        // target so a crash mid-write cannot corrupt the settings file.
+        var tempPath = SettingsFilePath + ".tmp";
+        try
+        {
+            await using (var stream = File.Create(tempPath))
+            {
+                await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(tempPath, SettingsFilePath, overwrite: true);
+        }
+        catch
+        {
+            // Clean up the temp file if anything went wrong.
+            try { File.Delete(tempPath); } catch { /* ignore */ }
+            throw;
+        }
     }
 
     public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)

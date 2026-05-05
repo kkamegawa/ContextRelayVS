@@ -31,15 +31,33 @@ public sealed class ContextRelayWindowContentEmbeddedResourceTests
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            var candidate = Path.Combine(current.FullName, "src", "ContextRelay.VSExtension", "bin", "Debug", "net8.0-windows10.0.22621.0", "ContextRelay.VSExtension.dll");
-            if (File.Exists(candidate))
+            var extensionBinDir = Path.Combine(current.FullName, "src", "ContextRelay.VSExtension", "bin");
+            if (Directory.Exists(extensionBinDir))
             {
-                return candidate;
+                // Probe Release before Debug so CI builds (which use -c Release) are found first.
+                foreach (var configuration in new[] { "Release", "Debug" })
+                {
+                    var configDir = Path.Combine(extensionBinDir, configuration);
+                    if (!Directory.Exists(configDir))
+                    {
+                        continue;
+                    }
+
+                    foreach (var tfmDir in Directory.EnumerateDirectories(configDir))
+                    {
+                        var candidate = Path.Combine(tfmDir, "ContextRelay.VSExtension.dll");
+                        if (File.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                }
             }
 
             current = current.Parent;
         }
 
-        throw new FileNotFoundException("ContextRelay.VSExtension.dll が見つかりませんでした。先にソリューションのビルドを実行してください。");
+        throw new FileNotFoundException(
+            "ContextRelay.VSExtension.dll was not found. Build the solution before running this test.");
     }
 }
