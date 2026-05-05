@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.Services;
 using Microsoft.VisualStudio.Extensibility;
@@ -17,7 +17,7 @@ internal sealed class OpenSettingsCommand : Command
         this.packageServices = packageServices;
     }
 
-    public override CommandConfiguration CommandConfiguration => new("ContextRelay Settings")
+    public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.OpenSettings.DisplayName%")
     {
         Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };

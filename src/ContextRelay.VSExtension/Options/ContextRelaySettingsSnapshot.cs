@@ -1,4 +1,4 @@
-using ContextRelay.Core.Auth;
+﻿using ContextRelay.Core.Auth;
 
 namespace ContextRelay.VSExtension.Options;
 
@@ -9,6 +9,8 @@ internal sealed class ContextRelaySettingsSnapshot
     public string OutputDirectory { get; set; } = ".contextrelay";
 
     public bool EnableChatPreview { get; set; } = true;
+
+    public string UiLanguage { get; set; } = "auto";
 
     public bool EnableGraphDebugLogging { get; set; }
 

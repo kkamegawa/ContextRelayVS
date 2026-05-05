@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.Services;
 using Microsoft.VisualStudio.Extensibility;
@@ -17,7 +17,7 @@ internal sealed class GenerateHandoffCommand : Command
         this.host = host;
     }
 
-    public override CommandConfiguration CommandConfiguration => new("ContextRelay Generate Handoff")
+    public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.GenerateHandoff.DisplayName%")
     {
         Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };

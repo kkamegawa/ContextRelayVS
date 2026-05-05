@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -9,6 +9,8 @@ namespace ContextRelay.VSExtension.Services;
 
 internal sealed class ContextRelaySettingsService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
     private static readonly string SettingsFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ContextRelay",
@@ -31,6 +33,27 @@ internal sealed class ContextRelaySettingsService
         {
             return new ContextRelaySettingsSnapshot();
         }
+    }
+
+    public async Task SaveSettingsAsync(ContextRelaySettingsSnapshot settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var directory = Path.GetDirectoryName(SettingsFilePath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await using var stream = File.Create(SettingsFilePath);
+        await JsonSerializer.SerializeAsync(stream, settings, JsonOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
+    {
+        var settings = await LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        settings.UiLanguage = uiLanguage;
+        await SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
     }
 
     public string GetSettingsFilePath() => SettingsFilePath;

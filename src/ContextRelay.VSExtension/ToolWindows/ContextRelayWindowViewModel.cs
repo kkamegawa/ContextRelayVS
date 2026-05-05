@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -27,6 +27,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private IReadOnlyList<SlashCommandSuggestion> commandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private SlashCommandSuggestion? selectedCommandSuggestion;
     private bool isApplyingState;
+    private string windowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
 
     public ContextRelayWindowViewModel(ContextRelayHost host)
     {
@@ -63,6 +64,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
+        UseEnglishCommand = new AsyncCommand(async (_, ct) => await ChangeUiLanguageAsync("en", ct).ConfigureAwait(false));
+        UseJapaneseCommand = new AsyncCommand(async (_, ct) => await ChangeUiLanguageAsync("ja", ct).ConfigureAwait(false));
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -87,6 +90,23 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public string SearchToolTipText { get; }
     [DataMember] public string CommandPopupHeaderText { get; }
 
+    [DataMember]
+    public string WindowTitleText
+    {
+        get => windowTitleText;
+        private set
+        {
+            if (windowTitleText != value)
+            {
+                windowTitleText = value;
+                RaiseNotifyPropertyChangedEvent(nameof(WindowTitleText));
+            }
+        }
+    }
+
+    [DataMember] public string UseEnglishButtonText => ContextRelayLocalizedStrings.UseEnglishButtonText;
+    [DataMember] public string UseJapaneseButtonText => ContextRelayLocalizedStrings.UseJapaneseButtonText;
+
     [DataMember] public AsyncCommand SearchCommand { get; }
     [DataMember] public AsyncCommand GenerateHandoffCommand { get; }
     [DataMember] public AsyncCommand CopyPromptCommand { get; }
@@ -101,6 +121,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
     [DataMember] public AsyncCommand CloseCommandPopupCommand { get; }
+    [DataMember] public AsyncCommand UseEnglishCommand { get; }
+    [DataMember] public AsyncCommand UseJapaneseCommand { get; }
 
     [DataMember]
     public string QueryText
@@ -323,6 +345,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             SignedInUserText = string.IsNullOrWhiteSpace(state.SignedInUser)
                 ? ContextRelayLocalizedStrings.SignedOutText
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
+            WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+            RaiseNotifyPropertyChangedEvent(nameof(UseEnglishButtonText));
+            RaiseNotifyPropertyChangedEvent(nameof(UseJapaneseButtonText));
             SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
             ChatHistory = state.ChatHistory.Select(item => new ChatHistoryItemViewModel(item, this)).ToArray();
@@ -409,6 +434,13 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         HelpText = IsCommandPopupOpen && selectedCommandSuggestion is not null
             ? selectedCommandSuggestion.Description
             : ContextRelayLocalizedStrings.GetHelpTextForQuery(QueryText);
+    }
+
+    private async Task ChangeUiLanguageAsync(string languageCode, CancellationToken ct)
+    {
+        await host.UpdateUiLanguageAsync(languageCode, ct).ConfigureAwait(false);
+        var state = await host.GetStateAsync().ConfigureAwait(false);
+        ApplyState(state);
     }
 
     private void CloseCommandPopup()

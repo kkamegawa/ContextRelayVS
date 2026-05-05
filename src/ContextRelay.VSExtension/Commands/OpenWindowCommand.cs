@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
@@ -12,7 +12,7 @@ internal sealed class OpenWindowCommand : Command
     public OpenWindowCommand(VisualStudioExtensibility extensibility)
         : base(extensibility) { }
 
-    public override CommandConfiguration CommandConfiguration => new("Open ContextRelay")
+    public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.OpenWindow.DisplayName%")
     {
         Placements =
         [

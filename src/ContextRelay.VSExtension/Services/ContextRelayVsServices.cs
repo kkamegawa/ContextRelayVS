@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.Options;
+using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
 
 namespace ContextRelay.VSExtension.Services;
@@ -18,8 +19,12 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         this.settingsService = settingsService;
     }
 
-    public Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default)
-        => settingsService.LoadSettingsAsync(cancellationToken);
+    public async Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
+        return settings;
+    }
 
     public Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)
     {
@@ -96,9 +101,14 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         // Always normalize and persist settings so newly added properties
         // (e.g. UseBroker) are materialized in settings.json.
         var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
-        var json = System.Text.Json.JsonSerializer.Serialize(settings, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(filePath, json, cancellationToken).ConfigureAwait(false);
+        await settingsService.SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
 
         await OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
+    {
+        await settingsService.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
+        ContextRelayLocalizedStrings.SetUiLanguage(uiLanguage);
     }
 }

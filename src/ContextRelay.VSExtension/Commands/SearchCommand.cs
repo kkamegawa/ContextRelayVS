@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
@@ -12,7 +12,7 @@ internal sealed class SearchCommand : Command
     public SearchCommand(VisualStudioExtensibility extensibility)
         : base(extensibility) { }
 
-    public override CommandConfiguration CommandConfiguration => new("ContextRelay Search")
+    public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.Search.DisplayName%")
     {
         Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };

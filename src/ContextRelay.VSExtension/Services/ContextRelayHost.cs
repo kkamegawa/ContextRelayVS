@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -109,8 +109,16 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task<ContextRelayHostState> GetStateAsync()
     {
+        var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
+        ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         await RefreshStateAsync(state.StatusMessage).ConfigureAwait(false);
         return state;
+    }
+
+    public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
+    {
+        await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
+        await RefreshStateAsync(state.StatusMessage).ConfigureAwait(false);
     }
 
     public void StartDeferredSignedInUserResolution()

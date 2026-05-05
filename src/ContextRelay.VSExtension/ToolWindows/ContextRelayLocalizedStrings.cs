@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -8,6 +8,11 @@ namespace ContextRelay.VSExtension.ToolWindows;
 
 internal static class ContextRelayLocalizedStrings
 {
+    private const string UiLanguageAuto = "auto";
+    private const string UiLanguageEnglish = "en";
+    private const string UiLanguageJapanese = "ja";
+    private static string configuredUiLanguage = UiLanguageAuto;
+
     private static readonly IReadOnlyDictionary<string, (string English, string Japanese)> CommandDescriptions =
         new Dictionary<string, (string English, string Japanese)>(StringComparer.OrdinalIgnoreCase)
         {
@@ -24,8 +29,14 @@ internal static class ContextRelayLocalizedStrings
             ["/clear"] = ("Clear the current chat transcript and pinned snippets.", "現在のチャット履歴とピン留めスニペットをクリアします。")
         };
 
-    public static bool UseJapanese =>
-        CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("ja", StringComparison.OrdinalIgnoreCase);
+    public static bool UseJapanese => ResolveLanguageCode(configuredUiLanguage).Equals(UiLanguageJapanese, StringComparison.OrdinalIgnoreCase);
+
+    public static string CurrentUiLanguage => configuredUiLanguage;
+
+    public static void SetUiLanguage(string? language)
+    {
+        configuredUiLanguage = NormalizeUiLanguage(language);
+    }
 
     public static string GenerateHandoffButtonText => UseJapanese ? "引き継ぎ文書を生成" : "Generate handoff";
 
@@ -48,6 +59,12 @@ internal static class ContextRelayLocalizedStrings
     public static string SearchButtonText => UseJapanese ? "送信" : "Send";
 
     public static string SearchResultsHeaderText => UseJapanese ? "検索結果" : "Search results";
+
+    public static string WindowTitleText => UseJapanese ? "ContextRelay" : "ContextRelay";
+
+    public static string UseEnglishButtonText => UseJapanese ? "English" : "English";
+
+    public static string UseJapaneseButtonText => UseJapanese ? "日本語" : "日本語";
 
     public static string SnippetsHeaderText => UseJapanese ? "ピン留めしたスニペット" : "Pinned snippets";
 
@@ -376,6 +393,34 @@ internal static class ContextRelayLocalizedStrings
         }
 
         return string.IsNullOrWhiteSpace(normalized) ? "md" : normalized;
+    }
+
+    private static string ResolveLanguageCode(string language)
+    {
+        var normalized = NormalizeUiLanguage(language);
+        if (!normalized.Equals(UiLanguageAuto, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized;
+        }
+
+        return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals(UiLanguageJapanese, StringComparison.OrdinalIgnoreCase)
+            ? UiLanguageJapanese
+            : UiLanguageEnglish;
+    }
+
+    private static string NormalizeUiLanguage(string? language)
+    {
+        var normalized = (language ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            UiLanguageEnglish => UiLanguageEnglish,
+            UiLanguageJapanese => UiLanguageJapanese,
+            UiLanguageAuto => UiLanguageAuto,
+            "en-us" => UiLanguageEnglish,
+            "en-gb" => UiLanguageEnglish,
+            "ja-jp" => UiLanguageJapanese,
+            _ => UiLanguageAuto
+        };
     }
 
     private static string GetLanguageDisplayName(string languageId)
