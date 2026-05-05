@@ -11,6 +11,8 @@ internal static class ContextRelayLocalizedStrings
     private const string UiLanguageAuto = "auto";
     private const string UiLanguageEnglish = "en";
     private const string UiLanguageJapanese = "ja";
+    private const string ReadyStatusEnglish = "ContextRelay is ready.";
+    private const string ReadyStatusJapanese = "ContextRelay の準備ができました。";
     private static string configuredUiLanguage = UiLanguageAuto;
 
     private static readonly IReadOnlyDictionary<string, (string English, string Japanese)> CommandDescriptions =
@@ -89,7 +91,13 @@ internal static class ContextRelayLocalizedStrings
 
     public static string OpenInBrowserMenuText => UseJapanese ? "ブラウザーで開く" : "Open in browser";
 
-    public static string ReadyStatus => UseJapanese ? "ContextRelay の準備ができました。" : "ContextRelay is ready.";
+    public static string ReadyStatus => UseJapanese ? ReadyStatusJapanese : ReadyStatusEnglish;
+
+    public static bool IsReadyStatus(string? statusMessage)
+    {
+        return string.Equals(statusMessage, ReadyStatusEnglish, StringComparison.Ordinal) ||
+            string.Equals(statusMessage, ReadyStatusJapanese, StringComparison.Ordinal);
+    }
 
     public static string GenericHelpText =>
         UseJapanese ? "通常の文章で Microsoft 365 Copilot とチャットします。検索するには /all などのスラッシュ コマンドを使用します。" : "Type a message to chat with Microsoft 365 Copilot. Use slash commands such as /all to search Microsoft 365 content.";

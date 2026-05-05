@@ -111,14 +111,19 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
-        await RefreshStateAsync(state.StatusMessage).ConfigureAwait(false);
+
+        var statusMessage = ContextRelayLocalizedStrings.IsReadyStatus(state.StatusMessage)
+            ? ContextRelayLocalizedStrings.ReadyStatus
+            : state.StatusMessage;
+
+        await RefreshStateAsync(statusMessage).ConfigureAwait(false);
         return state;
     }
 
     public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
     {
         await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
-        await RefreshStateAsync(state.StatusMessage).ConfigureAwait(false);
+        await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
     }
 
     public void StartDeferredSignedInUserResolution()
