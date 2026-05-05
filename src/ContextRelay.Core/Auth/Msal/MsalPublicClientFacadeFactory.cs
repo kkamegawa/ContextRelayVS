@@ -30,8 +30,12 @@ public sealed class MsalPublicClientFacadeFactory : IMsalPublicClientFacadeFacto
 
         var builder = PublicClientApplicationBuilder
             .Create(settings.ClientId.Trim())
-            .WithDefaultRedirectUri()
-            .WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows));
+            .WithDefaultRedirectUri();
+
+        if (settings.UseBroker)
+        {
+            builder.WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows));
+        }
 
         var cloudInstance = MapCloudInstance(settings.CloudEnvironment);
         if (settings.CloudEnvironment == CloudEnvironment.Custom &&

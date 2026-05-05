@@ -24,6 +24,8 @@ internal sealed class ContextRelaySettingsSnapshot
 
     public string CustomAuthEndpoint { get; set; } = string.Empty;
 
+    public bool UseBroker { get; set; } = false;
+
     public int CacheTtlSeconds { get; set; } = 300;
 
     public int CacheMaxEntries { get; set; } = 200;
@@ -54,7 +56,8 @@ internal sealed class ContextRelaySettingsSnapshot
             TenantId = string.IsNullOrWhiteSpace(TenantId) ? "organizations" : TenantId,
             CloudEnvironment = CloudEnvironment,
             CustomGraphEndpoint = CustomGraphEndpoint ?? string.Empty,
-            CustomAuthEndpoint = CustomAuthEndpoint ?? string.Empty
+            CustomAuthEndpoint = CustomAuthEndpoint ?? string.Empty,
+            UseBroker = UseBroker
         };
     }
 

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -9,6 +9,9 @@
     <RootNamespace>ContextRelay.VSExtension</RootNamespace>
     <AssemblyName>ContextRelay.VSExtension</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/kkamegawa/ContextRelayVS</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
@@ -19,8 +22,20 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Extensibility" Version="17.14.2098" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
   </ItemGroup>
 
   <!--
@@ -28,12 +43,8 @@
     which points at a file that doesn't exist yet. We copy our source.extension.vsixmanifest into the intermediate
     directory before DetokenizeVsixManifestFile runs so VsixUtil.exe can find it.
   -->
-  <Target Name="CopyVsixManifestToIntermediate"
-          BeforeTargets="DetokenizeVsixManifestFile"
-          Inputs="$(MSBuildProjectDirectory)\source.extension.vsixmanifest"
-          Outputs="$(IntermediateOutputPath)extension.vsixmanifest">
+  <Target Name="CopyVsixManifestToIntermediate" BeforeTargets="DetokenizeVsixManifestFile" Inputs="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" Outputs="$(IntermediateOutputPath)extension.vsixmanifest">
     <MakeDir Directories="$(IntermediateOutputPath)" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\source.extension.vsixmanifest"
-          DestinationFiles="$(IntermediateOutputPath)extension.vsixmanifest" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" DestinationFiles="$(IntermediateOutputPath)extension.vsixmanifest" />
   </Target>
 </Project>

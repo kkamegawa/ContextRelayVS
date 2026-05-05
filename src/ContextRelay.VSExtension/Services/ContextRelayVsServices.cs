@@ -92,12 +92,12 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         var filePath = settingsService.GetSettingsFilePath();
         var dir = Path.GetDirectoryName(filePath)!;
         Directory.CreateDirectory(dir);
-        if (!File.Exists(filePath))
-        {
-            var defaultSettings = new ContextRelaySettingsSnapshot();
-            var json = System.Text.Json.JsonSerializer.Serialize(defaultSettings, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(filePath, json, cancellationToken).ConfigureAwait(false);
-        }
+
+        // Always normalize and persist settings so newly added properties
+        // (e.g. UseBroker) are materialized in settings.json.
+        var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        var json = System.Text.Json.JsonSerializer.Serialize(settings, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        await File.WriteAllTextAsync(filePath, json, cancellationToken).ConfigureAwait(false);
 
         await OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }

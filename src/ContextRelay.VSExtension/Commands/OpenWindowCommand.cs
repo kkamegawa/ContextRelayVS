@@ -14,7 +14,11 @@ internal sealed class OpenWindowCommand : Command
 
     public override CommandConfiguration CommandConfiguration => new("Open ContextRelay")
     {
-        Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
+        Placements =
+        [
+            CommandPlacement.KnownPlacements.ToolsMenu,
+            CommandPlacement.KnownPlacements.ViewOtherWindowsMenu,
+        ],
     };
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)

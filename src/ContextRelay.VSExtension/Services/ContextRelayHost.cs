@@ -31,7 +31,8 @@ internal sealed class ContextRelayHost : IDisposable
     private readonly IContextRelayPackageServices packageServices;
     private readonly ContextRelayOutputLogger logger;
     private readonly SemaphoreSlim gate = new(1, 1);
-    private readonly IContextRelayAuthProvider authProvider;
+    private readonly CancellationTokenSource disposeCancellation = new();
+    private readonly Lazy<IContextRelayAuthProvider> authProvider;
     private readonly FileSystemSharedSessionStore sharedStore;
     private readonly SharedStoreWatcher watcher;
     private readonly SharedSnippetRepository snippetRepository;
@@ -50,12 +51,16 @@ internal sealed class ContextRelayHost : IDisposable
     private int cacheMaxEntries = 200;
     private ContextItem[] currentSearchResults = Array.Empty<ContextItem>();
     private bool initialized;
+    private bool shouldResolveSignedInUser;
+    private int deferredSignedInUserResolutionScheduled;
 
     public ContextRelayHost(IContextRelayPackageServices packageServices, ContextRelayOutputLogger logger)
     {
         this.packageServices = packageServices;
         this.logger = logger;
-        authProvider = new MsalAuthProvider();
+        authProvider = new Lazy<IContextRelayAuthProvider>(
+            static () => new MsalAuthProvider(),
+            LazyThreadSafetyMode.ExecutionAndPublication);
 
         var sharedStoreOptions = SharedStoreOptions.CreateDefault("vs", typeof(ContextRelayHost).Assembly.GetName().Version?.ToString() ?? "0.1.0");
         watcher = new SharedStoreWatcher(sharedStoreOptions.RootDirectory, sharedStoreOptions.WatcherDebounceMilliseconds);
@@ -108,6 +113,31 @@ internal sealed class ContextRelayHost : IDisposable
         return state;
     }
 
+    public void StartDeferredSignedInUserResolution()
+    {
+        if (Interlocked.Exchange(ref deferredSignedInUserResolutionScheduled, 1) == 1)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), disposeCancellation.Token).ConfigureAwait(false);
+                shouldResolveSignedInUser = true;
+                await RefreshStateAsync(state.StatusMessage).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning($"Deferred signed-in-user refresh failed: {ex.Message}");
+            }
+        }, disposeCancellation.Token);
+    }
+
     public async Task<ContextRelayHostState> SubmitQueryAsync(string input, CancellationToken cancellationToken = default)
     {
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -147,6 +177,7 @@ internal sealed class ContextRelayHost : IDisposable
             }
 
             var authSettings = settings.ToAuthSettings();
+            shouldResolveSignedInUser = true;
             if (route.Target == RouteTarget.WorkIq)
             {
                 return await HandleWorkIqCommandAsync(trimmed, route.Query, authSettings, cancellationToken).ConfigureAwait(false);
@@ -156,7 +187,7 @@ internal sealed class ContextRelayHost : IDisposable
             ContextRelayAccessToken token;
             try
             {
-                token = await authProvider.GetAccessTokenAsync(authSettings, featureOptions, cancellationToken).ConfigureAwait(false);
+                token = await authProvider.Value.GetAccessTokenAsync(authSettings, featureOptions, cancellationToken).ConfigureAwait(false);
             }
             catch (ContextRelayAuthenticationException ex)
             {
@@ -464,11 +495,13 @@ internal sealed class ContextRelayHost : IDisposable
 
     public void Dispose()
     {
+        disposeCancellation.Cancel();
         watcher.Changed -= OnSharedStoreChanged;
         workIqAdapter.Dispose();
         snippetRepository.Dispose();
         watcher.Dispose();
         gate.Dispose();
+        disposeCancellation.Dispose();
     }
 
     private async Task<IReadOnlyList<ContextItem>> SearchSourceAsync(
@@ -680,7 +713,7 @@ internal sealed class ContextRelayHost : IDisposable
         ContextRelayAccessToken token;
         try
         {
-            token = await authProvider.GetWorkIqAccessTokenAsync(authSettings, cancellationToken).ConfigureAwait(false);
+            token = await authProvider.Value.GetWorkIqAccessTokenAsync(authSettings, cancellationToken).ConfigureAwait(false);
         }
         catch (ContextRelayAuthenticationException ex)
         {
@@ -751,7 +784,12 @@ internal sealed class ContextRelayHost : IDisposable
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var handoffIndex = await sharedStore.GetHandoffIndexAsync(cancellationToken).ConfigureAwait(false);
-        var signedInUser = await TryGetSignedInUserAsync(cancellationToken).ConfigureAwait(false);
+
+        string? signedInUser = state.SignedInUser;
+        if (shouldResolveSignedInUser)
+        {
+            signedInUser = await TryGetSignedInUserAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         state = new ContextRelayHostState
         {
@@ -779,7 +817,7 @@ internal sealed class ContextRelayHost : IDisposable
 
         try
         {
-            var account = await authProvider.GetAccountAsync(settings.ToAuthSettings(), cancellationToken).ConfigureAwait(false);
+            var account = await authProvider.Value.GetAccountAsync(settings.ToAuthSettings(), cancellationToken).ConfigureAwait(false);
             return account?.Username;
         }
         catch (Exception ex)
@@ -1013,7 +1051,7 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
-            var token = await authProvider
+            var token = await authProvider.Value
                 .GetAccessTokenAsync(settings.ToAuthSettings(), settings.ToFeatureOptions(), cancellationToken)
                 .ConfigureAwait(false);
             var hydrated = await HydrateContextItemForHandoffAsync(token.AccessToken, item, cancellationToken).ConfigureAwait(false);

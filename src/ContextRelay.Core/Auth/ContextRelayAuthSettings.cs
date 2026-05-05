@@ -12,6 +12,8 @@ public sealed class ContextRelayAuthSettings
 
     public string CustomAuthEndpoint { get; set; } = string.Empty;
 
+    public bool UseBroker { get; set; } = true;
+
     public string GraphEndpoint =>
         CloudEndpoints.GetGraphEndpoint(CloudEnvironment, CustomGraphEndpoint);
 
