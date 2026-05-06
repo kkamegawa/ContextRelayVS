@@ -20,14 +20,16 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 
 1. Open **Tools** and confirm every ContextRelay command is present.
 2. Run **ContextRelay** and **Search Microsoft 365** and confirm the tool window opens.
-3. Run **Clear Chat**, **Clear Cache**, **Clear Snippets**, **Generate Handoff Docs**, **Open Handoff Doc**, **Copy Handoff Prompt**, **Show Debug Log**, and **Open Settings**.
+3. Run **Clear Chat**, **Clear Cache**, **Clear Snippets**, **Generate Handoff Docs**, **Open Handoff Doc**, **Copy Handoff Prompt**, and **Show Debug Log**.
 4. Confirm the commands do not throw and update UI state as expected.
 
-## Options pages
+## Options page
 
 1. Open **Tools > Options > ContextRelay**.
-2. Verify the **General**, **Authentication**, **Graph API**, **Cache**, and **Adapters** pages render.
+2. Verify the single integrated **General** page renders and exposes General, Authentication, Diagnostics, Caching, and Feature settings in one property grid.
 3. Change values, save, reopen the dialog, and confirm persistence.
+4. Confirm values are written to `%AppData%\ContextRelay\settings.json`.
+5. Confirm UI language changes from the options page are reflected in the tool window without requiring a restart.
 
 ## Theme and visual consistency
 

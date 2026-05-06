@@ -14,7 +14,6 @@ internal sealed class SearchCommand : Command
 
     public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.Search.DisplayName%")
     {
-        Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)

@@ -19,9 +19,9 @@ using ContextRelay.Core.Chat;
 using ContextRelay.Core.Handoff;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.Settings;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Snippets;
-using ContextRelay.VSExtension.Options;
 using ContextRelay.VSExtension.ToolWindows;
 
 namespace ContextRelay.VSExtension.Services;
@@ -493,11 +493,6 @@ internal sealed class ContextRelayHost : IDisposable
     public void ShowDebugLog()
     {
         logger.ShowDebugPane();
-    }
-
-    public async Task OpenSettingsAsync(CancellationToken cancellationToken = default)
-    {
-        await packageServices.OpenSettingsFileAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public void OpenExternalUrl(string? url)

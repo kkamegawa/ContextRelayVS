@@ -102,12 +102,11 @@ Sidebar move commands (`moveToSecondarySideBar` etc.) are intentionally not port
 
 ## 8. Options (`DialogPage`)
 
-Persisted via `SVsSettingsManager` / `WritableSettingsStore` (collection `ContextRelay`). Keys map 1:1 to VS Code settings (documented cross-reference table in README).
+Registered by an in-proc VSSDK `AsyncPackage` and persisted to the shared JSON store at `%AppData%\ContextRelay\settings.json` so both the Options dialog and the out-of-proc extension host read the same settings.
 
-- **General**: `MaxResults`, `OutputDir`, `EnableChatPreview`, `EnableGraphDebugLogging`
-- **Authentication**: `Auth.ClientId`, `Auth.TenantId`
-- **Cache**: `Cache.TtlSeconds`, `Cache.MaxEntries`, `Cache.PersistWorkspaceState`
-- **Adapters**: `Adapters.Mail`, `.Teams`, `.Sharepoint`, `.OneDrive`, `.Connectors`
+- **Integrated page**: one `ContextRelay > General` property grid that contains General, Authentication, Diagnostics, Caching, and Feature toggles.
+- **Shared persistence**: the in-proc Options page writes to the same JSON file consumed by the out-of-proc extension.
+- **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value.
 
 ## 9. Handoff docs
 

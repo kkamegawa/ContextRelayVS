@@ -24,7 +24,7 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 ## ビルドとパッケージング
 
 - Visual Studio 2022 17.8 以降、または Visual Studio 2026 (Insider 含む)
-- .NET Framework 4.7.2 ランタイム (Visual Studio に同梱)
+- .NET Framework 4.8 ランタイム (Visual Studio に同梱)
 - Microsoft 365 職場/学校アカウント (Microsoft Entra ID)。個人用 Microsoft アカウントは非対応
 - パブリック クライアント フローを有効化した Microsoft Entra アプリ登録、Microsoft Graph の委任アクセス許可、および `/workiq` 用の `WorkIQAgent.Ask` (任意)。設定手順は [docs/tenant_admin_quickstart.md](docs/tenant_admin_quickstart.md) を参照してください。
 
@@ -37,7 +37,7 @@ dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj -v mini
 生成される VSIX:
 
 ```text
-src\ContextRelay.VSExtension\bin\<Configuration>\net472\ContextRelay.VSExtension.vsix
+src\ContextRelay.VSExtension\bin\<Configuration>\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix
 ```
 
 ## 手動検証
@@ -50,9 +50,9 @@ src\ContextRelay.VSExtension\bin\<Configuration>\net472\ContextRelay.VSExtension
 
 | レイヤ | プロジェクト | フレームワーク |
 |---|---|---|
-| VSIX / ツールウィンドウ / コマンド / オプション | `src/ContextRelay.VSExtension` | .NET Framework 4.7.2 |
+| VSIX / ツールウィンドウ / コマンド / オプション | `src/ContextRelay.VSExtension` | net8.0-windows10.0.22621.0 |
 | ビジネスロジック (アダプタ / ルータ / キャッシュ / スニペット / ハンドオフ / 共有ストア / 認証) | `src/ContextRelay.Core` | netstandard2.0 |
-| WPF ビュー & ビューモデル (MVVM) | `src/ContextRelay.UI` | .NET Framework 4.7.2 |
+| WPF ビュー & ビューモデル (MVVM) | `src/ContextRelay.UI` | net8.0-windows |
 | 単体テスト | `tests/ContextRelay.Core.Tests` | net8.0 (xUnit) |
 
 認証には **MSAL.NET** (`Microsoft.Identity.Client`) と Windows Account Manager (WAM) ブローカーを使用。トークンは DPAPI 暗号化された `MsalCacheHelper` でキャッシュします。

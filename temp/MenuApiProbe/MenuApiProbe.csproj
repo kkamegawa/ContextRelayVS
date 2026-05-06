@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+	<TargetFramework>net8.0</TargetFramework>
+	<OutputType>Exe</OutputType>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+	<PackageReference Include="Microsoft.VisualStudio.Extensibility" Version="17.14.2098" />
+	  <PackageReference Include="Nerdbank.Streams" Version="2.11.90" />
+  </ItemGroup>
+</Project>

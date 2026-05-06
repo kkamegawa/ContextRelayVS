@@ -19,7 +19,6 @@ internal sealed class OpenCopilotChatCommand : Command
 
     public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.OpenCopilotChat.DisplayName%")
     {
-        Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
