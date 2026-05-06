@@ -67,6 +67,14 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <!-- Include binding redirect config for in-process package -->
+    <Content Include="$(InProcPackageOutputDir)\ContextRelay.VSExtension.Package.dll.config">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>ContextRelay.VSExtension.Package.dll.config</Link>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>

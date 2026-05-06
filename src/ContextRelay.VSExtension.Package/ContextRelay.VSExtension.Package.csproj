@@ -32,6 +32,13 @@
 	<Reference Include="System.Text.Json" />
   </ItemGroup>
   <ItemGroup>
+	<None Include="app.config">
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  <IncludeInVSIX>true</IncludeInVSIX>
+	  <Link>$(AssemblyName).dll.config</Link>
+	</None>
+  </ItemGroup>
+  <ItemGroup>
 	<PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" />
 	<PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" ExcludeAssets="runtime" />
 	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" />
