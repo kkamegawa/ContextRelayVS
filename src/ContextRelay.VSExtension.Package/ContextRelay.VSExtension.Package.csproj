@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	<TargetFramework>net48</TargetFramework>
 	<VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">17.0</VisualStudioVersion>
@@ -37,65 +37,12 @@
 	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" />
   </ItemGroup>
   <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets" Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
+  <Import Project="..\..\build\ContextRelay.Build.props" />
 	<Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
 	<PropertyGroup>
 	  <CreatePkgDefAssemblyToProcess>$(TargetPath)</CreatePkgDefAssemblyToProcess>
 	</PropertyGroup>
   </Target>
-
-  <!--
-	After pkgdef is generated, keep the legacy options page visible and replace
-	numeric resource references (@="#0") with literal display names.
-  -->
-  <UsingTask TaskName="PatchPkgdefFile" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-	<ParameterGroup>
-	  <PkgdefPath Required="true" />
-	</ParameterGroup>
-	<Task>
-	  <Code Type="Fragment" Language="cs">
-		<![CDATA[
-		try {
-		  if (!System.IO.File.Exists(PkgdefPath)) {
-			Log.LogError("pkgdef not found at: {0}", PkgdefPath);
-			return false;
-		  }
-
-		  var content = System.IO.File.ReadAllText(PkgdefPath, System.Text.Encoding.UTF8);
-		  
-		  // Keep the legacy options page visible
-		  content = System.Text.RegularExpressions.Regex.Replace(
-			content,
-			"\"IsInUnifiedSettings\"=dword:00000001",
-			"\"IsInUnifiedSettings\"=dword:00000000"
-		  );
-		  
-		  // Replace numeric resource references with literal display names
-		  content = System.Text.RegularExpressions.Regex.Replace(
-			content,
-			"(?m)^(\\[.*ToolsOptionsPages\\\\ContextRelay\\]\\s*\\r?\\n)@=\"#\\d+\"",
-			"$1@=\"ContextRelay\"",
-			System.Text.RegularExpressions.RegexOptions.Multiline
-		  );
-		  
-		  content = System.Text.RegularExpressions.Regex.Replace(
-			content,
-			"(?m)^(\\[.*ToolsOptionsPages\\\\ContextRelay\\\\General\\]\\s*\\r?\\n)@=\"#\\d+\"",
-			"$1@=\"General\"",
-			System.Text.RegularExpressions.RegexOptions.Multiline
-		  );
-		  
-		  System.IO.File.WriteAllText(PkgdefPath, content, System.Text.Encoding.UTF8);
-		  Log.LogMessage("Patched pkgdef: {0}", PkgdefPath);
-		  return true;
-		}
-		catch (System.Exception ex) {
-		  Log.LogError("Error patching pkgdef: {0}", ex.Message);
-		  return false;
-		}
-		]]>
-	  </Code>
-	</Task>
-  </UsingTask>
 
   <Target Name="PatchPkgdefOptionsRegistration" AfterTargets="GeneratePkgDef;Build">
 	<PropertyGroup>
