@@ -36,5 +36,5 @@ $content = $content -replace '"IsInUnifiedSettings"=dword:00000001', '"IsInUnifi
 $content = $content -replace '(?m)^(\[.*ToolsOptionsPages\\ContextRelay\]\s*\r?\n)@="#\d+"', '$1@="ContextRelay"'
 $content = $content -replace '(?m)^(\[.*ToolsOptionsPages\\ContextRelay\\General\]\s*\r?\n)@="#\d+"', '$1@="General"'
 
-Set-Content $PkgdefPath -Value $content -NoNewline
+Set-Content $PkgdefPath -Value $content -NoNewline -Encoding UTF8
 Write-Host "Patched pkgdef: $PkgdefPath"

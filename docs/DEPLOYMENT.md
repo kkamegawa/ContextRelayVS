@@ -13,7 +13,7 @@
 
 ## Pre-Installation Checklist
 - [ ] Visual Studio 2026 Insider or 2022 Enterprise is installed
-- [ ] VSIX file location: `D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix`
+- [ ] VSIX file location: `src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix` (relative to repo root)
 - [ ] Settings file exists: `%AppData%\ContextRelay\settings.json` (auto-created on first load)
 - [ ] No previous ContextRelay extension is installed
 
@@ -26,12 +26,12 @@ Recommended for internal testing and validation.
 # Visual Studio 2026 Insider
 & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\devenv.exe' `
   /rootsuffix Exp `
-  /Install 'D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
+  /Install '<repo-root>\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
 
 # Visual Studio 2022 Enterprise (if available)
 & 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\devenv.exe' `
   /rootsuffix Exp `
-  /Install 'D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
+  /Install '<repo-root>\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
 ```
 
 ### Method 2: Main Instance
@@ -40,7 +40,7 @@ For production or direct validation in the main VS instance.
 ```powershell
 # Visual Studio 2026 Insider
 & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\devenv.exe' `
-  /Install 'D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
+  /Install '<repo-root>\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
 ```
 
 ### Method 3: Extension Manager (GUI)
@@ -136,7 +136,7 @@ Get-Content $log | Select-String -Pattern "ContextRelay|Package|Error" | Select-
 
 # Reinstall
 & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\devenv.exe' `
-  /Install 'D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
+  /Install '<repo-root>\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
 ```
 
 ### Issue: Settings Changes Are Not Saved

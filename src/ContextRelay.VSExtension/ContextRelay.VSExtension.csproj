@@ -87,7 +87,7 @@
     This PowerShell script modifies the final extension.vsixmanifest to ensure the in-proc package is registered.
   -->
   <Target Name="EnsureVsPackageAssetInManifest" AfterTargets="DetokenizeVsixManifestFile" BeforeTargets="CreateVsixContainer">
-    <Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\InjectVsPackageAsset.ps1&quot; -ManifestPath &quot;$(IntermediateOutputPath)extension.vsixmanifest&quot; -SourceManifestPath &quot;$(MSBuildProjectDirectory)\source.extension.vsixmanifest&quot;" />
+    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\InjectVsPackageAsset.ps1&quot; -ManifestPath &quot;$(IntermediateOutputPath)extension.vsixmanifest&quot; -SourceManifestPath &quot;$(MSBuildProjectDirectory)\source.extension.vsixmanifest&quot;" />
   </Target>
 
   <!--
@@ -101,8 +101,8 @@
       <PackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</PackagePkgdefPath>
       <LatestPackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.latest.pkgdef'))</LatestPackagePkgdefPath>
     </PropertyGroup>
-    <Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PackagePkgdefPath)&quot;" Condition="Exists('$(PackagePkgdefPath)')" />
-    <Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPackagePkgdefPath)&quot;" Condition="Exists('$(LatestPackagePkgdefPath)')" />
+    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PackagePkgdefPath)&quot;" Condition="Exists('$(PackagePkgdefPath)')" />
+    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPackagePkgdefPath)&quot;" Condition="Exists('$(LatestPackagePkgdefPath)')" />
   </Target>
 
   <!--
