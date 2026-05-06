@@ -19,7 +19,6 @@ internal sealed class ClearChatCommand : Command
 
     public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.ClearChat.DisplayName%")
     {
-        Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)

@@ -19,7 +19,6 @@ internal sealed class ClearCacheCommand : Command
 
     public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.ClearCache.DisplayName%")
     {
-        Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)

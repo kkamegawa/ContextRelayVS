@@ -19,7 +19,6 @@ internal sealed class CopyHandoffPromptCommand : Command
 
     public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.CopyHandoffPrompt.DisplayName%")
     {
-        Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)

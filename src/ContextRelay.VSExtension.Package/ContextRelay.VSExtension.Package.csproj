@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+	<TargetFramework>net48</TargetFramework>
+	<VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">17.0</VisualStudioVersion>
+	<MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+	<LangVersion>latest</LangVersion>
+	<Nullable>enable</Nullable>
+	<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	<AssemblyName>ContextRelay.VSExtension.Package</AssemblyName>
+	<RootNamespace>ContextRelay.VSExtension.Package</RootNamespace>
+	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	<GeneratePkgDefFile>true</GeneratePkgDefFile>
+	<UseCodebase>true</UseCodebase>
+	<!-- This project only produces a DLL + pkgdef for inclusion in the main VSIX.
+		 Disable VSIX container creation to prevent VSSDK1048 during F5 debug. -->
+	<CreateVsixContainer>false</CreateVsixContainer>
+	<CopyVsixManifestToOutput>false</CopyVsixManifestToOutput>
+	<PkgdefProjectOutputGroupDependsOn>$(PkgdefProjectOutputGroupDependsOn);GeneratePkgDef;PatchPkgdefOptionsRegistration</PkgdefProjectOutputGroupDependsOn>
+	<IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
+	<IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
+	<IncludeDebugSymbolsInLocalVSIXDeployment>false</IncludeDebugSymbolsInLocalVSIXDeployment>
+	<CopyBuildOutputToOutputDirectory>true</CopyBuildOutputToOutputDirectory>
+	<DeployExtension>false</DeployExtension>
+	<StartAction>Program</StartAction>
+	<StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
+	<StartArguments>/rootsuffix Exp</StartArguments>
+  </PropertyGroup>
+  <ItemGroup>
+	<ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+	<Reference Include="System.Text.Json" />
+  </ItemGroup>
+  <ItemGroup>
+	<PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" />
+	<PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" ExcludeAssets="runtime" />
+	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120" PrivateAssets="all" />
+  </ItemGroup>
+  <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets"
+		  Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
+	<Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
+	<PropertyGroup>
+	  <CreatePkgDefAssemblyToProcess>$(TargetPath)</CreatePkgDefAssemblyToProcess>
+	</PropertyGroup>
+  </Target>
+
+  <!--
+	After pkgdef is generated, keep the legacy options page visible and replace
+	numeric resource references (@="#0") with literal display names.
+  -->
+  <Target Name="PatchPkgdefOptionsRegistration" AfterTargets="GeneratePkgDef;Build">
+	<PropertyGroup>
+	  <PkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).pkgdef'))</PkgdefFullPath>
+	  <LatestPkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).latest.pkgdef'))</LatestPkgdefFullPath>
+	</PropertyGroup>
+	<Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PkgdefFullPath)&quot;" Condition="Exists('$(PkgdefFullPath)')" />
+	<Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPkgdefFullPath)&quot;" Condition="Exists('$(LatestPkgdefFullPath)')" />
+  </Target>
+</Project>

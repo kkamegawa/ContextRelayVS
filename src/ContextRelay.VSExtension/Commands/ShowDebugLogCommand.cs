@@ -19,7 +19,6 @@ internal sealed class ShowDebugLogCommand : Command
 
     public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.ShowDebugLog.DisplayName%")
     {
-        Placements = [CommandPlacement.KnownPlacements.ToolsMenu],
     };
 
     public override Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)

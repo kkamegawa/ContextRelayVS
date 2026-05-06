@@ -1,13 +1,14 @@
 ﻿{
-  "ContextRelay.Command.ClearCache.DisplayName": "ContextRelay Clear Cache",
-  "ContextRelay.Command.ClearChat.DisplayName": "ContextRelay Clear Chat",
-  "ContextRelay.Command.ClearSnippets.DisplayName": "ContextRelay Clear Snippets",
-  "ContextRelay.Command.CopyHandoffPrompt.DisplayName": "ContextRelay Copy Handoff Prompt",
-  "ContextRelay.Command.GenerateHandoff.DisplayName": "ContextRelay Generate Handoff",
-  "ContextRelay.Command.OpenCopilotChat.DisplayName": "ContextRelay Open Copilot Chat",
-  "ContextRelay.Command.OpenHandoffDoc.DisplayName": "ContextRelay Open Handoff Doc",
+  "ContextRelay.Menu.DisplayName": "ContextRelay",
+  "ContextRelay.Command.ClearCache.DisplayName": "Clear Cache",
+  "ContextRelay.Command.ClearChat.DisplayName": "Clear Chat",
+  "ContextRelay.Command.ClearSnippets.DisplayName": "Clear Snippets",
+  "ContextRelay.Command.CopyHandoffPrompt.DisplayName": "Copy Handoff Prompt",
+  "ContextRelay.Command.GenerateHandoff.DisplayName": "Generate Handoff",
+  "ContextRelay.Command.OpenCopilotChat.DisplayName": "Open Copilot Chat",
+  "ContextRelay.Command.OpenHandoffDoc.DisplayName": "Open Handoff Doc",
   "ContextRelay.Command.OpenSettings.DisplayName": "ContextRelay Settings",
   "ContextRelay.Command.OpenWindow.DisplayName": "ContextRelay",
-  "ContextRelay.Command.Search.DisplayName": "ContextRelay Search",
-  "ContextRelay.Command.ShowDebugLog.DisplayName": "ContextRelay Debug Log"
+  "ContextRelay.Command.Search.DisplayName": "Open ContextRelay",
+  "ContextRelay.Command.ShowDebugLog.DisplayName": "Debug Log"
 }

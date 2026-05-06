@@ -26,7 +26,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 ## Build and package
 
 - Visual Studio 2022 17.8 or later, or Visual Studio 2026 (including Insider).
-- .NET Framework 4.7.2 runtime (bundled with Visual Studio).
+- .NET Framework 4.8 runtime (bundled with Visual Studio).
 - A Microsoft 365 work/school account (Microsoft Entra ID). Personal Microsoft accounts are not supported.
 - Microsoft Entra app registration with public-client flow enabled, delegated Microsoft Graph permissions, and optional `WorkIQAgent.Ask` consent for `/workiq`. See [docs/tenant_admin_quickstart.md](docs/tenant_admin_quickstart.md).
 
@@ -39,7 +39,7 @@ dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj -v mini
 The VSIX is emitted at:
 
 ```text
-src\ContextRelay.VSExtension\bin\<Configuration>\net472\ContextRelay.VSExtension.vsix
+src\ContextRelay.VSExtension\bin\<Configuration>\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix
 ```
 
 ## Manual validation
@@ -52,9 +52,9 @@ src\ContextRelay.VSExtension\bin\<Configuration>\net472\ContextRelay.VSExtension
 
 | Layer | Project | Framework |
 |---|---|---|
-| VSIX / ToolWindow / Commands / Options | `src/ContextRelay.VSExtension` | .NET Framework 4.7.2 |
+| VSIX / ToolWindow / Commands / Options | `src/ContextRelay.VSExtension` | net8.0-windows10.0.22621.0 |
 | Business logic (adapters, router, cache, snippets, handoff, shared store, auth) | `src/ContextRelay.Core` | netstandard2.0 |
-| WPF views & view-models (MVVM) | `src/ContextRelay.UI` | .NET Framework 4.7.2 |
+| WPF views & view-models (MVVM) | `src/ContextRelay.UI` | net8.0-windows |
 | Unit tests | `tests/ContextRelay.Core.Tests` | net8.0 (xUnit) |
 
 Authentication uses **MSAL.NET** (`Microsoft.Identity.Client`) with the Windows Account Manager (WAM) broker. Tokens are cached with DPAPI-encrypted `MsalCacheHelper`.

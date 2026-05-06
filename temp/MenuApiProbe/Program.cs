@@ -1,0 +1,1 @@
+using Microsoft.VisualStudio.Extensibility.Commands; using System.Reflection; var tools = GroupPlacement.KnownPlacements.ToolsMenu; System.Console.WriteLine($"Type={tools.GetType().FullName}"); foreach (var property in tools.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public)) { System.Console.WriteLine($"{property.Name}={property.GetValue(tools)}"); }

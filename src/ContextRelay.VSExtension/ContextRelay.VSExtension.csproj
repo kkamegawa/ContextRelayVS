@@ -12,12 +12,24 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/kkamegawa/ContextRelayVS</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Required by VSEXT0008: enables VSSDK+VisualStudio.Extensibility hybrid in-process hosting -->
+    <VssdkcompatibleExtension>true</VssdkcompatibleExtension>
+    <InProcPackageTargetFramework>net48</InProcPackageTargetFramework>
+    <VsixExtensionId>ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11</VsixExtensionId>
+    <InProcPackageOutputDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageOutputDir>
+    <InProcToolkitAssemblyPath>$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'Community.VisualStudio.Toolkit.dll'))</InProcToolkitAssemblyPath>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="icon.png" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
+    <ProjectReference Include="..\ContextRelay.VSExtension.Package\ContextRelay.VSExtension.Package.csproj">
+      <Name>ContextRelay.VSExtension.Package</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup;PkgdefProjectOutputGroup</IncludeOutputGroupsInVSIX>
+      <IncludeOutputGroupsInVSIXLocalOnly>DebugSymbolsProjectOutputGroup</IncludeOutputGroupsInVSIXLocalOnly>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="icon.png">
@@ -25,6 +37,9 @@
     </Content>
     <Content Include="LICENSE.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="source.extension.vsixmanifest">
+      <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
   </ItemGroup>
   <ItemGroup>
@@ -39,6 +54,13 @@
     <PackageReference Include="Microsoft.VisualStudio.Extensibility" Version="17.14.2098" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup Condition="Exists('$(InProcToolkitAssemblyPath)')">
+    <Content Include="$(InProcToolkitAssemblyPath)">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Community.VisualStudio.Toolkit.dll</Link>
+    </Content>
+  </ItemGroup>
   <ItemGroup>
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -51,12 +73,56 @@
   </ItemGroup>
 
   <!--
-    Extensibility.Build.targets (OOP mode) sets SourceVsixManifest to $(IntermediateOutputPath)extension.vsixmanifest,
-    which points at a file that doesn't exist yet. We copy our source.extension.vsixmanifest into the intermediate
-    directory before DetokenizeVsixManifestFile runs so VsixUtil.exe can find it.
+    Extensibility.Build.targets (OOP mode) generates a minimal extension.vsixmanifest that omits custom Assets.
+    We copy our source.extension.vsixmanifest to the intermediate directory before DetokenizeVsixManifestFile
+    runs to ensure the Assets section is preserved in the final manifest.
   -->
-  <Target Name="CopyVsixManifestToIntermediate" BeforeTargets="DetokenizeVsixManifestFile" Inputs="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" Outputs="$(IntermediateOutputPath)extension.vsixmanifest">
+  <Target Name="CopyVsixManifestToIntermediate" BeforeTargets="DetokenizeVsixManifestFile">
     <MakeDir Directories="$(IntermediateOutputPath)" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" DestinationFiles="$(IntermediateOutputPath)extension.vsixmanifest" />
+  </Target>
+
+  <!--
+    After VSIX manifest is tokenized, inject the VsPackage asset if it's missing.
+    This PowerShell script modifies the final extension.vsixmanifest to ensure the in-proc package is registered.
+  -->
+  <Target Name="EnsureVsPackageAssetInManifest" AfterTargets="DetokenizeVsixManifestFile" BeforeTargets="CreateVsixContainer">
+    <Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\InjectVsPackageAsset.ps1&quot; -ManifestPath &quot;$(IntermediateOutputPath)extension.vsixmanifest&quot; -SourceManifestPath &quot;$(MSBuildProjectDirectory)\source.extension.vsixmanifest&quot;" />
+  </Target>
+
+  <!--
+    Patch the pkgdef collected from the package project just before VSIX packaging.
+    The PkgdefProjectOutputGroup invocation regenerates the pkgdef file, so we must
+    patch it here (after all pkgdef generation) to keep the legacy options page
+    visible and ensure display names are correct in the final VSIX.
+  -->
+  <Target Name="PatchPackagePkgdefOptionsRegistrationBeforeVsix" BeforeTargets="CreateVsixContainer" AfterTargets="GetVsixSourceItems">
+    <PropertyGroup>
+      <PackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</PackagePkgdefPath>
+      <LatestPackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.latest.pkgdef'))</LatestPackagePkgdefPath>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PackagePkgdefPath)&quot;" Condition="Exists('$(PackagePkgdefPath)')" />
+    <Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPackagePkgdefPath)&quot;" Condition="Exists('$(LatestPackagePkgdefPath)')" />
+  </Target>
+
+  <!--
+    After F5 debug deployment, the OOP host deploys to VSExtensions which is NOT in the pkgdef
+    search path. We copy the pkgdef and DLL to the Extensions folder so VS can register the
+    in-proc package (ContextRelayOptionsPackage) and show Tools > Options > ContextRelay.
+    Also touch extensions.configurationchanged to force pkgdef cache invalidation.
+    
+    Run during Debug builds and whenever DeployExtension is true, to support both F5 debugging
+    and VSIX deployment scenarios.
+  -->
+  <Target Name="DeployInProcPackageToExtensions" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' Or '$(DeployExtension)' == 'true'">
+    <PropertyGroup>
+      <_VsExpSuffix Condition="'$(_VsExpSuffix)' == ''">Exp</_VsExpSuffix>
+      <_VsLocalAppData>$(LocalAppData)\Microsoft\VisualStudio</_VsLocalAppData>
+      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
+      <_DllSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.dll'))</_DllSrc>
+      <_ToolkitDllSrc>$(InProcToolkitAssemblyPath)</_ToolkitDllSrc>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildThisFileDirectory)..\..\build\RemoveDuplicateExperimentalExtensions.ps1&quot; -VsLocalAppData &quot;$(_VsLocalAppData)&quot; -RootSuffix &quot;$(_VsExpSuffix)&quot; -ExtensionId &quot;$(VsixExtensionId)&quot;" />
+    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildThisFileDirectory)..\..\build\DeployInProcPackage.ps1&quot; -PkgdefPath &quot;$(_PkgdefSrc)&quot; -DllPath &quot;$(_DllSrc)&quot; -VsLocalAppData &quot;$(_VsLocalAppData)&quot; -RootSuffix &quot;$(_VsExpSuffix)&quot; -SupportingAssemblies &quot;$(_ToolkitDllSrc)&quot; -ExtensionId &quot;$(VsixExtensionId)&quot;" />
   </Target>
 </Project>

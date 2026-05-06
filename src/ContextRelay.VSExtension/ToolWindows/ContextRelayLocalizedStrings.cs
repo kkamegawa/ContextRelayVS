@@ -54,8 +54,6 @@ internal static class ContextRelayLocalizedStrings
 
     public static string ClearCacheButtonText => UseJapanese ? "キャッシュをクリア" : "Clear cache";
 
-    public static string SettingsButtonText => UseJapanese ? "設定" : "Settings";
-
     public static string DebugLogButtonText => UseJapanese ? "デバッグ ログ" : "Debug log";
 
     public static string SearchButtonText => UseJapanese ? "送信" : "Send";

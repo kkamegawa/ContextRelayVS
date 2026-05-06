@@ -1,6 +1,6 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
-using ContextRelay.VSExtension.Options;
+using ContextRelay.Core.Settings;
 
 namespace ContextRelay.VSExtension.Services;
 
@@ -13,6 +13,5 @@ internal interface IContextRelayPackageServices
     Task<bool> ReplaceActiveDocumentAsync(string text, CancellationToken cancellationToken = default);
     Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default);
     Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default);
-    Task OpenSettingsFileAsync(CancellationToken cancellationToken = default);
     Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default);
 }

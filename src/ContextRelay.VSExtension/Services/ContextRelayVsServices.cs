@@ -1,8 +1,7 @@
 ﻿using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using ContextRelay.VSExtension.Options;
+using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
 
@@ -92,27 +91,9 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
 #pragma warning restore CA1416
     }
 
-    public async Task OpenSettingsFileAsync(CancellationToken cancellationToken = default)
-    {
-        var filePath = settingsService.GetSettingsFilePath();
-        var dir = Path.GetDirectoryName(filePath)!;
-        Directory.CreateDirectory(dir);
-
-        // Only write default settings when the file does not yet exist.
-        // Avoid overwriting the file on every open so that a corrupted but
-        // potentially recoverable file is not silently lost.
-        if (!File.Exists(filePath))
-        {
-            var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
-            await settingsService.SaveSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
-        }
-
-        await OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
     {
         await settingsService.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
-        ContextRelayLocalizedStrings.SetUiLanguage(uiLanguage);
+        ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsService.NormalizeUiLanguage(uiLanguage));
     }
 }

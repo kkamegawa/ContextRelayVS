@@ -1,0 +1,1 @@
+global using ContextRelaySettingsSnapshot = ContextRelay.Core.Settings.ContextRelaySettingsSnapshot;

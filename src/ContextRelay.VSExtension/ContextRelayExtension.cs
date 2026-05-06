@@ -13,12 +13,9 @@ internal sealed class ContextRelayExtension : Extension
 {
     public override ExtensionConfiguration ExtensionConfiguration => new()
     {
-        Metadata = new(
-            id: "ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
-            version: ExtensionAssemblyVersion,
-            publisherName: "KazushiKamegawa",
-            displayName: "ContextRelay for Visual Studio",
-            description: "ContextRelay connects Visual Studio with Microsoft 365 Copilot context."),
+        // RequiresInProcessHosting = true is required for VSSDK+VisualStudio.Extensibility hybrid mode.
+        // When set to true, Metadata must be null - it is read from source.extension.vsixmanifest instead.
+        RequiresInProcessHosting = true,
     };
 
     protected override void InitializeServices(IServiceCollection serviceCollection)
