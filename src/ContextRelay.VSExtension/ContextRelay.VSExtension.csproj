@@ -19,6 +19,134 @@
     <InProcPackageOutputDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageOutputDir>
     <InProcToolkitAssemblyPath>$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'Community.VisualStudio.Toolkit.dll'))</InProcToolkitAssemblyPath>
   </PropertyGroup>
+
+  <UsingTask TaskName="PatchPkgdefFile" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+	<ParameterGroup>
+	  <PkgdefPath Required="true" />
+	</ParameterGroup>
+	<Task>
+	  <Code Type="Fragment" Language="cs">
+		<![CDATA[
+		try {
+		  if (!System.IO.File.Exists(PkgdefPath)) {
+			Log.LogError("pkgdef not found at: {0}", PkgdefPath);
+			return false;
+		  }
+
+		  var content = System.IO.File.ReadAllText(PkgdefPath, System.Text.Encoding.UTF8);
+		  
+		  // Keep the legacy options page visible
+		  content = System.Text.RegularExpressions.Regex.Replace(
+			content,
+			"\"IsInUnifiedSettings\"=dword:00000001",
+			"\"IsInUnifiedSettings\"=dword:00000000"
+		  );
+		  
+		  // Replace numeric resource references with literal display names
+		  content = System.Text.RegularExpressions.Regex.Replace(
+			content,
+			"(?m)^(\\[.*ToolsOptionsPages\\\\ContextRelay\\]\\s*\\r?\\n)@=\"#\\d+\"",
+			"$1@=\"ContextRelay\"",
+			System.Text.RegularExpressions.RegexOptions.Multiline
+		  );
+		  
+		  content = System.Text.RegularExpressions.Regex.Replace(
+			content,
+			"(?m)^(\\[.*ToolsOptionsPages\\\\ContextRelay\\\\General\\]\\s*\\r?\\n)@=\"#\\d+\"",
+			"$1@=\"General\"",
+			System.Text.RegularExpressions.RegexOptions.Multiline
+		  );
+		  
+		  System.IO.File.WriteAllText(PkgdefPath, content, System.Text.Encoding.UTF8);
+		  Log.LogMessage("Patched pkgdef: {0}", PkgdefPath);
+		  return true;
+		}
+		catch (System.Exception ex) {
+		  Log.LogError("Error patching pkgdef: {0}", ex.Message);
+		  return false;
+		}
+		]]>
+	  </Code>
+	</Task>
+  </UsingTask>
+
+  <UsingTask TaskName="InjectVsPackageAsset" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+	<ParameterGroup>
+	  <ManifestPath Required="true" />
+	  <SourceManifestPath Required="false" />
+	</ParameterGroup>
+	<Task>
+	  <Code Type="Fragment" Language="cs">
+		<![CDATA[
+		try {
+		  if (!System.IO.File.Exists(ManifestPath)) {
+			Log.LogError("Manifest not found at: {0}", ManifestPath);
+			return false;
+		  }
+
+		  var xml = new System.Xml.XmlDocument();
+		  xml.Load(ManifestPath);
+		  
+		  var ns = new System.Xml.XmlNamespaceManager(xml.NameTable);
+		  ns.AddNamespace("pm", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+		  
+		  // Sync sections from source manifest if provided
+		  if (!string.IsNullOrWhiteSpace(SourceManifestPath) && System.IO.File.Exists(SourceManifestPath)) {
+			var sourceXml = new System.Xml.XmlDocument();
+			sourceXml.Load(SourceManifestPath);
+			var sourceNs = new System.Xml.XmlNamespaceManager(sourceXml.NameTable);
+			sourceNs.AddNamespace("pm", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+			
+			var sections = new[] { "Metadata", "Installation", "Dependencies", "Prerequisites" };
+			foreach (var section in sections) {
+			  var existingNode = xml.DocumentElement.SelectSingleNode("pm:" + section, ns);
+			  if (existingNode != null) {
+				xml.DocumentElement.RemoveChild(existingNode);
+			  }
+			  
+			  var sourceNode = sourceXml.SelectSingleNode("//pm:" + section, sourceNs);
+			  if (sourceNode != null) {
+				var importedNode = xml.ImportNode(sourceNode, true);
+				xml.DocumentElement.AppendChild(importedNode);
+			  }
+			}
+			Log.LogMessage("Synchronized manifest metadata and installation targets from source manifest");
+		  }
+		  
+		  // Ensure Assets element exists
+		  var assetsNode = xml.SelectSingleNode("//pm:Assets", ns) as System.Xml.XmlElement;
+		  if (assetsNode == null) {
+			assetsNode = xml.CreateElement("Assets", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+			xml.DocumentElement.AppendChild(assetsNode);
+			Log.LogMessage("Created Assets element");
+		  }
+		  
+		  // Inject or update VsPackage asset
+		  var vsPackageAsset = xml.SelectSingleNode("//pm:Asset[@Type='Microsoft.VisualStudio.VsPackage']", ns) as System.Xml.XmlElement;
+		  if (vsPackageAsset == null) {
+			var assetNode = xml.CreateElement("Asset", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+			assetNode.SetAttribute("Type", "Microsoft.VisualStudio.VsPackage");
+			assetNode.SetAttribute("Path", "ContextRelay.VSExtension.Package.pkgdef");
+			assetsNode.AppendChild(assetNode);
+			Log.LogMessage("Injected VsPackage asset into manifest: {0}", ManifestPath);
+		  }
+		  else {
+			vsPackageAsset.SetAttribute("Path", "ContextRelay.VSExtension.Package.pkgdef");
+			Log.LogMessage("Normalized VsPackage asset in manifest");
+		  }
+		  
+		  xml.Save(ManifestPath);
+		  return true;
+		}
+		catch (System.Exception ex) {
+		  Log.LogError("Error injecting VsPackage asset: {0}", ex.Message);
+		  return false;
+		}
+		]]>
+	  </Code>
+	</Task>
+  </UsingTask>
+
   <ItemGroup>
     <None Remove="icon.png" />
   </ItemGroup>
@@ -87,7 +215,7 @@
     This PowerShell script modifies the final extension.vsixmanifest to ensure the in-proc package is registered.
   -->
   <Target Name="EnsureVsPackageAssetInManifest" AfterTargets="DetokenizeVsixManifestFile" BeforeTargets="CreateVsixContainer">
-    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\InjectVsPackageAsset.ps1&quot; -ManifestPath &quot;$(IntermediateOutputPath)extension.vsixmanifest&quot; -SourceManifestPath &quot;$(MSBuildProjectDirectory)\source.extension.vsixmanifest&quot;" />
+    <InjectVsPackageAsset ManifestPath="$(IntermediateOutputPath)extension.vsixmanifest" SourceManifestPath="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" />
   </Target>
 
   <!--
@@ -101,8 +229,8 @@
       <PackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</PackagePkgdefPath>
       <LatestPackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.latest.pkgdef'))</LatestPackagePkgdefPath>
     </PropertyGroup>
-    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PackagePkgdefPath)&quot;" Condition="Exists('$(PackagePkgdefPath)')" />
-    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPackagePkgdefPath)&quot;" Condition="Exists('$(LatestPackagePkgdefPath)')" />
+    <PatchPkgdefFile PkgdefPath="$(PackagePkgdefPath)" Condition="Exists('$(PackagePkgdefPath)')" />
+    <PatchPkgdefFile PkgdefPath="$(LatestPackagePkgdefPath)" Condition="Exists('$(LatestPackagePkgdefPath)')" />
   </Target>
 
   <!--
@@ -122,7 +250,7 @@
       <_DllSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.dll'))</_DllSrc>
       <_ToolkitDllSrc>$(InProcToolkitAssemblyPath)</_ToolkitDllSrc>
     </PropertyGroup>
-    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildThisFileDirectory)..\..\build\RemoveDuplicateExperimentalExtensions.ps1&quot; -VsLocalAppData &quot;$(_VsLocalAppData)&quot; -RootSuffix &quot;$(_VsExpSuffix)&quot; -ExtensionId &quot;$(VsixExtensionId)&quot;" />
-    <Exec Command="powershell -NoProfile -File &quot;$(MSBuildThisFileDirectory)..\..\build\DeployInProcPackage.ps1&quot; -PkgdefPath &quot;$(_PkgdefSrc)&quot; -DllPath &quot;$(_DllSrc)&quot; -VsLocalAppData &quot;$(_VsLocalAppData)&quot; -RootSuffix &quot;$(_VsExpSuffix)&quot; -SupportingAssemblies &quot;$(_ToolkitDllSrc)&quot; -ExtensionId &quot;$(VsixExtensionId)&quot;" />
+    <Exec Command="powershell -Command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; &amp; '$(MSBuildThisFileDirectory)..\..\build\RemoveDuplicateExperimentalExtensions.ps1' -VsLocalAppData '$(_VsLocalAppData)' -RootSuffix '$(_VsExpSuffix)' -ExtensionId '$(VsixExtensionId)'" />
+    <Exec Command="powershell -Command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; &amp; '$(MSBuildThisFileDirectory)..\..\build\DeployInProcPackage.ps1' -PkgdefPath '$(_PkgdefSrc)' -DllPath '$(_DllSrc)' -VsLocalAppData '$(_VsLocalAppData)' -RootSuffix '$(_VsExpSuffix)' -SupportingAssemblies '$(_ToolkitDllSrc)' -ExtensionId '$(VsixExtensionId)'" />
   </Target>
 </Project>
