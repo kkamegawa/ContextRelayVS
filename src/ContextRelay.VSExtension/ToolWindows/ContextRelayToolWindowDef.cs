@@ -27,14 +27,47 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
         Placement = ToolWindowPlacement.DocumentWell,
     };
 
-    public override async Task<IRemoteUserControl> GetContentAsync(CancellationToken cancellationToken)
+    public override Task<IRemoteUserControl> GetContentAsync(CancellationToken cancellationToken)
     {
         var hostInstance = host ??= serviceProvider.GetRequiredService<ContextRelayHost>();
-
-        await hostInstance.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var viewModel = new ContextRelayWindowViewModel(hostInstance);
-        await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
-        hostInstance.StartDeferredSignedInUserResolution();
-        return new ContextRelayWindowContent(viewModel);
+        var content = new ContextRelayWindowContent(viewModel);
+
+        ObserveInitialization(InitializeToolWindowAsync(hostInstance, viewModel, cancellationToken));
+        return Task.FromResult<IRemoteUserControl>(content);
+    }
+
+    private static void ObserveInitialization(Task task)
+    {
+        if (task.IsCompletedSuccessfully)
+        {
+            return;
+        }
+
+        _ = task.ContinueWith(
+            static failedTask => System.Diagnostics.Debug.WriteLine(failedTask.Exception),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private static async Task InitializeToolWindowAsync(
+        ContextRelayHost hostInstance,
+        ContextRelayWindowViewModel viewModel,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await hostInstance.InitializeAsync(cancellationToken).ConfigureAwait(false);
+            await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
+            hostInstance.StartDeferredSignedInUserResolution();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            await hostInstance.ReportToolWindowInitializationFailureAsync(ex, CancellationToken.None).ConfigureAwait(false);
+        }
     }
 }

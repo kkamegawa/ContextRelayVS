@@ -23,14 +23,6 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 3. Run **Clear Chat**, **Clear Cache**, **Clear Snippets**, **Generate Handoff Docs**, **Open Handoff Doc**, **Copy Handoff Prompt**, and **Show Debug Log**.
 4. Confirm the commands do not throw and update UI state as expected.
 
-## Options page
-
-1. Open **Tools > Options > ContextRelay**.
-2. Verify the single integrated **General** page renders and exposes General, Authentication, Diagnostics, Caching, and Feature settings in one property grid.
-3. Change values, save, reopen the dialog, and confirm persistence.
-4. Confirm values are written to `%AppData%\ContextRelay\settings.json`.
-5. Confirm UI language changes from the options page are reflected in the tool window without requiring a restart.
-
 ## Theme and visual consistency
 
 1. Switch Visual Studio themes (Light, Dark, Blue).

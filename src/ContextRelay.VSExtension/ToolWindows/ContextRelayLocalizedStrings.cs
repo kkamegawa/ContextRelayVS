@@ -181,6 +181,20 @@ internal static class ContextRelayLocalizedStrings
 
     public static string TypeQueryStatus => GenericHelpText;
 
+    public static string GetToolWindowInitializationFailedStatus(string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return UseJapanese
+                ? "ContextRelay ウィンドウの初期化に失敗しました。"
+                : "ContextRelay window initialization failed.";
+        }
+
+        return UseJapanese
+            ? $"ContextRelay ウィンドウの初期化に失敗しました: {detail}"
+            : $"ContextRelay window initialization failed: {detail}";
+    }
+
     public static string GetSignedInUserText(string username) =>
         UseJapanese ? $"サインイン中: {username}" : $"Signed in as {username}";
 
