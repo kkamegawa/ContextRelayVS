@@ -107,6 +107,35 @@ internal sealed class ContextRelayHost : IDisposable
         }
     }
 
+    public async Task ReportToolWindowInitializationFailureAsync(Exception exception, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        logger.LogError("ContextRelay tool window initialization failed.", exception);
+
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            state = new ContextRelayHostState
+            {
+                QueryText = state.QueryText,
+                HelpText = ContextRelayLocalizedStrings.GenericHelpText,
+                StatusMessage = ContextRelayLocalizedStrings.GetToolWindowInitializationFailedStatus(exception.Message),
+                SignedInUser = state.SignedInUser,
+                LastHandoffPath = state.LastHandoffPath,
+                SearchResults = state.SearchResults,
+                Snippets = state.Snippets,
+                ChatHistory = state.ChatHistory
+            };
+        }
+        finally
+        {
+            gate.Release();
+        }
+
+        StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state));
+    }
+
     public async Task<ContextRelayHostState> GetStateAsync()
     {
         var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
