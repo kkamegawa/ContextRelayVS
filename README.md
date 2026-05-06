@@ -1,6 +1,9 @@
 # ContextRelay for Visual Studio
 
-ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that surfaces relevant Microsoft 365 context (Exchange Mail, Microsoft Teams, SharePoint, OneDrive) in a tool window while you design and code. It ports the feature set of the VS Code extension [ContextRelay](https://github.com/kkamegawa/ContextRelay) to the Visual Studio platform, and can share pinned snippets, chat history, and handoff-document pointers with the VS Code version on the same machine.
+[![CI](https://github.com/kkamegawa/ContextRelayVS/actions/workflows/ci.yml/badge.svg)](https://github.com/kkamegawa/ContextRelayVS/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/kkamegawa/ContextRelayVS/branch/main/graph/badge.svg)](https://codecov.io/gh/kkamegawa/ContextRelayVS)
+
+ContextRelay for Visual Studio isa Visual Studio (2022 / 2026) extension that surfaces relevant Microsoft 365 context (Exchange Mail, Microsoft Teams, SharePoint, OneDrive) in a tool window while you design and code. It ports the feature set of the VS Code extension [ContextRelay](https://github.com/kkamegawa/ContextRelay) to the Visual Studio platform, and can share pinned snippets, chat history, and handoff-document pointers with the VS Code version on the same machine.
 
 > **Status**: Implemented preview. The repository builds an installable VSIX locally and now includes the planned in-repo UX features: localized tool-window text, slash-command discovery, result actions, `/connectors`, plain Microsoft 365 Copilot chat, `/ask` context chat, and `/workiq`. Manual Experimental Instance validation is still required before marketplace release.
 
