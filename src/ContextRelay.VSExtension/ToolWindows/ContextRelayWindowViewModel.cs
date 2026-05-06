@@ -90,6 +90,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     [DataMember] public string UseEnglishButtonText => ContextRelayLocalizedStrings.UseEnglishButtonText;
     [DataMember] public string UseJapaneseButtonText => ContextRelayLocalizedStrings.UseJapaneseButtonText;
+    [DataMember] public bool IsEnglishUiLanguageActive => !ContextRelayLocalizedStrings.UseJapanese;
+    [DataMember] public bool IsJapaneseUiLanguageActive => ContextRelayLocalizedStrings.UseJapanese;
 
     [DataMember] public AsyncCommand SearchCommand { get; }
     [DataMember] public AsyncCommand GenerateHandoffCommand { get; }
@@ -450,6 +452,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
         RaiseNotifyPropertyChangedEvent(nameof(UseEnglishButtonText));
         RaiseNotifyPropertyChangedEvent(nameof(UseJapaneseButtonText));
+        RaiseNotifyPropertyChangedEvent(nameof(IsEnglishUiLanguageActive));
+        RaiseNotifyPropertyChangedEvent(nameof(IsJapaneseUiLanguageActive));
     }
 
     private async Task ChangeUiLanguageAsync(string languageCode, CancellationToken ct)

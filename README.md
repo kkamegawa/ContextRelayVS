@@ -21,7 +21,7 @@ ContextRelay for Visual Studio isa Visual Studio (2022 / 2026) extension that su
 - **`/ask` context chat** — requires pinned snippets, caps the forwarded context, sends it to Microsoft 365 Copilot, and saves the reply to shared chat history without automatically editing or opening a document.
 - **`/workiq` natural language work intelligence** — sends A2A v1.0 queries to the Work IQ Gateway with a dedicated token audience, keeps a separate Work IQ conversation context, and resets that context on `/clear`.
 - **Localized WPF tool window UI** — English/Japanese labels, status/help text, result-card context actions, and debug-log access.
-- **DialogPage options** — General, Authentication, Graph API, Cache, and Adapters settings pages with modern WPF controls and sovereign cloud support.
+- **JSON-backed settings persistence** — ContextRelay reads and writes its shared settings from `%AppData%\ContextRelay\settings.json`.
 - **MSAL.NET + WAM authentication** with DPAPI-backed token cache.
 - **TTL + LRU cache** with workspace persistence.
 - **Cross-editor session sharing** — snippets, chat history, and handoff pointers are shared with the VS Code extension via `%LocalAppData%\ContextRelay\shared\`. See [docs/shared-session-schema.md](docs/shared-session-schema.md).
@@ -67,6 +67,7 @@ UI is native WPF bound to `VsBrushes` / `EnvironmentColors` so it follows the VS
 ## Current known gaps
 
 - Experimental Instance behavior still needs host-side manual validation.
+- Visual Studio **Tools > Options** integration is temporarily excluded from the main VSIX while the tool-window regression is being corrected.
 - Marketplace publishing still requires PAT provisioning and a manual release trigger.
 - The VS Code repository still needs its separate shared-store migration PR.
 - Prompt injection into GitHub Copilot Chat is still clipboard-based in Visual Studio; unlike VS Code, there is no supported prompt-prefill API wired into this extension.

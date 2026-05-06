@@ -16,14 +16,14 @@
 
   <Import Project="..\..\build\ContextRelay.Build.props" />
 
-
-
   <ItemGroup>
     <None Remove="icon.png" />
   </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
   </ItemGroup>
+
   <ItemGroup>
     <Content Include="icon.png">
       <IncludeInVSIX>true</IncludeInVSIX>
@@ -32,18 +32,21 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
   <ItemGroup>
     <None Include="..\..\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" PrivateAssets="all" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility" Version="17.14.2098" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
   </ItemGroup>
+
   <ItemGroup>
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -54,4 +57,14 @@
       <LogicalName>ContextRelay.VSExtension.ToolWindows.ContextRelayWindowContent.xaml</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+
+  <!--
+    Extensibility.Build.targets (OOP mode) sets SourceVsixManifest to $(IntermediateOutputPath)extension.vsixmanifest,
+    which points at a file that doesn't exist yet. We copy our source.extension.vsixmanifest into the intermediate
+    directory before DetokenizeVsixManifestFile runs so VsixUtil.exe can find it.
+  -->
+  <Target Name="CopyVsixManifestToIntermediate" BeforeTargets="DetokenizeVsixManifestFile" Inputs="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" Outputs="$(IntermediateOutputPath)extension.vsixmanifest">
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" DestinationFiles="$(IntermediateOutputPath)extension.vsixmanifest" />
+  </Target>
 </Project>
