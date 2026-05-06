@@ -1,43 +1,52 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-   <PropertyGroup>
-     <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
-     <UseWPF>true</UseWPF>
-     <LangVersion>latest</LangVersion>
-     <Nullable>enable</Nullable>
-     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-     <NoWarn>NU1603;NU1605;VSEXTPREVIEW_OUTPUTWINDOW</NoWarn>
-     <RootNamespace>ContextRelay.VSExtension</RootNamespace>
-     <AssemblyName>ContextRelay.VSExtension</AssemblyName>
-     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-     <RepositoryType>git</RepositoryType>
-     <RepositoryUrl>https://github.com/kkamegawa/ContextRelayVS</RepositoryUrl>
-     <PackageReadmeFile>README.md</PackageReadmeFile>
-   </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>NU1603;NU1605;VSEXTPREVIEW_OUTPUTWINDOW</NoWarn>
+    <RootNamespace>ContextRelay.VSExtension</RootNamespace>
+    <AssemblyName>ContextRelay.VSExtension</AssemblyName>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/kkamegawa/ContextRelayVS</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <Import Project="..\..\build\ContextRelay.Build.props" />
+
   <ItemGroup>
     <None Remove="icon.png" />
   </ItemGroup>
-   <ItemGroup>
-     <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
-   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <Content Include="icon.png">
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-     <Content Include="LICENSE.txt">
-       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-     </Content>
-   </ItemGroup>
+    <Content Include="LICENSE.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="..\..\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.2098" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility" Version="17.14.2098" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
   </ItemGroup>
+
   <ItemGroup>
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -58,4 +67,4 @@
     <MakeDir Directories="$(IntermediateOutputPath)" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" DestinationFiles="$(IntermediateOutputPath)extension.vsixmanifest" />
   </Target>
- </Project>
+</Project>

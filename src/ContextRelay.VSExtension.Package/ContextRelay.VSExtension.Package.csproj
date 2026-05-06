@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	<TargetFramework>net48</TargetFramework>
 	<VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">17.0</VisualStudioVersion>
@@ -37,22 +37,19 @@
 	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" />
   </ItemGroup>
   <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets" Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
+  <Import Project="..\..\build\ContextRelay.Build.props" />
 	<Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
 	<PropertyGroup>
 	  <CreatePkgDefAssemblyToProcess>$(TargetPath)</CreatePkgDefAssemblyToProcess>
 	</PropertyGroup>
   </Target>
 
-  <!--
-	After pkgdef is generated, keep the legacy options page visible and replace
-	numeric resource references (@="#0") with literal display names.
-  -->
   <Target Name="PatchPkgdefOptionsRegistration" AfterTargets="GeneratePkgDef;Build">
 	<PropertyGroup>
 	  <PkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).pkgdef'))</PkgdefFullPath>
 	  <LatestPkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).latest.pkgdef'))</LatestPkgdefFullPath>
 	</PropertyGroup>
-	<Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PkgdefFullPath)&quot;" Condition="Exists('$(PkgdefFullPath)')" />
-	<Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPkgdefFullPath)&quot;" Condition="Exists('$(LatestPkgdefFullPath)')" />
+	<PatchPkgdefFile PkgdefPath="$(PkgdefFullPath)" Condition="Exists('$(PkgdefFullPath)')" />
+	<PatchPkgdefFile PkgdefPath="$(LatestPkgdefFullPath)" Condition="Exists('$(LatestPkgdefFullPath)')" />
   </Target>
 </Project>

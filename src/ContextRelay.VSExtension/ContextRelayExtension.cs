@@ -18,7 +18,7 @@ internal sealed class ContextRelayExtension : Extension
             version: ExtensionAssemblyVersion,
             publisherName: "KazushiKamegawa",
             displayName: "ContextRelay for Visual Studio",
-            description: "ContextRelay connects Visual Studio with Microsoft 365 Copilot context."),
+            description: "Surface Microsoft 365 context in a Visual Studio tool window."),
     };
 
     protected override void InitializeServices(IServiceCollection serviceCollection)
