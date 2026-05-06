@@ -7,7 +7,6 @@
   "ContextRelay.Command.GenerateHandoff.DisplayName": "Generate Handoff",
   "ContextRelay.Command.OpenCopilotChat.DisplayName": "Open Copilot Chat",
   "ContextRelay.Command.OpenHandoffDoc.DisplayName": "Open Handoff Doc",
-  "ContextRelay.Command.OpenSettings.DisplayName": "ContextRelay Settings",
   "ContextRelay.Command.OpenWindow.DisplayName": "ContextRelay",
   "ContextRelay.Command.Search.DisplayName": "Open ContextRelay",
   "ContextRelay.Command.ShowDebugLog.DisplayName": "Debug Log"

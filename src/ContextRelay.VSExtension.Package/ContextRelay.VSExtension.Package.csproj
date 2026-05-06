@@ -52,7 +52,7 @@
 	  <PkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).pkgdef'))</PkgdefFullPath>
 	  <LatestPkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).latest.pkgdef'))</LatestPkgdefFullPath>
 	</PropertyGroup>
-	<Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PkgdefFullPath)&quot;" Condition="Exists('$(PkgdefFullPath)')" />
-	<Exec Command="powershell -NoProfile -File &quot;D:\github\kkamegawa\ContextRelayVS\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPkgdefFullPath)&quot;" Condition="Exists('$(LatestPkgdefFullPath)')" />
+	<Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(PkgdefFullPath)&quot;" Condition="Exists('$(PkgdefFullPath)')" />
+	<Exec Command="powershell -NoProfile -File &quot;$(MSBuildProjectDirectory)\..\..\build\EnableUnifiedSettings.ps1&quot; -PkgdefPath &quot;$(LatestPkgdefFullPath)&quot;" Condition="Exists('$(LatestPkgdefFullPath)')" />
   </Target>
 </Project>

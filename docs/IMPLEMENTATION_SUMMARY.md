@@ -238,12 +238,12 @@ docs/
 
 1. **MSBuild Phase**
    - Restore all NuGet packages
-   - Compile all projects (net8.0, net472, netstandard2.0)
+   - Compile all projects (net8.0, net48, netstandard2.0)
    - Generate `ContextRelay.VSExtension.Package.pkgdef` from Assembly attributes
 
 2. **Post-Processing Phase**
    - Call `build/InjectVsPackageAsset.ps1` to inject VsPackage asset into manifest
-   - Call `build/EnableUnifiedSettings.ps1` to set `IsInUnifiedSettings=1` in pkgdef
+   - Call `build/EnableUnifiedSettings.ps1` to force `IsInUnifiedSettings=0` in pkgdef (keeps legacy Options page visible)
 
 3. **VSIX Creation Phase**
    - Package all content (DLLs, pkgdef, manifest, icon, LICENSE)
@@ -251,19 +251,19 @@ docs/
 
 ### Deployment
 
-**VSIX Ready Location**: `D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix`
+**VSIX Ready Location**: `src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix`
 
 **Installation Command** (Experimental Instance):
 ```powershell
 & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\devenv.exe' `
   /rootsuffix Exp `
-  /Install 'D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
+  /Install '<repo-root>\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
 ```
 
 **Installation Command** (Main Instance):
 ```powershell
 & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\devenv.exe' `
-  /Install 'D:\github\kkamegawa\ContextRelayVS\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
+  /Install '<repo-root>\src\ContextRelay.VSExtension\bin\Debug\net8.0-windows10.0.22621.0\ContextRelay.VSExtension.vsix'
 ```
 
 ### Verification Checklist
@@ -283,7 +283,7 @@ After installation, verify:
 | Component | Technology | Version | Location |
 |-----------|-----------|---------|----------|
 | Out-of-Proc Host | .NET 8 | 8.0 | `src/ContextRelay.VSExtension/` |
-| In-Proc Package | .NET Framework | 4.7.2 | `src/ContextRelay.VSExtension.Package/` |
+| In-Proc Package | .NET Framework | 4.8 | `src/ContextRelay.VSExtension.Package/` |
 | Shared Settings | .NET Standard | 2.0 | `src/ContextRelay.Core/Settings/` |
 | VSSDK | Microsoft.VisualStudio.Shell | 15.0 | NuGet |
 | VS Extensibility | Microsoft.VisualStudio.Extensibility | 17.x | NuGet |

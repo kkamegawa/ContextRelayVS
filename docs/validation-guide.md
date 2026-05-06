@@ -42,11 +42,12 @@ Verify all settings are displayed in the Options page:
 - [ ] **Caching**: Cache TTL, Cache Max Entries, Persist Workspace State
 - [ ] **Features**: Mail, Teams, SharePoint, OneDrive, Connectors, OneNote, Planner, Todo enabled/disabled toggles
 
-### 3. Unified Settings Registration
+### 3. Tools > Options Registration
 - [ ] Open **Tools** > **Options** > **Search**
 - [ ] Type "contextrelay" or "settings" in the search box
 - [ ] Verify **ContextRelay > General** appears in search results
 - [ ] Verify the description mentions "ContextRelay options"
+- > **Note**: The extension uses the legacy Tools > Options page (not Unified Settings). `IsInUnifiedSettings` is forced to `0` to keep the page visible in Visual Studio 18.
 
 ### 4. JSON Settings Persistence
 - [ ] In the Options page, change at least one setting (e.g., Max Results to 20)

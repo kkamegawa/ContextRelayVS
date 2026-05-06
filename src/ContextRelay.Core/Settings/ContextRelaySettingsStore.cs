@@ -69,10 +69,13 @@ public static class ContextRelaySettingsStore
 
             if (File.Exists(SettingsFilePath))
             {
-                File.Delete(SettingsFilePath);
+                // Use atomic replace to avoid losing settings if the process crashes between delete and move.
+                File.Replace(tempPath, SettingsFilePath, null);
             }
-
-            File.Move(tempPath, SettingsFilePath);
+            else
+            {
+                File.Move(tempPath, SettingsFilePath);
+            }
         }
         catch
         {
