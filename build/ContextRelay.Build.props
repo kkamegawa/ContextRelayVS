@@ -46,7 +46,7 @@
             content = Regex.Replace(content, @"@=""#0""", "\"ContextRelay\"", RegexOptions.IgnoreCase);
             content = Regex.Replace(content, @"@=""#1""", "\"General\"", RegexOptions.IgnoreCase);
 
-            File.WriteAllText(PkgdefPath, content, System.Text.Encoding.UTF8);
+            File.WriteAllText(PkgdefPath, content, new System.Text.UTF8Encoding(false));
             Log.LogMessage(MessageImportance.High, "Patched pkgdef file: {0}", PkgdefPath);
         }
         catch (Exception ex)
@@ -81,6 +81,13 @@
         <![CDATA[
         try
         {
+            // If SourceManifestPath is provided, verify it exists to prevent silent failures
+            if (!string.IsNullOrEmpty(SourceManifestPath) && !File.Exists(SourceManifestPath))
+            {
+                Log.LogError("SourceManifestPath '{0}' does not exist; failing the build to prevent creating VSIX with unsynced manifest", SourceManifestPath);
+                return false;
+            }
+
             XmlDocument doc = new XmlDocument();
             doc.Load(ManifestPath);
             XmlNamespaceManager ns = new XmlNamespaceManager(doc.NameTable);
