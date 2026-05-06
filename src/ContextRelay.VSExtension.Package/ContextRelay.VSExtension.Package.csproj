@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	<TargetFramework>net48</TargetFramework>
 	<VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">17.0</VisualStudioVersion>
@@ -34,10 +34,9 @@
   <ItemGroup>
 	<PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" />
 	<PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" ExcludeAssets="runtime" />
-	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120" PrivateAssets="all" />
+	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" />
   </ItemGroup>
-  <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets"
-		  Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
+  <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets" Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
 	<Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
 	<PropertyGroup>
 	  <CreatePkgDefAssemblyToProcess>$(TargetPath)</CreatePkgDefAssemblyToProcess>

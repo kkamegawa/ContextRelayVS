@@ -50,7 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" PrivateAssets="all" ExcludeAssets="runtime" />
-    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.2098" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility" Version="17.14.2098" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
   </ItemGroup>
