@@ -38,5 +38,11 @@ public sealed class ExtensionHostConfigurationTests
         Assert.Contains(
             controlPlacements,
             placement => placement.GetProperty("controlName").GetString() == "ContextRelay.VSExtension.Commands.OpenWindowCommand");
+        Assert.Contains(
+            controlPlacements,
+            placement => placement.GetProperty("controlName").GetString() == "ContextRelay.VSExtension.Commands.SetLanguageEnglishCommand");
+        Assert.Contains(
+            controlPlacements,
+            placement => placement.GetProperty("controlName").GetString() == "ContextRelay.VSExtension.Commands.SetLanguageJapaneseCommand");
     }
 }

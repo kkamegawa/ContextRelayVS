@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, ...</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, ...</value>
+  </resheader>
+  <data name="GenerateHandoffButtonText" xml:space="preserve"><value>Generate handoff</value></data>
+  <data name="CopyPromptButtonText" xml:space="preserve"><value>Copy prompt</value></data>
+  <data name="OpenHandoffButtonText" xml:space="preserve"><value>Open handoff</value></data>
+  <data name="OpenCopilotButtonText" xml:space="preserve"><value>Open Copilot</value></data>
+  <data name="ClearChatButtonText" xml:space="preserve"><value>Clear chat</value></data>
+  <data name="ClearSnippetsButtonText" xml:space="preserve"><value>Clear snippets</value></data>
+  <data name="ClearCacheButtonText" xml:space="preserve"><value>Clear cache</value></data>
+  <data name="DebugLogButtonText" xml:space="preserve"><value>Debug log</value></data>
+  <data name="SearchButtonText" xml:space="preserve"><value>Send</value></data>
+  <data name="SearchResultsHeaderText" xml:space="preserve"><value>Search results</value></data>
+  <data name="WindowTitleText" xml:space="preserve"><value>ContextRelay</value></data>
+  <data name="SnippetsHeaderText" xml:space="preserve"><value>Pinned snippets</value></data>
+  <data name="ChatHistoryHeaderText" xml:space="preserve"><value>Shared chat history</value></data>
+  <data name="SearchToolTip" xml:space="preserve"><value>Type plain text to chat with Copilot, or use /mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /workiq /clear</value></data>
+  <data name="CommandPopupHeaderText" xml:space="preserve"><value>Slash commands</value></data>
+  <data name="PinButtonText" xml:space="preserve"><value>Pin</value></data>
+  <data name="OpenButtonText" xml:space="preserve"><value>Open</value></data>
+  <data name="DeleteButtonText" xml:space="preserve"><value>Delete</value></data>
+  <data name="CopyMenuText" xml:space="preserve"><value>Copy</value></data>
+  <data name="AppendToHandoffMenuText" xml:space="preserve"><value>Append to handoff</value></data>
+  <data name="OpenInBrowserMenuText" xml:space="preserve"><value>Open in browser</value></data>
+  <data name="ReadyStatus" xml:space="preserve"><value>ContextRelay is ready.</value></data>
+  <data name="GenericHelpText" xml:space="preserve"><value>Type a message to chat with Microsoft 365 Copilot. Use slash commands such as /all to search Microsoft 365 content.</value></data>
+  <data name="SignedOutText" xml:space="preserve"><value>Not signed in. Configure Client ID under Tools &gt; Options &gt; ContextRelay.</value></data>
+  <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>The requested source is disabled in ContextRelay options.</value></data>
+  <data name="AskDisabledStatus" xml:space="preserve"><value>/ask is disabled. Enable chat preview in ContextRelay options.</value></data>
+  <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot chat is disabled. Enable chat preview in ContextRelay options.</value></data>
+  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>Pin one or more snippets before using /ask. The pinned content is sent to Microsoft 365 Copilot as context.</value></data>
+  <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>Chat and snippets cleared.</value></data>
+  <data name="ResultPinnedStatus" xml:space="preserve"><value>Result pinned to snippets.</value></data>
+  <data name="ResultPinnedWithExcerptFallbackStatus" xml:space="preserve"><value>Result pinned to snippets. Full content could not be fetched, so the saved snippet uses the search excerpt.</value></data>
+  <data name="ResultUnpinnedStatus" xml:space="preserve"><value>Snippet unpinned.</value></data>
+  <data name="SnippetRemovedStatus" xml:space="preserve"><value>Snippet removed.</value></data>
+  <data name="SnippetsClearedStatus" xml:space="preserve"><value>All snippets cleared.</value></data>
+  <data name="ChatHistoryClearedStatus" xml:space="preserve"><value>Chat history cleared.</value></data>
+  <data name="SearchCacheClearedStatus" xml:space="preserve"><value>Search cache cleared.</value></data>
+  <data name="HandoffPromptCopiedStatus" xml:space="preserve"><value>Handoff prompt copied to clipboard.</value></data>
+  <data name="OpenedHandoffStatus" xml:space="preserve"><value>Opened HANDOFF.md.</value></data>
+  <data name="OpenCopilotPromptReadyStatus" xml:space="preserve"><value>Prompt copied. Paste it into GitHub Copilot Chat in Visual Studio.</value></data>
+  <data name="OpenCopilotPromptAndPaneReadyStatus" xml:space="preserve"><value>Prompt copied and GitHub Copilot Chat opened. Paste the prompt in Visual Studio and send it.</value></data>
+  <data name="ResultCopiedStatus" xml:space="preserve"><value>Result copied to clipboard.</value></data>
+  <data name="SnippetCopiedStatus" xml:space="preserve"><value>Snippet copied to clipboard.</value></data>
+  <data name="AppendedToHandoffStatus" xml:space="preserve"><value>Result appended to HANDOFF.md.</value></data>
+  <data name="ChatReplyShownStatus" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel.</value></data>
+  <data name="WorkIqReplyShownStatus" xml:space="preserve"><value>Work IQ response shown in the panel.</value></data>
+  <data name="AssistantResponseCopiedStatus" xml:space="preserve"><value>Copilot response copied to clipboard.</value></data>
+  <data name="AssistantResponseAppendedStatus" xml:space="preserve"><value>Copilot response inserted into the active editor.</value></data>
+  <data name="AssistantResponseReplacedStatus" xml:space="preserve"><value>Active editor selection or document replaced with the Copilot response.</value></data>
+  <data name="NoActiveEditorStatus" xml:space="preserve"><value>No active text editor is available.</value></data>
+  <data name="CopyAssistantButtonText" xml:space="preserve"><value>Copy</value></data>
+  <data name="AppendAssistantButtonText" xml:space="preserve"><value>Append</value></data>
+  <data name="ReplaceAssistantButtonText" xml:space="preserve"><value>Replace</value></data>
+  <data name="ContextLabelsPrefixText" xml:space="preserve"><value>Context: </value></data>
+  <data name="NoResultsFoundStatus" xml:space="preserve"><value>No results found.</value></data>
+  <data name="ToolWindowInitializationFailed_NoDetail" xml:space="preserve"><value>ContextRelay window initialization failed.</value></data>
+  <data name="ToolWindowInitializationFailed_WithDetail" xml:space="preserve"><value>ContextRelay window initialization failed: {0}</value></data>
+  <data name="SignedInUser_Format" xml:space="preserve"><value>Signed in as {0}</value></data>
+  <data name="FoundResults_Format" xml:space="preserve"><value>Found {0} result(s).</value></data>
+  <data name="HandoffUpdated_Format" xml:space="preserve"><value>Handoff docs updated ({0} files).</value></data>
+  <data name="AskPreviewOpenedStatus_Format" xml:space="preserve"><value>Opened the Microsoft 365 Copilot response in a new editor tab ({0}). Used {1} pinned snippet(s) as context and saved the reply to chat.</value></data>
+  <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} pinned snippet(s) as context.</value></data>
+  <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} explicit ContextRelay context item(s).</value></data>
+  <data name="HelpFor_mail" xml:space="preserve"><value>Example: /mail from:alice subject:budget&#10;Example: /mail incident review</value></data>
+  <data name="HelpFor_teams" xml:space="preserve"><value>Example: /teams sprint review&#10;Example: /teams from:bob mentions:me</value></data>
+  <data name="HelpFor_sharepoint" xml:space="preserve"><value>Example: /sharepoint VPN setup guide&#10;Example: /sharepoint architecture</value></data>
+  <data name="HelpFor_onedrive" xml:space="preserve"><value>Example: /onedrive architecture diagram&#10;Example: /onedrive Q3 report</value></data>
+  <data name="HelpFor_onenote" xml:space="preserve"><value>Example: /onenote architecture decision log&#10;Example: /onenote section notebook architecture</value></data>
+  <data name="HelpFor_task" xml:space="preserve"><value>Example: /task release checklist&#10;Example: /task metadata comments onboarding</value></data>
+  <data name="HelpFor_connectors" xml:space="preserve"><value>Example: /connectors incident tracker&#10;Example: /connectors external knowledge base</value></data>
+  <data name="HelpFor_all" xml:space="preserve"><value>Example: /all architecture decisions&#10;Plain text without a slash command starts or continues Microsoft 365 Copilot chat.</value></data>
+  <data name="HelpFor_ask" xml:space="preserve"><value>Example: /ask Translate this to Japanese and format as markdown&#10;Example: /ask Summarize the pinned docs as a bullet list&#10;Pinned snippets are used as context and the response is shown in the panel.</value></data>
+  <data name="HelpFor_workiq" xml:space="preserve"><value>Example: /workiq Summarize my recent emails from Alice&#10;Example: /workiq What meetings do I have today?&#10;Sends a natural language query to the Work IQ Gateway (A2A protocol). Requires a Microsoft 365 Copilot license.</value></data>
+  <data name="HelpFor_clear" xml:space="preserve"><value>Example: /clear&#10;Clears the current chat transcript and discards all pinned snippets.</value></data>
+  <data name="CommandDescription_mail" xml:space="preserve"><value>Search Exchange mail.</value></data>
+  <data name="CommandDescription_teams" xml:space="preserve"><value>Search Teams messages.</value></data>
+  <data name="CommandDescription_sharepoint" xml:space="preserve"><value>Search SharePoint content.</value></data>
+  <data name="CommandDescription_onedrive" xml:space="preserve"><value>Search OneDrive content.</value></data>
+  <data name="CommandDescription_onenote" xml:space="preserve"><value>Search OneNote pages.</value></data>
+  <data name="CommandDescription_task" xml:space="preserve"><value>Search Planner and To Do tasks.</value></data>
+  <data name="CommandDescription_connectors" xml:space="preserve"><value>Search connector content.</value></data>
+  <data name="CommandDescription_all" xml:space="preserve"><value>Search all enabled Microsoft 365 sources.</value></data>
+  <data name="CommandDescription_ask" xml:space="preserve"><value>Chat with Microsoft 365 Copilot using pinned context.</value></data>
+  <data name="CommandDescription_workiq" xml:space="preserve"><value>Query Work IQ for Microsoft 365 work intelligence.</value></data>
+  <data name="CommandDescription_clear" xml:space="preserve"><value>Clear the current chat transcript and pinned snippets.</value></data>
+  <data name="LanguageDisplay_shellscript" xml:space="preserve"><value>Shell script</value></data>
+  <data name="LanguageDisplay_plaintext" xml:space="preserve"><value>Plain text</value></data>
+</root>

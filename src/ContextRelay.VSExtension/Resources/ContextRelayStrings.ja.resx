@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, ...</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, ...</value>
+  </resheader>
+  <data name="GenerateHandoffButtonText" xml:space="preserve"><value>引き継ぎ文書を生成</value></data>
+  <data name="CopyPromptButtonText" xml:space="preserve"><value>プロンプトをコピー</value></data>
+  <data name="OpenHandoffButtonText" xml:space="preserve"><value>引き継ぎ文書を開く</value></data>
+  <data name="OpenCopilotButtonText" xml:space="preserve"><value>Copilot を開く</value></data>
+  <data name="ClearChatButtonText" xml:space="preserve"><value>チャットをクリア</value></data>
+  <data name="ClearSnippetsButtonText" xml:space="preserve"><value>スニペットをクリア</value></data>
+  <data name="ClearCacheButtonText" xml:space="preserve"><value>キャッシュをクリア</value></data>
+  <data name="DebugLogButtonText" xml:space="preserve"><value>デバッグ ログ</value></data>
+  <data name="SearchButtonText" xml:space="preserve"><value>送信</value></data>
+  <data name="SearchResultsHeaderText" xml:space="preserve"><value>検索結果</value></data>
+  <data name="WindowTitleText" xml:space="preserve"><value>ContextRelay</value></data>
+  <data name="SnippetsHeaderText" xml:space="preserve"><value>ピン留めしたスニペット</value></data>
+  <data name="ChatHistoryHeaderText" xml:space="preserve"><value>共有チャット履歴</value></data>
+  <data name="SearchToolTip" xml:space="preserve"><value>通常の文章で Copilot とチャットし、/mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /workiq /clear を使用できます</value></data>
+  <data name="CommandPopupHeaderText" xml:space="preserve"><value>スラッシュ コマンド</value></data>
+  <data name="PinButtonText" xml:space="preserve"><value>ピン留め</value></data>
+  <data name="OpenButtonText" xml:space="preserve"><value>開く</value></data>
+  <data name="DeleteButtonText" xml:space="preserve"><value>削除</value></data>
+  <data name="CopyMenuText" xml:space="preserve"><value>コピー</value></data>
+  <data name="AppendToHandoffMenuText" xml:space="preserve"><value>HANDOFF に追記</value></data>
+  <data name="OpenInBrowserMenuText" xml:space="preserve"><value>ブラウザーで開く</value></data>
+  <data name="ReadyStatus" xml:space="preserve"><value>ContextRelay の準備ができました。</value></data>
+  <data name="GenericHelpText" xml:space="preserve"><value>通常の文章で Microsoft 365 Copilot とチャットします。検索するには /all などのスラッシュ コマンドを使用します。</value></data>
+  <data name="SignedOutText" xml:space="preserve"><value>未サインインです。 [ツール] &gt; [オプション] &gt; [ContextRelay] で Client ID を設定してください。</value></data>
+  <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>指定したソースは ContextRelay のオプションで無効です。</value></data>
+  <data name="AskDisabledStatus" xml:space="preserve"><value>/ask は無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
+  <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot チャットは無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
+  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>/ask を使うには先に 1 件以上のスニペットをピン留めしてください。ピン留めした内容が Microsoft 365 Copilot にコンテキストとして送信されます。</value></data>
+  <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>チャット履歴とスニペットをクリアしました。</value></data>
+  <data name="ResultPinnedStatus" xml:space="preserve"><value>結果をスニペットにピン留めしました。</value></data>
+  <data name="ResultPinnedWithExcerptFallbackStatus" xml:space="preserve"><value>結果をスニペットにピン留めしました。全文の取得には失敗したため、検索結果の抜粋を保存しました。</value></data>
+  <data name="ResultUnpinnedStatus" xml:space="preserve"><value>結果のピン留めを解除しました。</value></data>
+  <data name="SnippetRemovedStatus" xml:space="preserve"><value>スニペットを削除しました。</value></data>
+  <data name="SnippetsClearedStatus" xml:space="preserve"><value>すべてのスニペットをクリアしました。</value></data>
+  <data name="ChatHistoryClearedStatus" xml:space="preserve"><value>チャット履歴をクリアしました。</value></data>
+  <data name="SearchCacheClearedStatus" xml:space="preserve"><value>検索キャッシュをクリアしました。</value></data>
+  <data name="HandoffPromptCopiedStatus" xml:space="preserve"><value>引き継ぎプロンプトをクリップボードにコピーしました。</value></data>
+  <data name="OpenedHandoffStatus" xml:space="preserve"><value>HANDOFF.md を開きました。</value></data>
+  <data name="OpenCopilotPromptReadyStatus" xml:space="preserve"><value>プロンプトをコピーしました。Visual Studio の GitHub Copilot Chat に貼り付けてください。</value></data>
+  <data name="OpenCopilotPromptAndPaneReadyStatus" xml:space="preserve"><value>プロンプトをコピーし、GitHub Copilot Chat を開きました。Visual Studio 上で貼り付けて送信してください。</value></data>
+  <data name="ResultCopiedStatus" xml:space="preserve"><value>結果をクリップボードにコピーしました。</value></data>
+  <data name="SnippetCopiedStatus" xml:space="preserve"><value>スニペットをクリップボードにコピーしました。</value></data>
+  <data name="AppendedToHandoffStatus" xml:space="preserve"><value>結果を HANDOFF.md に追記しました。</value></data>
+  <data name="ChatReplyShownStatus" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。</value></data>
+  <data name="WorkIqReplyShownStatus" xml:space="preserve"><value>Work IQ の応答をパネルに表示しました。</value></data>
+  <data name="AssistantResponseCopiedStatus" xml:space="preserve"><value>Copilot の応答をクリップボードにコピーしました。</value></data>
+  <data name="AssistantResponseAppendedStatus" xml:space="preserve"><value>Copilot の応答をアクティブなエディターに挿入しました。</value></data>
+  <data name="AssistantResponseReplacedStatus" xml:space="preserve"><value>アクティブなエディターの選択範囲または文書を Copilot の応答で置き換えました。</value></data>
+  <data name="NoActiveEditorStatus" xml:space="preserve"><value>アクティブなテキスト エディターがありません。</value></data>
+  <data name="CopyAssistantButtonText" xml:space="preserve"><value>コピー</value></data>
+  <data name="AppendAssistantButtonText" xml:space="preserve"><value>エディターに挿入</value></data>
+  <data name="ReplaceAssistantButtonText" xml:space="preserve"><value>置換</value></data>
+  <data name="ContextLabelsPrefixText" xml:space="preserve"><value>コンテキスト: </value></data>
+  <data name="NoResultsFoundStatus" xml:space="preserve"><value>結果が見つかりませんでした。</value></data>
+  <data name="ToolWindowInitializationFailed_NoDetail" xml:space="preserve"><value>ContextRelay ウィンドウの初期化に失敗しました。</value></data>
+  <data name="ToolWindowInitializationFailed_WithDetail" xml:space="preserve"><value>ContextRelay ウィンドウの初期化に失敗しました: {0}</value></data>
+  <data name="SignedInUser_Format" xml:space="preserve"><value>サインイン中: {0}</value></data>
+  <data name="FoundResults_Format" xml:space="preserve"><value>{0} 件の結果が見つかりました。</value></data>
+  <data name="HandoffUpdated_Format" xml:space="preserve"><value>引き継ぎ文書を更新しました ({0} ファイル)。</value></data>
+  <data name="AskPreviewOpenedStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答を新しいエディター タブで開きました ({0})。{1} 件のピン留めスニペットをコンテキストとして使用し、共有チャット履歴にも保存しました。</value></data>
+  <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットをコンテキストとして使用しました。</value></data>
+  <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件の明示的な ContextRelay コンテキストを使用しました。</value></data>
+  <data name="HelpFor_mail" xml:space="preserve"><value>例: /mail from:alice subject:budget&#10;例: /mail incident review</value></data>
+  <data name="HelpFor_teams" xml:space="preserve"><value>例: /teams sprint review&#10;例: /teams from:bob mentions:me</value></data>
+  <data name="HelpFor_sharepoint" xml:space="preserve"><value>例: /sharepoint VPN setup guide&#10;例: /sharepoint architecture</value></data>
+  <data name="HelpFor_onedrive" xml:space="preserve"><value>例: /onedrive architecture diagram&#10;例: /onedrive Q3 report</value></data>
+  <data name="HelpFor_onenote" xml:space="preserve"><value>例: /onenote architecture decision log&#10;例: /onenote section notebook architecture</value></data>
+  <data name="HelpFor_task" xml:space="preserve"><value>例: /task release checklist&#10;例: /task metadata comments onboarding</value></data>
+  <data name="HelpFor_connectors" xml:space="preserve"><value>例: /connectors incident tracker&#10;例: /connectors external knowledge base</value></data>
+  <data name="HelpFor_all" xml:space="preserve"><value>例: /all architecture decisions&#10;スラッシュ コマンドなしの文章は Microsoft 365 Copilot チャットとして送信されます。</value></data>
+  <data name="HelpFor_ask" xml:space="preserve"><value>例: /ask 日本語に翻訳して markdown にして&#10;例: /ask ピン留めした情報を箇条書きで要約して&#10;ピン留めスニペットをコンテキストとして使用し、応答はパネルに表示されます。</value></data>
+  <data name="HelpFor_workiq" xml:space="preserve"><value>例: /workiq Alice からの最近のメールを要約して&#10;例: /workiq 今日の会議を教えて&#10;Work IQ Gateway (A2A プロトコル) に自然言語クエリを送信します。Microsoft 365 Copilot ライセンスが必要です。</value></data>
+  <data name="HelpFor_clear" xml:space="preserve"><value>例: /clear&#10;現在のチャット履歴とピン留めスニペットを破棄します。</value></data>
+  <data name="CommandDescription_mail" xml:space="preserve"><value>Exchange メールを検索します。</value></data>
+  <data name="CommandDescription_teams" xml:space="preserve"><value>Teams メッセージを検索します。</value></data>
+  <data name="CommandDescription_sharepoint" xml:space="preserve"><value>SharePoint コンテンツを検索します。</value></data>
+  <data name="CommandDescription_onedrive" xml:space="preserve"><value>OneDrive コンテンツを検索します。</value></data>
+  <data name="CommandDescription_onenote" xml:space="preserve"><value>OneNote ページを検索します。</value></data>
+  <data name="CommandDescription_task" xml:space="preserve"><value>Planner と To Do のタスクを検索します。</value></data>
+  <data name="CommandDescription_connectors" xml:space="preserve"><value>コネクタのコンテンツを検索します。</value></data>
+  <data name="CommandDescription_all" xml:space="preserve"><value>有効な Microsoft 365 ソース全体を検索します。</value></data>
+  <data name="CommandDescription_ask" xml:space="preserve"><value>ピン留めしたコンテキストを使って Microsoft 365 Copilot とチャットします。</value></data>
+  <data name="CommandDescription_workiq" xml:space="preserve"><value>Work IQ に Microsoft 365 のワークインテリジェンスを問い合わせます。</value></data>
+  <data name="CommandDescription_clear" xml:space="preserve"><value>現在のチャット履歴とピン留めスニペットをクリアします。</value></data>
+  <data name="LanguageDisplay_shellscript" xml:space="preserve"><value>Shell スクリプト</value></data>
+  <data name="LanguageDisplay_plaintext" xml:space="preserve"><value>プレーン テキスト</value></data>
+</root>
