@@ -21,21 +21,6 @@
             <Setter Property="Padding" Value="8,2" />
         </Style>
 
-        <Style x:Key="LanguageToggleButtonStyle" TargetType="Button" BasedOn="{StaticResource ThemedButtonStyle}">
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontWeight" Value="Normal" />
-            <Setter Property="TabIndex" Value="1" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Tag}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTabSelectedTabBrushKey}}" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTabSelectedBorderBrushKey}}" />
-                    <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTabSelectedTextBrushKey}}" />
-                    <Setter Property="FontWeight" Value="SemiBold" />
-                    <Setter Property="TabIndex" Value="0" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
         <Style x:Key="ThemedListBoxStyle" TargetType="ListBox">
             <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
@@ -102,11 +87,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding WindowTitleText}" Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
-                        <Button x:Name="EnglishLanguageButton" Style="{StaticResource LanguageToggleButtonStyle}" Margin="10,0,6,0" Padding="8,2" Content="{Binding UseEnglishButtonText}" Command="{Binding UseEnglishCommand}" IsEnabled="{Binding IsNotBusy}" Tag="{Binding IsEnglishUiLanguageActive}" />
-                        <Button x:Name="JapaneseLanguageButton" Style="{StaticResource LanguageToggleButtonStyle}" Padding="8,2" Content="{Binding UseJapaneseButtonText}" Command="{Binding UseJapaneseCommand}" IsEnabled="{Binding IsNotBusy}" Tag="{Binding IsJapaneseUiLanguageActive}" />
-                    </StackPanel>
+                    <TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding WindowTitleText}" Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
                     <TextBlock Margin="0,3,0,0" Text="{Binding SignedInUserText}" Style="{StaticResource MutedTextStyle}" />
                     <TextBlock Margin="0,3,0,0" Text="{Binding StatusMessage}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
                     <TextBlock Margin="0,3,0,0" Text="{Binding HelpText}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />

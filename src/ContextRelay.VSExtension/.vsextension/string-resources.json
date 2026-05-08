@@ -1,5 +1,6 @@
 ﻿{
   "ContextRelay.Menu.DisplayName": "ContextRelay",
+  "ContextRelay.Menu.Language.DisplayName": "Language",
   "ContextRelay.Command.ClearCache.DisplayName": "Clear Cache",
   "ContextRelay.Command.ClearChat.DisplayName": "Clear Chat",
   "ContextRelay.Command.ClearSnippets.DisplayName": "Clear Snippets",
@@ -9,5 +10,7 @@
   "ContextRelay.Command.OpenHandoffDoc.DisplayName": "Open Handoff Doc",
   "ContextRelay.Command.OpenWindow.DisplayName": "ContextRelay",
   "ContextRelay.Command.Search.DisplayName": "Open ContextRelay",
-  "ContextRelay.Command.ShowDebugLog.DisplayName": "Debug Log"
+  "ContextRelay.Command.ShowDebugLog.DisplayName": "Debug Log",
+  "ContextRelay.Command.SetLanguageEnglish.DisplayName": "English",
+  "ContextRelay.Command.SetLanguageJapanese.DisplayName": "日本語"
 }

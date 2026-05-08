@@ -29,6 +29,7 @@ internal static class ContextRelayMenuDefinitions
             MenuChild.Command<CopyHandoffPromptCommand>(),
             MenuChild.Command<OpenCopilotChatCommand>(),
             MenuChild.Command<OpenHandoffDocCommand>(),
+            MenuChild.Menu(LanguageMenu),
 
             // Separator
             MenuChild.Separator,
@@ -38,6 +39,19 @@ internal static class ContextRelayMenuDefinitions
             MenuChild.Command<ClearChatCommand>(),
             MenuChild.Command<ClearSnippetsCommand>(),
             MenuChild.Command<ShowDebugLogCommand>(),
+        },
+    };
+
+    /// <summary>
+    /// The language submenu for choosing UI language.
+    /// </summary>
+    [VisualStudioContribution]
+    internal static MenuConfiguration LanguageMenu => new("%ContextRelay.Menu.Language.DisplayName%")
+    {
+        Children = new MenuChild[]
+        {
+            MenuChild.Command<SetLanguageEnglishCommand>(),
+            MenuChild.Command<SetLanguageJapaneseCommand>(),
         },
     };
 

@@ -49,8 +49,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
-        UseEnglishCommand = new AsyncCommand(async (_, ct) => await ChangeUiLanguageAsync("en", ct).ConfigureAwait(false));
-        UseJapaneseCommand = new AsyncCommand(async (_, ct) => await ChangeUiLanguageAsync("ja", ct).ConfigureAwait(false));
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -88,11 +86,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
     }
 
-    [DataMember] public string UseEnglishButtonText => ContextRelayLocalizedStrings.UseEnglishButtonText;
-    [DataMember] public string UseJapaneseButtonText => ContextRelayLocalizedStrings.UseJapaneseButtonText;
-    [DataMember] public bool IsEnglishUiLanguageActive => !ContextRelayLocalizedStrings.UseJapanese;
-    [DataMember] public bool IsJapaneseUiLanguageActive => ContextRelayLocalizedStrings.UseJapanese;
-
     [DataMember] public AsyncCommand SearchCommand { get; }
     [DataMember] public AsyncCommand GenerateHandoffCommand { get; }
     [DataMember] public AsyncCommand CopyPromptCommand { get; }
@@ -106,8 +99,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
     [DataMember] public AsyncCommand CloseCommandPopupCommand { get; }
-    [DataMember] public AsyncCommand UseEnglishCommand { get; }
-    [DataMember] public AsyncCommand UseJapaneseCommand { get; }
 
     [DataMember]
     public string QueryText
@@ -450,16 +441,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         CommandPopupHeaderText = ContextRelayLocalizedStrings.CommandPopupHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
-        RaiseNotifyPropertyChangedEvent(nameof(UseEnglishButtonText));
-        RaiseNotifyPropertyChangedEvent(nameof(UseJapaneseButtonText));
-        RaiseNotifyPropertyChangedEvent(nameof(IsEnglishUiLanguageActive));
-        RaiseNotifyPropertyChangedEvent(nameof(IsJapaneseUiLanguageActive));
-    }
-
-    private async Task ChangeUiLanguageAsync(string languageCode, CancellationToken ct)
-    {
-        var state = await host.UpdateUiLanguageAsync(languageCode, ct).ConfigureAwait(false);
-        ApplyState(state);
     }
 
     private void CloseCommandPopup()
