@@ -15,6 +15,7 @@
     <PackageReference Include="Microsoft.Identity.Client.Broker" Version="4.84.0" />
     <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.84.0" />
     <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.0" />
     <PackageReference Include="System.Text.Json" Version="10.0.7" />
   </ItemGroup>
 
