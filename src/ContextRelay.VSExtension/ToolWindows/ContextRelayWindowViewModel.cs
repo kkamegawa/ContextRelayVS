@@ -14,9 +14,11 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [DataContract]
 internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject, IDisposable
 {
+    private const int MaxVisibleCommandSuggestions = 4;
     private readonly ContextRelayHost host;
     private bool isBusy;
     private bool isCommandPopupOpen;
+    private int commandSuggestionWindowStart;
     private string queryText = string.Empty;
     private string helpText = ContextRelayLocalizedStrings.GenericHelpText;
     private string statusMessage = ContextRelayLocalizedStrings.ReadyStatus;
@@ -25,6 +27,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private IReadOnlyList<SnippetItemViewModel> snippets = Array.Empty<SnippetItemViewModel>();
     private IReadOnlyList<ChatHistoryItemViewModel> chatHistory = Array.Empty<ChatHistoryItemViewModel>();
     private IReadOnlyList<SlashCommandSuggestion> commandSuggestions = Array.Empty<SlashCommandSuggestion>();
+    private IReadOnlyList<SlashCommandSuggestion> visibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private SlashCommandSuggestion? selectedCommandSuggestion;
     private bool isApplyingState;
     private string windowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
@@ -227,6 +230,17 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     }
 
     [DataMember]
+    public IReadOnlyList<SlashCommandSuggestion> VisibleCommandSuggestions
+    {
+        get => visibleCommandSuggestions;
+        private set
+        {
+            visibleCommandSuggestions = value;
+            RaiseNotifyPropertyChangedEvent(nameof(VisibleCommandSuggestions));
+        }
+    }
+
+    [DataMember]
     public SlashCommandSuggestion? SelectedCommandSuggestion
     {
         get => selectedCommandSuggestion;
@@ -328,7 +342,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
             ChatHistory = state.ChatHistory.Select(item => new ChatHistoryItemViewModel(item, this)).ToArray();
             CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+            VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
             SelectedCommandSuggestion = null;
+            commandSuggestionWindowStart = 0;
             IsCommandPopupOpen = false;
         }
         finally
@@ -392,7 +408,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             nextIndex = 0;
         }
 
-        SelectedCommandSuggestion = commandSuggestions[nextIndex];
+        SelectCommandSuggestion(nextIndex);
     }
 
     private bool ApplySelectedCommandSuggestion()
@@ -419,7 +435,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         CommandSuggestions = suggestions
             .Select(CreateInteractiveSuggestion)
             .ToArray();
+        commandSuggestionWindowStart = 0;
         SelectedCommandSuggestion = commandSuggestions.Count > 0 ? commandSuggestions[0] : null;
+        UpdateVisibleCommandSuggestions();
         IsCommandPopupOpen = commandSuggestions.Count > 0;
     }
 
@@ -466,8 +484,48 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private void CloseCommandPopup()
     {
         CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+        VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
         SelectedCommandSuggestion = null;
+        commandSuggestionWindowStart = 0;
         IsCommandPopupOpen = false;
+    }
+
+    private void SelectCommandSuggestion(int index)
+    {
+        if (index < 0 || index >= commandSuggestions.Count)
+        {
+            return;
+        }
+
+        var nextWindowStart = CalculateVisibleWindowStart(
+            totalCount: commandSuggestions.Count,
+            selectedIndex: index,
+            currentWindowStart: commandSuggestionWindowStart,
+            maxVisibleCount: MaxVisibleCommandSuggestions);
+        if (nextWindowStart != commandSuggestionWindowStart)
+        {
+            commandSuggestionWindowStart = nextWindowStart;
+            UpdateVisibleCommandSuggestions();
+        }
+
+        SelectedCommandSuggestion = commandSuggestions[index];
+    }
+
+    private void UpdateVisibleCommandSuggestions()
+    {
+        if (commandSuggestions.Count == 0)
+        {
+            VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+            commandSuggestionWindowStart = 0;
+            return;
+        }
+
+        var maxStartIndex = Math.Max(0, commandSuggestions.Count - MaxVisibleCommandSuggestions);
+        commandSuggestionWindowStart = Math.Clamp(commandSuggestionWindowStart, 0, maxStartIndex);
+        VisibleCommandSuggestions = commandSuggestions
+            .Skip(commandSuggestionWindowStart)
+            .Take(MaxVisibleCommandSuggestions)
+            .ToArray();
     }
 
     private SlashCommandSuggestion CreateInteractiveSuggestion(SlashCommandSuggestion suggestion)
@@ -488,6 +546,36 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         });
 
         return interactiveSuggestion;
+    }
+
+    internal static int CalculateVisibleWindowStart(int totalCount, int selectedIndex, int currentWindowStart, int maxVisibleCount)
+    {
+        if (totalCount <= 0 || maxVisibleCount <= 0)
+        {
+            return 0;
+        }
+
+        if (selectedIndex < 0)
+        {
+            selectedIndex = 0;
+        }
+        else if (selectedIndex >= totalCount)
+        {
+            selectedIndex = totalCount - 1;
+        }
+
+        var nextWindowStart = currentWindowStart;
+        if (selectedIndex < nextWindowStart)
+        {
+            nextWindowStart = selectedIndex;
+        }
+        else if (selectedIndex >= nextWindowStart + maxVisibleCount)
+        {
+            nextWindowStart = selectedIndex - maxVisibleCount + 1;
+        }
+
+        var maxWindowStart = Math.Max(0, totalCount - maxVisibleCount);
+        return Math.Clamp(nextWindowStart, 0, maxWindowStart);
     }
 
     private static int IndexOf<T>(IReadOnlyList<T> list, T item)

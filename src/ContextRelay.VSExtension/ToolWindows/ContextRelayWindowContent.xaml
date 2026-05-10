@@ -39,6 +39,9 @@
             <Setter Property="Margin" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
@@ -238,15 +241,17 @@
                 <StackPanel>
                     <TextBlock Margin="8,6,8,4" FontWeight="SemiBold" Text="{Binding CommandPopupHeaderText}" Style="{StaticResource MutedTextStyle}" />
                      <ListBox Style="{StaticResource ThemedListBoxStyle}" MaxHeight="220" BorderThickness="0"
-                              ItemsSource="{Binding CommandSuggestions}"
+                              ItemsSource="{Binding VisibleCommandSuggestions}"
                               SelectedItem="{Binding SelectedCommandSuggestion, Mode=TwoWay}">
                          <ListBox.ItemTemplate>
                              <DataTemplate>
                                  <Button Style="{StaticResource SuggestionButtonStyle}" Command="{Binding ApplyCommand}">
                                      <StackPanel Margin="8,4">
                                          <StackPanel Orientation="Horizontal">
-                                             <TextBlock Text="{Binding Icon}" Margin="0,0,4,0" />
-                                             <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                             <TextBlock Text="{Binding Icon}" Margin="0,0,4,0"
+                                                        Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+                                             <TextBlock FontWeight="SemiBold" Text="{Binding Name}"
+                                                        Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
                                          </StackPanel>
                                          <TextBlock Margin="0,2,0,0" Text="{Binding Description}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
                                      </StackPanel>

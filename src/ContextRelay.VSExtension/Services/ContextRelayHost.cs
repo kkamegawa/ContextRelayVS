@@ -429,6 +429,8 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
+            currentSearchResults = Array.Empty<ContextItem>();
+            lastSearchSummary = null;
             copilotConversationId = null;
             workIqContextId = null;
             return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);

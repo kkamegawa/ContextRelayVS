@@ -14,7 +14,10 @@ public sealed class SlashCommandSuggestionInteractionTests
         var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
         var method = suggestionType!.GetMethod("TryBuildCommittedQuery", BindingFlags.Static | BindingFlags.NonPublic);
         var suggestion = Activator.CreateInstance(suggestionType);
-        suggestionType.GetProperty("Name")!.SetValue(suggestion, "/onedrive");
+        var nameProperty = suggestionType.GetProperty("Name");
+        Assert.NotNull(method);
+        Assert.NotNull(nameProperty);
+        nameProperty!.SetValue(suggestion, "/onedrive");
         var parameters = new object?[] { true, suggestion, null };
 
         var result = (bool)method!.Invoke(obj: null, parameters)!;
@@ -30,7 +33,10 @@ public sealed class SlashCommandSuggestionInteractionTests
         var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
         var method = suggestionType!.GetMethod("TryBuildCommittedQuery", BindingFlags.Static | BindingFlags.NonPublic);
         var suggestion = Activator.CreateInstance(suggestionType);
-        suggestionType.GetProperty("Name")!.SetValue(suggestion, "/onenote");
+        var nameProperty = suggestionType.GetProperty("Name");
+        Assert.NotNull(method);
+        Assert.NotNull(nameProperty);
+        nameProperty!.SetValue(suggestion, "/onenote");
         var parameters = new object?[] { false, suggestion, null };
 
         var result = (bool)method!.Invoke(obj: null, parameters)!;
@@ -52,6 +58,27 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.Contains("Command=\"{Binding ApplyCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding ConfirmQueryInputCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding VisibleCommandSuggestions}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ToolWindowTextBrushKey", xaml, StringComparison.Ordinal);
+        Assert.Contains("Focusable\" Value=\"False\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsTabStop\" Value=\"False\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(6, 4, 0, 4, 1)]
+    [InlineData(6, 5, 1, 4, 2)]
+    [InlineData(6, 1, 2, 4, 1)]
+    [InlineData(3, 2, 0, 4, 0)]
+    public void CalculateVisibleWindowStart_TracksKeyboardSelection(int totalCount, int selectedIndex, int currentWindowStart, int maxVisibleCount, int expectedStart)
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+        var method = viewModelType!.GetMethod("CalculateVisibleWindowStart", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var result = (int)method!.Invoke(obj: null, new object[] { totalCount, selectedIndex, currentWindowStart, maxVisibleCount })!;
+
+        Assert.Equal(expectedStart, result);
     }
 
     private static Assembly LoadBuiltExtensionAssembly()
