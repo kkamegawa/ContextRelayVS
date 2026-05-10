@@ -59,9 +59,20 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("Command=\"{Binding ApplyCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding ConfirmQueryInputCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding VisibleCommandSuggestions}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource SuggestionPopupListBoxStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemContainerStyle=\"{StaticResource SuggestionListBoxItemStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("FocusManager.IsFocusScope=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("FocusManager.FocusedElement=\"{Binding ElementName=QueryTextBox}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"QueryTextBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ToolWindowTextBrushKey", xaml, StringComparison.Ordinal);
         Assert.Contains("Focusable\" Value=\"False\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsTabStop\" Value=\"False\"", xaml, StringComparison.Ordinal);
+        // Caret-to-end fix: TargetUpdated fires only when VM pushes text (not on user keystrokes).
+        // mc:Ignorable="i" makes the behaviors elements safe to skip if the assembly is unavailable.
+        Assert.Contains("mc:Ignorable=\"i\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("NotifyOnTargetUpdated=True", xaml, StringComparison.Ordinal);
+        Assert.Contains("EventName=\"TargetUpdated\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("PropertyName=\"CaretIndex\"", xaml, StringComparison.Ordinal);
     }
 
     [Theory]
