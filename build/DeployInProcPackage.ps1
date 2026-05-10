@@ -45,7 +45,16 @@ param(
     [string[]]$SupportingAssemblies = @(),
 
     [Parameter(Mandatory = $false)]
-    [string]$ExtensionId = ""
+    [string]$ExtensionId = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$PublisherName = "KazushiKamegawa",
+
+    [Parameter(Mandatory = $false)]
+    [string]$SidecarName = "ContextRelay.Package",
+
+    [Parameter(Mandatory = $false)]
+    [string]$SidecarVersion = "0.3.0.0"
 )
 
 Set-StrictMode -Version Latest
@@ -65,19 +74,7 @@ foreach ($expDir in $expDirs) {
         New-Item -ItemType Directory -Path $extensionsRoot -Force | Out-Null
     }
 
-    # Find the hashed sub-folder (e.g. Extensions-18.0_24b3d224)
-    $subDirs = @(Get-ChildItem $extensionsRoot -Directory | Where-Object { $_.Name -match "^Extensions-" })
-    if ($subDirs.Count -eq 0) {
-        Write-Host "No Extensions-* subfolder found. Creating one based on experimental instance."
-        # Extract version from expDir name (e.g. "18.0_24b3d224Exp" -> "Extensions-18.0_24b3d224")
-        $expName = $expDir.Name -replace "${RootSuffix}$", ""
-        $expectedSubDir = "Extensions-$expName"
-        $subDirPath = Join-Path $extensionsRoot $expectedSubDir
-        New-Item -ItemType Directory -Path $subDirPath -Force | Out-Null
-        $subDirs = @(Get-Item $subDirPath)
-    }
-
-    $targetDir = Join-Path $subDirs[0].FullName "KazushiKamegawa\ContextRelay.Package"
+    $targetDir = Join-Path $extensionsRoot "$PublisherName\$SidecarName\$SidecarVersion"
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 
     # Copy pkgdef
@@ -114,7 +111,7 @@ foreach ($expDir in $expDirs) {
     $manifestContent = @"
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
   <Metadata>
-    <Identity Id="ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package" Version="0.3.0.0" Language="en-US" Publisher="KazushiKamegawa" />
+    <Identity Id="ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package" Version="$SidecarVersion" Language="en-US" Publisher="$PublisherName" />
     <DisplayName>ContextRelay for Visual Studio (Package)</DisplayName>
     <Description xml:space="preserve">In-proc VSSDK package for ContextRelay Tools &gt; Options registration.</Description>
   </Metadata>
@@ -147,20 +144,21 @@ foreach ($expDir in $expDirs) {
 
     if (-not [string]::IsNullOrWhiteSpace($ExtensionId)) {
         $mainExtensionDirs = @(
-            Get-ChildItem $extensionsRoot -Directory | ForEach-Object {
-                $manifestPath = Join-Path $_.FullName "extension.vsixmanifest"
-                if (-not (Test-Path $manifestPath)) {
-                    return
+            foreach ($rootPath in @($extensionsRoot, (Join-Path $expDir.FullName "VSExtensions"))) {
+                if (-not (Test-Path $rootPath)) {
+                    continue
                 }
 
-                $manifestContent = Get-Content $manifestPath -Raw
-                if ($manifestContent -match [regex]::Escape("Id=`"$ExtensionId`"")) {
-                    $_.FullName
+                Get-ChildItem $rootPath -Filter extension.vsixmanifest -Recurse -File | ForEach-Object {
+                    $manifestContent = Get-Content $_.FullName -Raw
+                    if ($manifestContent -match [regex]::Escape("Id=`"$ExtensionId`"")) {
+                        Split-Path $_.FullName -Parent
+                    }
                 }
             }
         )
 
-        foreach ($mainExtensionDir in $mainExtensionDirs) {
+        foreach ($mainExtensionDir in ($mainExtensionDirs | Select-Object -Unique)) {
             foreach ($assemblyPath in $SupportingAssemblies) {
                 if ([string]::IsNullOrWhiteSpace($assemblyPath) -or -not (Test-Path $assemblyPath)) {
                     continue

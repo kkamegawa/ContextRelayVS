@@ -77,10 +77,112 @@
     <Task>
       <Using Namespace="System.Xml" />
       <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
       <Code>
         <![CDATA[
         try
         {
+            const string ManifestNamespace = "http://schemas.microsoft.com/developer/vsx-schema/2011";
+
+            void RemoveDirectChild(XmlElement root, string localName)
+            {
+                var existing = root.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == localName && node.NamespaceURI == ManifestNamespace);
+                if (existing != null)
+                {
+                    root.RemoveChild(existing);
+                }
+            }
+
+            XmlElement EnsureSection(XmlDocument targetDocument, XmlElement targetRoot, string sectionName)
+            {
+                XmlElement existingSection = targetRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == sectionName && node.NamespaceURI == ManifestNamespace) as XmlElement;
+                if (existingSection != null)
+                {
+                    return existingSection;
+                }
+
+                XmlElement newSection = targetDocument.CreateElement(sectionName, ManifestNamespace);
+                if (sectionName == "Installation")
+                {
+                    XmlNode metadataNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Metadata" && node.NamespaceURI == ManifestNamespace);
+                    if (metadataNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, metadataNode);
+                        return newSection;
+                    }
+                }
+
+                if (sectionName == "Dependencies")
+                {
+                    XmlNode installationNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Installation" && node.NamespaceURI == ManifestNamespace);
+                    if (installationNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, installationNode);
+                        return newSection;
+                    }
+                }
+
+                if (sectionName == "Prerequisites")
+                {
+                    XmlNode dependenciesNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Dependencies" && node.NamespaceURI == ManifestNamespace);
+                    if (dependenciesNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, dependenciesNode);
+                        return newSection;
+                    }
+
+                    XmlNode installationNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Installation" && node.NamespaceURI == ManifestNamespace);
+                    if (installationNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, installationNode);
+                        return newSection;
+                    }
+                }
+
+                XmlNode assetsNode = targetRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Assets" && node.NamespaceURI == ManifestNamespace);
+                if (assetsNode != null)
+                {
+                    targetRoot.InsertBefore(newSection, assetsNode);
+                    return newSection;
+                }
+
+                targetRoot.AppendChild(newSection);
+                return newSection;
+            }
+
+            void SyncSection(XmlDocument targetDocument, XmlElement targetRoot, XmlDocument sourceDocument, string sectionName)
+            {
+                RemoveDirectChild(targetRoot, sectionName);
+
+                XmlElement sourceRoot = sourceDocument.DocumentElement;
+                XmlElement sourceSection = sourceRoot == null ? null : sourceRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == sectionName && node.NamespaceURI == ManifestNamespace) as XmlElement;
+
+                if (sourceSection == null)
+                {
+                    return;
+                }
+
+                XmlNode importedNode = targetDocument.ImportNode(sourceSection, true);
+                XmlElement sectionContainer = EnsureSection(targetDocument, targetRoot, sectionName);
+                targetRoot.ReplaceChild(importedNode, sectionContainer);
+            }
+
             // If SourceManifestPath is provided, verify it exists to prevent silent failures
             if (!string.IsNullOrEmpty(SourceManifestPath) && !File.Exists(SourceManifestPath))
             {
@@ -91,26 +193,36 @@
             XmlDocument doc = new XmlDocument();
             doc.Load(ManifestPath);
             XmlNamespaceManager ns = new XmlNamespaceManager(doc.NameTable);
-            ns.AddNamespace("x", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+            ns.AddNamespace("x", ManifestNamespace);
+            XmlElement root = doc.DocumentElement;
+            if (root == null)
+            {
+                Log.LogError("Manifest '{0}' did not contain a document element", ManifestPath);
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(SourceManifestPath))
+            {
+                XmlDocument sourceDoc = new XmlDocument();
+                sourceDoc.Load(SourceManifestPath);
+                SyncSection(doc, root, sourceDoc, "Installation");
+                SyncSection(doc, root, sourceDoc, "Dependencies");
+                SyncSection(doc, root, sourceDoc, "Prerequisites");
+                Log.LogMessage(MessageImportance.High, "Synchronized manifest installation metadata from source manifest: {0}", SourceManifestPath);
+            }
 
             // Ensure Assets element exists
-            XmlNode assetsNode = doc.SelectSingleNode("//x:Assets", ns);
-            if (assetsNode == null)
-            {
-                XmlElement root = doc.DocumentElement;
-                assetsNode = doc.CreateElement("Assets", "http://schemas.microsoft.com/developer/vsx-schema/2011");
-                root.AppendChild(assetsNode);
-            }
+            XmlElement assetsElement = EnsureSection(doc, root, "Assets");
 
             // Find or create Microsoft.VisualStudio.VsPackage asset
             XmlNode pkgAsset = doc.SelectSingleNode("//x:Asset[@Type='Microsoft.VisualStudio.VsPackage']", ns);
             if (pkgAsset == null)
             {
-                pkgAsset = doc.CreateElement("Asset", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+                pkgAsset = doc.CreateElement("Asset", ManifestNamespace);
                 XmlElement pkgElement = (XmlElement)pkgAsset;
                 pkgElement.SetAttribute("Type", "Microsoft.VisualStudio.VsPackage");
                 pkgElement.SetAttribute("Path", PkgdefFileName);
-                assetsNode.AppendChild(pkgAsset);
+                assetsElement.AppendChild(pkgAsset);
             }
             else
             {
@@ -178,66 +290,95 @@
 
             foreach (DirectoryInfo expDir in expDirs)
             {
-                DirectoryInfo extensionsRoot = new DirectoryInfo(Path.Combine(expDir.FullName, "Extensions"));
-                if (!extensionsRoot.Exists)
+                string extensionsPath = Path.Combine(expDir.FullName, "Extensions");
+                string vsExtensionsPath = Path.Combine(expDir.FullName, "VSExtensions");
+                var searchRoots = new List<string>();
+
+                if (Directory.Exists(extensionsPath))
+                {
+                    searchRoots.Add(extensionsPath);
+                }
+
+                if (Directory.Exists(vsExtensionsPath))
+                {
+                    searchRoots.Add(vsExtensionsPath);
+                }
+
+                if (searchRoots.Count == 0)
                 {
                     continue;
                 }
 
-                // Find all extension deployments matching ExtensionId
-                var matchingDirs = new List<(DirectoryInfo Dir, DateTime LastWriteTime)>();
-                foreach (DirectoryInfo extDir in extensionsRoot.GetDirectories())
+                // Collect all deployments that declare the same extension ID across both roots.
+                var matchingDirs = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+                foreach (string rootPath in searchRoots)
                 {
-                    string manifestPath = Path.Combine(extDir.FullName, "extension.vsixmanifest");
-                    if (!File.Exists(manifestPath))
+                    foreach (string manifestPath in Directory.EnumerateFiles(rootPath, "extension.vsixmanifest", SearchOption.AllDirectories))
                     {
-                        continue;
-                    }
-
-                    try
-                    {
-                        string manifestContent = File.ReadAllText(manifestPath);
-                        if (manifestContent.Contains("Id=\"" + ExtensionId + "\""))
+                        try
                         {
-                            matchingDirs.Add((extDir, extDir.LastWriteTimeUtc));
+                            string manifestContent = File.ReadAllText(manifestPath);
+                            if (!manifestContent.Contains("Id=\"" + ExtensionId + "\""))
+                            {
+                                continue;
+                            }
+
+                            string candidateDir = Path.GetDirectoryName(manifestPath);
+                            if (string.IsNullOrWhiteSpace(candidateDir))
+                            {
+                                continue;
+                            }
+
+                            string normalizedCandidateDir = Path.GetFullPath(candidateDir)
+                                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                            matchingDirs[normalizedCandidateDir] = Directory.GetLastWriteTimeUtc(normalizedCandidateDir);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.LogWarning("Failed to inspect manifest {0}: {1}", manifestPath, ex.Message);
                         }
                     }
-                    catch (Exception ex)
+                }
+
+                if (matchingDirs.Count > 1)
+                {
+                    string keepDir = matchingDirs
+                        .OrderByDescending(x => x.Value)
+                        .First()
+                        .Key;
+
+                    foreach (string candidateDir in matchingDirs.Keys)
                     {
-                        Log.LogWarning("Failed to read manifest {0}: {1}", manifestPath, ex.Message);
+                        if (StringComparer.OrdinalIgnoreCase.Equals(candidateDir, keepDir))
+                        {
+                            continue;
+                        }
+
+                        try
+                        {
+                            Directory.Delete(candidateDir, recursive: true);
+                            Log.LogMessage(MessageImportance.High, "Removed duplicate extension deployment: {0}", candidateDir);
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.LogWarning("Failed to remove duplicate extension {0}: {1}", candidateDir, ex.Message);
+                        }
                     }
                 }
 
-                if (matchingDirs.Count <= 1)
+                if (Directory.Exists(extensionsPath))
                 {
-                    continue;
-                }
-
-                // Sort by LastWriteTime descending (newest first), keep only the first
-                var sorted = matchingDirs.OrderByDescending(x => x.LastWriteTime).ToList();
-                for (int i = 1; i < sorted.Count; i++)
-                {
+                    // Touch extensions.configurationchanged to invalidate cache
                     try
                     {
-                        Directory.Delete(sorted[i].Dir.FullName, recursive: true);
-                        Log.LogMessage(MessageImportance.High, "Removed duplicate extension deployment: {0}", sorted[i].Dir.FullName);
+                        string changeFile = Path.Combine(extensionsPath, "extensions.configurationchanged");
+                        File.WriteAllText(changeFile, DateTime.UtcNow.ToString("o"));
+                        Log.LogMessage(MessageImportance.High, "Touched extensions.configurationchanged: {0}", changeFile);
                     }
                     catch (Exception ex)
                     {
-                        Log.LogWarning("Failed to remove duplicate extension {0}: {1}", sorted[i].Dir.FullName, ex.Message);
+                        Log.LogWarning("Failed to touch extensions.configurationchanged: {0}", ex.Message);
                     }
-                }
-
-                // Touch extensions.configurationchanged to invalidate cache
-                try
-                {
-                    string changeFile = Path.Combine(extensionsRoot.FullName, "extensions.configurationchanged");
-                    File.WriteAllText(changeFile, DateTime.UtcNow.ToString("o"));
-                    Log.LogMessage(MessageImportance.High, "Touched extensions.configurationchanged: {0}", changeFile);
-                }
-                catch (Exception ex)
-                {
-                    Log.LogWarning("Failed to touch extensions.configurationchanged: {0}", ex.Message);
                 }
             }
         }
@@ -274,6 +415,9 @@
       <RootSuffix ParameterType="System.String" Required="false" />
       <SupportingAssemblies ParameterType="System.String" Required="false" />
       <ExtensionId ParameterType="System.String" Required="false" />
+      <PublisherName ParameterType="System.String" Required="false" />
+      <SidecarName ParameterType="System.String" Required="false" />
+      <SidecarVersion ParameterType="System.String" Required="false" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System.IO" />
@@ -286,6 +430,9 @@
         try
         {
             string rootSuffix = string.IsNullOrEmpty(RootSuffix) ? "Exp" : RootSuffix;
+            string publisherName = string.IsNullOrWhiteSpace(PublisherName) ? "KazushiKamegawa" : PublisherName.Trim();
+            string sidecarName = string.IsNullOrWhiteSpace(SidecarName) ? "ContextRelay.Package" : SidecarName.Trim();
+            string sidecarVersion = string.IsNullOrWhiteSpace(SidecarVersion) ? "0.3.0.0" : SidecarVersion.Trim();
             string expPattern = @"\d+\.\d+_[0-9a-fA-F]+" + Regex.Escape(rootSuffix) + "$";
 
             DirectoryInfo vsAppData = new DirectoryInfo(VsLocalAppData);
@@ -330,28 +477,25 @@
                     ? "ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package"
                     : ExtensionId + ".Package";
 
-                // VS scans extension manifests from immediate child folders under Extensions.
-                // Keep the sidecar flat so its VSSDK pkgdef is merged into the experimental hive.
-                string targetDir = Path.Combine(extensionsPath, "ContextRelay.Package");
+                // Mirror the standard VSIX installer folder layout so Experimental Instance
+                // registration uses the same discovery conventions as an installed extension.
+                string targetDir = Path.Combine(extensionsPath, publisherName, sidecarName, sidecarVersion);
                 string fullTargetDir = Path.GetFullPath(targetDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 var staleSidecarDirs = new List<string>
                 {
+                    Path.Combine(extensionsPath, "ContextRelay.Package"),
                     Path.Combine(legacySubDirPath, "ContextRelay.Package"),
-                    Path.Combine(legacySubDirPath, "KazushiKamegawa", "ContextRelay.Package")
+                    Path.Combine(legacySubDirPath, publisherName, sidecarName),
+                    Path.Combine(extensionsPath, publisherName, sidecarName)
                 };
 
                 foreach (string candidateRoot in new[] { extensionsPath, legacySubDirPath }.Where(Directory.Exists))
                 {
-                    foreach (DirectoryInfo candidateDir in new DirectoryInfo(candidateRoot).GetDirectories())
+                    foreach (string candidateManifest in Directory.EnumerateFiles(candidateRoot, "extension.vsixmanifest", SearchOption.AllDirectories))
                     {
-                        string fullCandidateDir = Path.GetFullPath(candidateDir.FullName).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        string candidateDir = Path.GetDirectoryName(candidateManifest);
+                        string fullCandidateDir = Path.GetFullPath(candidateDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                         if (StringComparer.OrdinalIgnoreCase.Equals(fullCandidateDir, fullTargetDir))
-                        {
-                            continue;
-                        }
-
-                        string candidateManifest = Path.Combine(candidateDir.FullName, "extension.vsixmanifest");
-                        if (!File.Exists(candidateManifest))
                         {
                             continue;
                         }
@@ -360,13 +504,13 @@
                         {
                             string candidateManifestContent = File.ReadAllText(candidateManifest);
                             bool isCurrentSidecar = candidateManifestContent.Contains("Id=\"" + sidecarExtensionId + "\"");
-                            bool isStaleHybridPackage = !string.IsNullOrWhiteSpace(ExtensionId)
-                                && candidateManifestContent.Contains("Id=\"" + ExtensionId + "\"")
-                                && candidateManifestContent.Contains("ContextRelay.VSExtension.Package.pkgdef");
 
-                            if (isCurrentSidecar || isStaleHybridPackage)
+                            // Never treat the main hybrid extension deployment as disposable sidecar content.
+                            // The main extension legitimately references the package pkgdef in its manifest,
+                            // so sidecar cleanup must key off the sidecar extension ID only.
+                            if (isCurrentSidecar)
                             {
-                                staleSidecarDirs.Add(candidateDir.FullName);
+                                staleSidecarDirs.Add(candidateDir);
                             }
                         }
                         catch (Exception ex)
@@ -385,11 +529,18 @@
                     }
                 }
 
-                string stalePublisherDir = Path.Combine(legacySubDirPath, "KazushiKamegawa");
+                string stalePublisherDir = Path.Combine(legacySubDirPath, publisherName);
                 if (Directory.Exists(stalePublisherDir) && !Directory.EnumerateFileSystemEntries(stalePublisherDir).Any())
                 {
                     Directory.Delete(stalePublisherDir);
                     Log.LogMessage(MessageImportance.High, "Removed empty sidecar publisher folder: {0}", stalePublisherDir);
+                }
+
+                string publisherRoot = Path.Combine(extensionsPath, publisherName);
+                if (Directory.Exists(publisherRoot) && !Directory.EnumerateFileSystemEntries(publisherRoot).Any())
+                {
+                    Directory.Delete(publisherRoot);
+                    Log.LogMessage(MessageImportance.High, "Removed empty sidecar publisher root: {0}", publisherRoot);
                 }
 
                 if (Directory.Exists(targetDir))
@@ -441,7 +592,7 @@
                 // Write extension.vsixmanifest
                 string manifestContent = $@"<PackageManifest Version=""2.0.0"" xmlns=""http://schemas.microsoft.com/developer/vsx-schema/2011"">
   <Metadata>
-    <Identity Id=""{sidecarExtensionId}"" Version=""0.3.0.0"" Language=""en-US"" Publisher=""KazushiKamegawa"" />
+    <Identity Id=""{sidecarExtensionId}"" Version=""{sidecarVersion}"" Language=""en-US"" Publisher=""{publisherName}"" />
     <DisplayName>ContextRelay for Visual Studio (Package)</DisplayName>
     <Description xml:space=""preserve"">In-proc VSSDK package for ContextRelay Tools &gt; Options registration.</Description>
   </Metadata>
@@ -485,35 +636,36 @@
                 // If ExtensionId provided, copy supporting assemblies to main extension deployment
                 if (!string.IsNullOrWhiteSpace(ExtensionId))
                 {
-                    DirectoryInfo extensionsRootDir = new DirectoryInfo(extensionsPath);
-                    var mainExtDirs = new List<string>();
+                     var mainExtDirs = new List<string>();
+                     foreach (string rootPath in new[] { extensionsPath, Path.Combine(expDir.FullName, "VSExtensions") }.Where(Directory.Exists))
+                     {
+                         foreach (string mPath in Directory.EnumerateFiles(rootPath, "extension.vsixmanifest", SearchOption.AllDirectories))
+                         {
+                             try
+                             {
+                                 string mContent = File.ReadAllText(mPath);
+                                 if (mContent.Contains("Id=\"" + ExtensionId + "\""))
+                                 {
+                                     string mainExtDir = Path.GetDirectoryName(mPath);
+                                     if (!string.IsNullOrWhiteSpace(mainExtDir))
+                                     {
+                                         mainExtDirs.Add(mainExtDir);
+                                     }
+                                 }
+                             }
+                             catch (Exception ex)
+                             {
+                                 Log.LogWarning("Failed to check manifest {0}: {1}", mPath, ex.Message);
+                             }
+                         }
+                     }
 
-                    foreach (DirectoryInfo dir in extensionsRootDir.GetDirectories())
-                    {
-                        string mPath = Path.Combine(dir.FullName, "extension.vsixmanifest");
-                        if (File.Exists(mPath))
-                        {
-                            try
-                            {
-                                string mContent = File.ReadAllText(mPath);
-                                if (mContent.Contains("Id=\"" + ExtensionId + "\""))
-                                {
-                                    mainExtDirs.Add(dir.FullName);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.LogWarning("Failed to check manifest {0}: {1}", mPath, ex.Message);
-                            }
-                        }
-                    }
-
-                    foreach (string mainExtDir in mainExtDirs)
-                    {
-                        foreach (string assemblyPath in supportingAssemblies)
-                        {
-                            if (File.Exists(assemblyPath))
-                            {
+                     foreach (string mainExtDir in mainExtDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+                     {
+                         foreach (string assemblyPath in supportingAssemblies)
+                         {
+                             if (File.Exists(assemblyPath))
+                             {
                                 string destAssembly = Path.Combine(mainExtDir, Path.GetFileName(assemblyPath));
                                 File.Copy(assemblyPath, destAssembly, overwrite: true);
                                 Log.LogMessage(MessageImportance.High, "Copied dependency -> {0}", destAssembly);

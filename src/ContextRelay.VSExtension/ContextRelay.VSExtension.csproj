@@ -12,10 +12,13 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/kkamegawa/ContextRelayVS</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- Path properties for the in-proc package sidecar deployment.
-         The package is NOT embedded in the VSIX (hybrid mode causes System.Runtime load failures).
-         Instead, it is deployed as a separate extension to the VS Extensions folder so the pkgdef
-         engine discovers it and registers Tools > Options pages. -->
+    <!-- Always launch the debugging target with an explicit activity log path so
+         registration failures are diagnosable even when Visual Studio does not
+         emit its default ActivityLog.xml automatically. -->
+    <VisualStudioActivityLogPath>$([System.IO.Path]::Combine('$(APPDATA)', 'Microsoft', 'VisualStudio', 'ContextRelayVS-Exp-ActivityLog.xml'))</VisualStudioActivityLogPath>
+    <!-- Path properties for the in-proc package registration support.
+         The package remains isolated from the net8 OOP runtime and is deployed
+         as a sidecar for Options registration. -->
     <InProcPackageTargetFramework>net48</InProcPackageTargetFramework>
     <VsixExtensionId>ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11</VsixExtensionId>
     <InProcPackageOutputDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageOutputDir>
@@ -28,14 +31,22 @@
     <None Remove="icon.png" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <StartAction>Program</StartAction>
+    <StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
+    <StartArguments>/rootsuffix Exp /log &quot;$(VisualStudioActivityLogPath)&quot;</StartArguments>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
-    <!-- Build the in-proc package so it is ready for sidecar deployment.
-         ReferenceOutputAssembly=false: we do not reference the net48 DLL from our net8.0 code.
-         No IncludeOutputGroupsInVSIX: the package is NOT bundled in the VSIX. -->
+    <!-- Build the in-proc package for sidecar deployment only.
+         ReferenceOutputAssembly=false keeps the net48 package out of the net8 compile graph. -->
     <ProjectReference Include="..\ContextRelay.VSExtension.Package\ContextRelay.VSExtension.Package.csproj">
       <Name>ContextRelay.VSExtension.Package</Name>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <!-- Explicitly suppress VSIX output groups from the net48 package project reference.
+           This prevents unresolved project-output tokens from leaking into local deployment. -->
+      <IncludeOutputGroupsInVSIX></IncludeOutputGroupsInVSIX>
     </ProjectReference>
   </ItemGroup>
 
@@ -45,6 +56,9 @@
     </Content>
     <Content Include="LICENSE.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="source.extension.vsixmanifest">
+      <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
   </ItemGroup>
 
@@ -85,25 +99,25 @@
   </Target>
 
   <!--
-    Sidecar deployment: copy the in-proc package (pkgdef + DLL + toolkit) to the VS Extensions
-    folder as a separate VSSDK payload, then register the same pkgdef keys in the Experimental
-    Instance hive. This avoids embedding net48 assemblies in the OOP VSIX while keeping
-    Tools > Options available during F5/debug runs.
+    Supplemental debug registration: copy the in-proc package (generated pkgdef + DLL + toolkit)
+    to the Experimental Instance Extensions folder as a separate VSSDK payload using a
+    standard VSIX-like publisher/name/version layout. This keeps F5/debug runs aligned with
+    the packaged VSIX without relying on extra direct hive writes.
     Runs during Debug builds and whenever DeployExtension is true.
   -->
   <Target Name="DeployInProcPackageToExtensions" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' Or '$(DeployExtension)' == 'true'">
     <PropertyGroup>
       <_VsExpSuffix Condition="'$(_VsExpSuffix)' == ''">Exp</_VsExpSuffix>
       <_VsLocalAppData>$(LocalAppData)\Microsoft\VisualStudio</_VsLocalAppData>
-      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
+      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
       <_DllSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.dll'))</_DllSrc>
       <_ToolkitDllSrc>$(InProcToolkitAssemblyPath)</_ToolkitDllSrc>
     </PropertyGroup>
     <ItemGroup>
+      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe')" />
       <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\VsRegEdit.exe')" />
       <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\VsRegEdit.exe')" />
       <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe')" />
       <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VsRegEdit.exe')" />
       <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VsRegEdit.exe')" />
       <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VsRegEdit.exe')" />
@@ -118,7 +132,10 @@
       VsLocalAppData="$(_VsLocalAppData)"
       RootSuffix="$(_VsExpSuffix)"
       SupportingAssemblies="$(_ToolkitDllSrc)"
-      ExtensionId="$(VsixExtensionId)" />
+      ExtensionId="$(VsixExtensionId)"
+      PublisherName="KazushiKamegawa"
+      SidecarName="ContextRelay.Package"
+      SidecarVersion="$(Version)" />
     <Warning Condition="'@(_VsRegEditPath)' == ''" Text="VsRegEdit.exe was not found; skipping direct Experimental Instance options registration." />
     <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; @ string &quot;ContextRelay&quot;" />
     <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; PID string &quot;0.3.0&quot;" />
@@ -150,5 +167,6 @@
     <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; version string &quot;17.0.551.0&quot;" />
     <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; codeBase string &quot;$(_ToolkitDllSrc)&quot;" />
     <Message Importance="High" Condition="'@(_VsRegEditPath)' != ''" Text="Registered ContextRelay options page in the $(_VsExpSuffix) Experimental Instance hives for: @(_VsRegEditPath)" />
+    <Message Importance="High" Text="Deployed the in-proc package sidecar using standard VSIX discovery layout under the Experimental Instance Extensions folder." />
   </Target>
 </Project>
