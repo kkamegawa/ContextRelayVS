@@ -83,12 +83,6 @@ dotnet build ContextRelayVS.sln -v minimal
 dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj -v minimal
 ```
 
-```bash
-pwsh -File ./build/Invoke-PackageAudit.ps1 -SolutionPath ./ContextRelayVS.sln
-dotnet build ./ContextRelayVS.sln -v minimal
-dotnet test ./tests/ContextRelay.Core.Tests/ContextRelay.Core.Tests.csproj -v minimal
-```
-
 ## Usage quick start
 
 Plain text input starts or continues Microsoft 365 Copilot chat in the tool window without implicit source search.
