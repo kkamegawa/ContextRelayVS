@@ -315,7 +315,7 @@ public sealed class AdapterTests
                       "title": "Security check",
                       "body": {
                         "contentType": "html",
-                        "content": "<style>.x{color:red;}</style><script>alert('xss')</script><p>Keep visible content.</p>"
+                        "content": "<style>.x{color:red;}</style>&lt;script&gt;alert('encoded')&lt;/script&gt;<script>alert('xss')</script><p>Keep visible content.</p>"
                       },
                       "createdDateTime": "2026-04-19T09:00:00Z"
                     }
@@ -329,6 +329,7 @@ public sealed class AdapterTests
         Assert.Single(results);
         Assert.Contains("Keep visible content.", results[0].Snippet);
         Assert.DoesNotContain("alert('xss')", results[0].Snippet);
+        Assert.DoesNotContain("alert('encoded')", results[0].Snippet);
         Assert.DoesNotContain(".x{color:red;}", results[0].Snippet);
     }
 

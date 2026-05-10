@@ -16,6 +16,11 @@ public sealed class TodoSearchAdapter : IContextSearchAdapter
     private const int MaxConcurrentListRequests = 4;
     private const int MaxListsPerQuery = 8;
     private const int MaxTotalTasksPerQuery = 80;
+    private static readonly TimeSpan HtmlNormalizationTimeout = TimeSpan.FromMilliseconds(250);
+    private static readonly Regex ScriptBlockRegex = new Regex("<script\\b[^>]*>.*?</script>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex StyleBlockRegex = new Regex("<style\\b[^>]*>.*?</style>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex HtmlTagRegex = new Regex("<[^>]+>", RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex WhitespaceRegex = new Regex("\\s+", RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
 
     private readonly GraphHttpClient graphClient;
 
@@ -228,14 +233,28 @@ public sealed class TodoSearchAdapter : IContextSearchAdapter
 
         if (string.Equals(body?.ContentType, "html", StringComparison.OrdinalIgnoreCase))
         {
-            content = Regex.Replace(content, "<script\\b[^>]*>.*?</script>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            content = Regex.Replace(content, "<style\\b[^>]*>.*?</style>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            content = Regex.Replace(content, "<[^>]+>", " ");
             content = System.Net.WebUtility.HtmlDecode(content);
+            try
+            {
+                content = ScriptBlockRegex.Replace(content, " ");
+                content = StyleBlockRegex.Replace(content, " ");
+                content = HtmlTagRegex.Replace(content, " ");
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return string.Empty;
+            }
         }
 
-        content = Regex.Replace(content, @"\s+", " ");
-        return content.Trim();
+        try
+        {
+            content = WhitespaceRegex.Replace(content, " ");
+            return content.Trim();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return string.Empty;
+        }
     }
 
     private static string? FormatDueDate(TodoDateTimeTimeZone? value)
