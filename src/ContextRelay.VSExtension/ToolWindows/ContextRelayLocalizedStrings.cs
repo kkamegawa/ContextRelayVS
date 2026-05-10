@@ -98,6 +98,16 @@ internal static class ContextRelayLocalizedStrings
     public static string ReplaceAssistantButtonText => GetString("ReplaceAssistantButtonText");
     public static string ContextLabelsPrefixText => GetString("ContextLabelsPrefixText");
     public static string NoResultsFoundStatus => GetString("NoResultsFoundStatus");
+    public static string SourceLabelMail => GetString("SourceLabel_mail");
+    public static string SourceLabelTeams => GetString("SourceLabel_teams");
+    public static string SourceLabelSharePoint => GetString("SourceLabel_sharepoint");
+    public static string SourceLabelOneDrive => GetString("SourceLabel_onedrive");
+    public static string SourceLabelOneNote => GetString("SourceLabel_onenote");
+    public static string SourceLabelPlanner => GetString("SourceLabel_planner");
+    public static string SourceLabelTodo => GetString("SourceLabel_todo");
+    public static string SourceLabelConnectors => GetString("SourceLabel_connectors");
+    public static string SourceLabelAll => GetString("SourceLabel_all");
+    public static string SourceLabelDefault => GetString("SourceLabel_default");
     public static string TypeQueryStatus => GenericHelpText;
 
     public static bool IsReadyStatus(string? statusMessage)

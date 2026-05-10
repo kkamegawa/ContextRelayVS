@@ -527,6 +527,11 @@ internal sealed class ContextRelayHost : IDisposable
 
     public void OpenExternalUrl(string? url)
     {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+
         if (!ExternalUrlSafety.TryNormalizeExternalUrl(url, out var safeUrl))
         {
             logger.LogWarning("Blocked unsafe external URL open attempt.");

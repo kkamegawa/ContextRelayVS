@@ -98,4 +98,14 @@
   <data name="CommandDescription_clear" xml:space="preserve"><value>現在のチャット履歴とピン留めスニペットをクリアします。</value></data>
   <data name="LanguageDisplay_shellscript" xml:space="preserve"><value>Shell スクリプト</value></data>
   <data name="LanguageDisplay_plaintext" xml:space="preserve"><value>プレーン テキスト</value></data>
+  <data name="SourceLabel_mail" xml:space="preserve"><value>Exchange メール</value></data>
+  <data name="SourceLabel_teams" xml:space="preserve"><value>Teams</value></data>
+  <data name="SourceLabel_sharepoint" xml:space="preserve"><value>SharePoint</value></data>
+  <data name="SourceLabel_onedrive" xml:space="preserve"><value>OneDrive</value></data>
+  <data name="SourceLabel_onenote" xml:space="preserve"><value>OneNote</value></data>
+  <data name="SourceLabel_planner" xml:space="preserve"><value>Planner</value></data>
+  <data name="SourceLabel_todo" xml:space="preserve"><value>Microsoft To Do</value></data>
+  <data name="SourceLabel_connectors" xml:space="preserve"><value>コネクタ</value></data>
+  <data name="SourceLabel_all" xml:space="preserve"><value>すべてのソース</value></data>
+  <data name="SourceLabel_default" xml:space="preserve"><value>ソース</value></data>
 </root>

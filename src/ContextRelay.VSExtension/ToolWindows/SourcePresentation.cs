@@ -10,18 +10,18 @@ internal static class SourcePresentation
 {
     private const string FallbackIcon = "📎";
 
-    private static readonly IReadOnlyDictionary<string, string> SourceLabels =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly IReadOnlyDictionary<string, Func<string>> SourceLabels =
+        new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["mail"] = "Exchange Mail",
-            ["teams"] = "Teams",
-            ["sharepoint"] = "SharePoint",
-            ["onedrive"] = "OneDrive",
-            ["onenote"] = "OneNote",
-            ["planner"] = "Planner",
-            ["todo"] = "Microsoft To Do",
-            ["connectors"] = "Connectors",
-            ["all"] = "All Sources",
+            ["mail"] = () => ContextRelayLocalizedStrings.SourceLabelMail,
+            ["teams"] = () => ContextRelayLocalizedStrings.SourceLabelTeams,
+            ["sharepoint"] = () => ContextRelayLocalizedStrings.SourceLabelSharePoint,
+            ["onedrive"] = () => ContextRelayLocalizedStrings.SourceLabelOneDrive,
+            ["onenote"] = () => ContextRelayLocalizedStrings.SourceLabelOneNote,
+            ["planner"] = () => ContextRelayLocalizedStrings.SourceLabelPlanner,
+            ["todo"] = () => ContextRelayLocalizedStrings.SourceLabelTodo,
+            ["connectors"] = () => ContextRelayLocalizedStrings.SourceLabelConnectors,
+            ["all"] = () => ContextRelayLocalizedStrings.SourceLabelAll,
         };
 
     private static readonly IReadOnlyDictionary<string, string> SourceIcons =
@@ -58,12 +58,12 @@ internal static class SourcePresentation
     {
         if (string.IsNullOrWhiteSpace(source))
         {
-            return "Source";
+            return ContextRelayLocalizedStrings.SourceLabelDefault;
         }
 
-        if (SourceLabels.TryGetValue(source, out var label))
+        if (SourceLabels.TryGetValue(source, out var labelFactory))
         {
-            return label;
+            return labelFactory();
         }
 
         return $"{char.ToUpperInvariant(source[0])}{source.Substring(1)}";
