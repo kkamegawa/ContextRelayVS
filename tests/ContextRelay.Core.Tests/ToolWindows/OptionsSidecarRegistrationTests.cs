@@ -62,9 +62,8 @@ public sealed class OptionsSidecarRegistrationTests
         Assert.DoesNotContain("<Link>Community.VisualStudio.Toolkit.dll</Link>", extensionProject, StringComparison.Ordinal);
         Assert.Contains("PublisherName=\"KazushiKamegawa\"", extensionProject, StringComparison.Ordinal);
         Assert.Contains("SidecarVersion=\"$(Version)\"", extensionProject, StringComparison.Ordinal);
-        Assert.DoesNotContain("VsRegEdit.exe", extensionProject, StringComparison.Ordinal);
-        Assert.Contains("ContextRelay.Core.dll", extensionProject, StringComparison.Ordinal);
-        Assert.Contains("System.Text.Json.dll", extensionProject, StringComparison.Ordinal);
+        Assert.Contains("VsRegEdit.exe", extensionProject, StringComparison.Ordinal);
+        Assert.Contains(@"ToolsOptionsPages\ContextRelay", extensionProject, StringComparison.Ordinal);
         Assert.DoesNotContain("ExtensionType=\"VSSDK+VisualStudio.Extensibility\"", manifest, StringComparison.Ordinal);
         Assert.Contains("<GeneratePkgDefFile>true</GeneratePkgDefFile>", packageProject, StringComparison.Ordinal);
         Assert.Contains("VisualStudioActivityLogPath", packageProject, StringComparison.Ordinal);
@@ -81,7 +80,7 @@ public sealed class OptionsSidecarRegistrationTests
     }
 
     [Fact]
-    public void StaticPkgdef_IsThePrimaryDeploymentSource()
+    public void StaticPkgdef_IsNotTheOnlyRegistrationPath()
     {
         var pkgdefPath = ResolveRepositoryFile(
             "src",
@@ -96,16 +95,15 @@ public sealed class OptionsSidecarRegistrationTests
         Assert.Contains("[$RootKey$\\ToolsOptionsPages\\ContextRelay\\General]", pkgdef, StringComparison.Ordinal);
         Assert.Contains("\"Page\"=\"{68a2d2d2-54f0-4d97-9ae7-861330f6231f}\"", pkgdef, StringComparison.Ordinal);
         Assert.Contains("\"IsInUnifiedSettings\"=dword:00000000", pkgdef, StringComparison.Ordinal);
-
         var extensionProjectPath = ResolveRepositoryFile(
             "src",
             "ContextRelay.VSExtension",
             "ContextRelay.VSExtension.csproj");
         var extensionProject = File.ReadAllText(extensionProjectPath);
 
-        // The deployment target reads the static pkgdef directly from the project directory.
-        Assert.Contains("ContextRelay.VSExtension.Package', 'ContextRelay.VSExtension.Package.pkgdef'", extensionProject, StringComparison.Ordinal);
-        Assert.DoesNotContain("VsRegEdit.exe", extensionProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackagePkgdefPath", extensionProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef", extensionProject, StringComparison.Ordinal);
+        Assert.Contains("VsRegEdit.exe", extensionProject, StringComparison.Ordinal);
     }
 
     private static string ResolveRepositoryFile(params string[] pathSegments)
