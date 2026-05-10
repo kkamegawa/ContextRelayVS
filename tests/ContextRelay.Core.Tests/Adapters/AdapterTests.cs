@@ -273,7 +273,7 @@ public sealed class AdapterTests
                 """),
             CreateResponse(HttpStatusCode.OK, """
                 {
-                  "description": "<script>alert('x')</script><p>Finish the <strong>onboarding</strong> release plan.</p>",
+                  "description": "<script>alert('x')</script>&lt;script&gt;alert('encoded')&lt;/script&gt;<p>Finish the <strong>onboarding</strong> release plan.</p>",
                   "checklist": {
                     "item-1": { "title": "<style>.x{color:red;}</style><span>Collect approvals</span>" }
                   }
@@ -293,6 +293,7 @@ public sealed class AdapterTests
         Assert.Contains("Finish the onboarding release plan.", results[0].Snippet);
         Assert.Contains("Checklist: Collect approvals", results[0].Snippet);
         Assert.DoesNotContain("alert('x')", results[0].Snippet);
+        Assert.DoesNotContain("alert('encoded')", results[0].Snippet);
         Assert.DoesNotContain(".x{color:red;}", results[0].Snippet);
     }
 

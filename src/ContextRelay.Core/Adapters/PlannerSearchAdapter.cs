@@ -13,6 +13,12 @@ namespace ContextRelay.Core.Adapters;
 
 public sealed class PlannerSearchAdapter : IContextSearchAdapter
 {
+    private static readonly TimeSpan HtmlNormalizationTimeout = TimeSpan.FromMilliseconds(250);
+    private static readonly Regex ScriptBlockRegex = new Regex("<script\\b[^>]*>.*?</script>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex StyleBlockRegex = new Regex("<style\\b[^>]*>.*?</style>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex HtmlTagRegex = new Regex("<[^>]+>", RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex WhitespaceRegex = new Regex("\\s+", RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+
     private readonly GraphHttpClient graphClient;
 
     public PlannerSearchAdapter(GraphHttpClient? graphClient = null)
@@ -285,12 +291,19 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
             return string.Empty;
         }
 
-        content = Regex.Replace(content, "<script\\b[^>]*>.*?</script>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        content = Regex.Replace(content, "<style\\b[^>]*>.*?</style>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        content = Regex.Replace(content, "<[^>]+>", " ");
         content = System.Net.WebUtility.HtmlDecode(content);
-        content = Regex.Replace(content, @"\s+", " ");
-        return content.Trim();
+        try
+        {
+            content = ScriptBlockRegex.Replace(content, " ");
+            content = StyleBlockRegex.Replace(content, " ");
+            content = HtmlTagRegex.Replace(content, " ");
+            content = WhitespaceRegex.Replace(content, " ");
+            return content.Trim();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return string.Empty;
+        }
     }
 
     private static int ComputePlannerScore(
