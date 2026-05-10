@@ -204,6 +204,35 @@ public sealed class AdapterTests
     }
 
     [Fact]
+    public async Task OneNoteSearchAdapter_DropsUnsafePageUrl()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    {
+                      "id": "page-unsafe",
+                      "title": "Unsafe link note",
+                      "createdDateTime": "2026-04-19T10:00:00Z",
+                      "lastModifiedDateTime": "2026-04-19T12:00:00Z",
+                      "links": { "oneNoteWebUrl": { "href": "javascript:alert(1)" } }
+                    }
+                  ]
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                { "previewText": "This page has an unsafe link." }
+                """)));
+
+        var adapter = new OneNoteSearchAdapter(new GraphHttpClient(httpClient));
+        var results = await adapter.SearchAsync("token", "unsafe", 10, cancellationToken);
+
+        Assert.Single(results);
+        Assert.Null(results[0].Url);
+    }
+
+    [Fact]
     public async Task PlannerSearchAdapter_IncludesMetadataAndCommentFallbackText()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

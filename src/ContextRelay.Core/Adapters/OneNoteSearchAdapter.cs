@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.Utilities;
 
 namespace ContextRelay.Core.Adapters;
 
@@ -164,7 +165,7 @@ public sealed class OneNoteSearchAdapter : IContextSearchAdapter
             Source = ContextSource.OneNote,
             Title = string.IsNullOrWhiteSpace(page.Title) ? "Untitled page" : page.Title!.Trim(),
             Snippet = snippet,
-            Url = page.Links?.OneNoteWebUrl?.Href,
+            Url = GetSafePageUrl(page),
             Timestamp = page.LastModifiedDateTime ?? page.CreatedDateTime,
             Cache = new ContextItemCacheInfo { Hit = false },
             Metadata = new Dictionary<string, string>
@@ -176,6 +177,12 @@ public sealed class OneNoteSearchAdapter : IContextSearchAdapter
                 ["previewText"] = candidate.PreviewText
             }
         };
+    }
+
+    private static string? GetSafePageUrl(OneNotePage page)
+    {
+        var candidate = page.Links?.OneNoteWebUrl?.Href;
+        return ExternalUrlSafety.TryNormalizeExternalUrl(candidate, out var safeUrl) ? safeUrl : null;
     }
 
     private static DateTimeOffset ParseTimestamp(string? value)
