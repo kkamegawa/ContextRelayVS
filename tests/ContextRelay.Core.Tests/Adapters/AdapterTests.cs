@@ -253,6 +253,50 @@ public sealed class AdapterTests
     }
 
     [Fact]
+    public async Task PlannerSearchAdapter_NormalizesHtmlInDescriptionAndChecklist()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    {
+                      "id": "task-1",
+                      "title": "Release onboarding checklist",
+                      "planId": "plan-1",
+                      "bucketId": "bucket-1",
+                      "hasDescription": true,
+                      "createdDateTime": "2026-04-19T09:00:00Z"
+                    }
+                  ]
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "description": "<script>alert('x')</script><p>Finish the <strong>onboarding</strong> release plan.</p>",
+                  "checklist": {
+                    "item-1": { "title": "<style>.x{color:red;}</style><span>Collect approvals</span>" }
+                  }
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                { "id": "plan-1", "title": "Product Plan" }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                { "id": "bucket-1", "name": "Sprint Backlog" }
+                """)));
+
+        var adapter = new PlannerSearchAdapter(new GraphHttpClient(httpClient));
+        var results = await adapter.SearchAsync("token", "metadata onboarding", 10, cancellationToken);
+
+        Assert.Single(results);
+        Assert.Contains("Finish the onboarding release plan.", results[0].Snippet);
+        Assert.Contains("Checklist: Collect approvals", results[0].Snippet);
+        Assert.DoesNotContain("alert('x')", results[0].Snippet);
+        Assert.DoesNotContain(".x{color:red;}", results[0].Snippet);
+    }
+
+    [Fact]
     public async Task TodoSearchAdapter_IncludesListMetadataAndNormalizesHtmlBody()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

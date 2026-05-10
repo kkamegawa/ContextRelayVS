@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Models;
@@ -41,7 +42,7 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
         var candidates = tasks.Select(task =>
         {
             var details = task.Id is not null && detailsMap.TryGetValue(task.Id, out var d) ? d : null;
-            var description = details?.Description?.Trim() ?? string.Empty;
+            var description = NormalizePlannerText(details?.Description);
             var checklistTitles = ExtractChecklistTitles(details);
             var planTitle = task.PlanId is not null && planTitles.TryGetValue(task.PlanId, out var pt) ? pt : null;
             var bucketName = task.BucketId is not null && bucketNames.TryGetValue(task.BucketId, out var bn) ? bn : null;
@@ -271,9 +272,25 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
         }
 
         return details.Checklist.Values
-            .Select(item => item.Title?.Trim() ?? string.Empty)
+            .Select(item => NormalizePlannerText(item.Title))
             .Where(title => title.Length > 0)
             .ToArray();
+    }
+
+    private static string NormalizePlannerText(string? value)
+    {
+        var content = value?.Trim() ?? string.Empty;
+        if (content.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        content = Regex.Replace(content, "<script\\b[^>]*>.*?</script>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        content = Regex.Replace(content, "<style\\b[^>]*>.*?</style>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        content = Regex.Replace(content, "<[^>]+>", " ");
+        content = System.Net.WebUtility.HtmlDecode(content);
+        content = Regex.Replace(content, @"\s+", " ");
+        return content.Trim();
     }
 
     private static int ComputePlannerScore(
