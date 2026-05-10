@@ -48,6 +48,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
+        ConfirmQueryInputCommand = new AsyncCommand(async (_, ct) => await ConfirmQueryInputAsync(ct).ConfigureAwait(false));
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
     }
 
@@ -98,6 +99,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand MoveSelectionDownCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
+    [DataMember] public AsyncCommand ConfirmQueryInputCommand { get; }
     [DataMember] public AsyncCommand CloseCommandPopupCommand { get; }
 
     [DataMember]
@@ -342,6 +344,16 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, ct).ConfigureAwait(false); }).ConfigureAwait(false);
     }
 
+    private async Task ConfirmQueryInputAsync(CancellationToken ct)
+    {
+        if (ApplySelectedCommandSuggestion())
+        {
+            return;
+        }
+
+        await SubmitAsync(ct).ConfigureAwait(false);
+    }
+
     private async Task RunBusyAsync(Func<Task> action)
     {
         if (isBusy)
@@ -385,12 +397,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private bool ApplySelectedCommandSuggestion()
     {
-        if (selectedCommandSuggestion is null)
+        return ApplyCommandSuggestion(selectedCommandSuggestion);
+    }
+
+    private bool ApplyCommandSuggestion(SlashCommandSuggestion? suggestion)
+    {
+        if (!SlashCommandSuggestion.TryBuildCommittedQuery(IsCommandPopupOpen, suggestion, out var committedQuery))
         {
             return false;
         }
 
-        QueryText = $"{selectedCommandSuggestion.Name} ";
+        SelectedCommandSuggestion = suggestion;
+        QueryText = committedQuery;
         CloseCommandPopup();
         return true;
     }
@@ -398,7 +416,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private void UpdateCommandSuggestions()
     {
         var suggestions = ContextRelayLocalizedStrings.GetCommandSuggestions(QueryText);
-        CommandSuggestions = suggestions.ToArray();
+        CommandSuggestions = suggestions
+            .Select(CreateInteractiveSuggestion)
+            .ToArray();
         SelectedCommandSuggestion = commandSuggestions.Count > 0 ? commandSuggestions[0] : null;
         IsCommandPopupOpen = commandSuggestions.Count > 0;
     }
@@ -448,6 +468,26 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
         SelectedCommandSuggestion = null;
         IsCommandPopupOpen = false;
+    }
+
+    private SlashCommandSuggestion CreateInteractiveSuggestion(SlashCommandSuggestion suggestion)
+    {
+        ArgumentNullException.ThrowIfNull(suggestion);
+
+        var interactiveSuggestion = new SlashCommandSuggestion
+        {
+            Icon = suggestion.Icon,
+            Name = suggestion.Name,
+            Description = suggestion.Description
+        };
+
+        interactiveSuggestion.ApplyCommand = new AsyncCommand((_, _) =>
+        {
+            ApplyCommandSuggestion(interactiveSuggestion);
+            return Task.CompletedTask;
+        });
+
+        return interactiveSuggestion;
     }
 
     private static int IndexOf<T>(IReadOnlyList<T> list, T item)

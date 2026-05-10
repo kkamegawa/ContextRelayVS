@@ -34,6 +34,15 @@
             <Setter Property="CaretBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
         </Style>
 
+        <Style x:Key="SuggestionButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+
         <Style x:Key="ThemedTabItemStyle" TargetType="TabItem">
             <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTabTextBrushKey}}" />
             <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTabGradientBrushKey}}" />
@@ -228,21 +237,23 @@
                     Visibility="{Binding IsCommandPopupOpen, Converter={StaticResource BoolToVisConverter}}">
                 <StackPanel>
                     <TextBlock Margin="8,6,8,4" FontWeight="SemiBold" Text="{Binding CommandPopupHeaderText}" Style="{StaticResource MutedTextStyle}" />
-                    <ListBox Style="{StaticResource ThemedListBoxStyle}" MaxHeight="220" BorderThickness="0"
-                             ItemsSource="{Binding CommandSuggestions}"
-                             SelectedItem="{Binding SelectedCommandSuggestion, Mode=TwoWay}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Margin="8,4">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding Icon}" Margin="0,0,4,0" />
-                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
-                                    </StackPanel>
-                                    <TextBlock Margin="0,2,0,0" Text="{Binding Description}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                     <ListBox Style="{StaticResource ThemedListBoxStyle}" MaxHeight="220" BorderThickness="0"
+                              ItemsSource="{Binding CommandSuggestions}"
+                              SelectedItem="{Binding SelectedCommandSuggestion, Mode=TwoWay}">
+                         <ListBox.ItemTemplate>
+                             <DataTemplate>
+                                 <Button Style="{StaticResource SuggestionButtonStyle}" Command="{Binding ApplyCommand}">
+                                     <StackPanel Margin="8,4">
+                                         <StackPanel Orientation="Horizontal">
+                                             <TextBlock Text="{Binding Icon}" Margin="0,0,4,0" />
+                                             <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                         </StackPanel>
+                                         <TextBlock Margin="0,2,0,0" Text="{Binding Description}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
+                                     </StackPanel>
+                                 </Button>
+                             </DataTemplate>
+                         </ListBox.ItemTemplate>
+                     </ListBox>
                 </StackPanel>
             </Border>
 
@@ -252,7 +263,7 @@
                      Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
                      ToolTip="{Binding SearchToolTipText}">
                 <TextBox.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                    <KeyBinding Key="Enter" Command="{Binding ConfirmQueryInputCommand}" />
                     <KeyBinding Key="Down" Command="{Binding MoveSelectionDownCommand}" />
                     <KeyBinding Key="Up" Command="{Binding MoveSelectionUpCommand}" />
                     <KeyBinding Key="Tab" Command="{Binding ApplyCommandSelectionCommand}" />
