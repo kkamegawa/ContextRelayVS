@@ -14,6 +14,7 @@ This skill is for diagnosing why a Visual Studio extension's Tools > Options pag
 3. If no log file exists, relaunch the target instance with an explicit `/log` path.
 4. Inspect the built VSIX for `Microsoft.VisualStudio.VsPackage`, the package DLL, and the package pkgdef.
 5. Compare the current build wiring against the known-good PR #36 path before changing registration again.
+6. **Do not** propose or apply a hand-placed extension folder under `%LOCALAPPDATA%\...\Extensions\Publisher\...\` as a debug shortcut. That path is silently ignored on Visual Studio Insiders v18 and produced a real regression (PR #57). The fix is always to ship the in-proc Package inside the main VSIX.
 
 Use these sample scripts first:
 
@@ -31,17 +32,30 @@ Do not assume the visible Visual Studio window is the Experimental Instance. Alw
 
 Visual Studio only writes `ActivityLog.xml` to disk for sessions launched with `/log`. If the expected log file is missing, treat that as an investigation blocker and relaunch with an explicit path such as `%APPDATA%\Microsoft\VisualStudio\ContextRelayVS-Exp-ActivityLog.xml`.
 
-### Main VSIX registration and sidecar registration are different paths
+### Sidecar drop-in registration does NOT work on Visual Studio Insiders v18 — never reintroduce it
 
-ContextRelay currently uses both:
+**Proven by ActivityLog evidence on this repository (PR #57, May 2026).** On Visual Studio 18 Insiders (`/RootSuffix Exp`), hand-placing an extension folder under `%LOCALAPPDATA%\Microsoft\VisualStudio\<root>\Extensions\Publisher\ExtensionName\Version\` is silently ignored by the Extension Manager — even when the folder contains a valid `extension.vsixmanifest`, a valid pkgdef, and all required DLLs. The pkgdef is never merged into `privateregistry.bin`, and no diagnostic is emitted.
 
-- a main VSIX path, where the built extension package must include:
-  - `Microsoft.VisualStudio.VsPackage` in `extension.vsixmanifest`
-  - `ContextRelay.VSExtension.Package.pkgdef`
-  - `ContextRelay.VSExtension.Package.dll`
-- a debug sidecar path, where the in-proc package is copied under the VS profile `Extensions` folder using a standard `Publisher\ExtensionName\Version` layout so Visual Studio can discover it like a normal installed VSIX
+Concrete evidence collected from a clean `/log` Exp launch:
 
-Do not treat one path as proof that the other is healthy.
+| Signal | Observation |
+|---|---|
+| ActivityLog record for `PkgDefSearchPath` | Lists only `Program Files\...\Common7\IDE\Extensions`, `...\CommonExtensions`, and `devenv.admin.pkgdef`. The per-user Exp `Extensions` folder is **absent**. |
+| ActivityLog record for `ImageManifestSearchPath` | **Does** include the per-user Exp `Extensions` folder. Image discovery and pkgdef discovery use different roots. |
+| Extension Manager log entries | Only emits warnings for preinstalled disabled extensions; emits **nothing** about a hand-placed sidecar folder. The sidecar is not enumerated at all. |
+| `privateregistry.bin` after the launch | Contains zero occurrences of the sidecar's Package GUID, class name, or any sidecar string in any encoding. |
+| `HKCU\Software\Microsoft\VisualStudio\<root>_Config\` | No keys for the sidecar's Package GUID or Options pages. |
+
+**Conclusion**: the only supported registration path is to ship the in-proc Package **inside the main VSIX** so the Extension Manager itself performs the install (`VSIXInstaller.exe` or F5 deploy). Marketplace install and F5 must use the **same single VSIX**. Do not write to `%LOCALAPPDATA%\...\Extensions\` by hand, do not author a "debug-only sidecar," and do not split the in-proc Package into a separate deployable folder. Any future agent that proposes a sidecar must first reproduce the ActivityLog evidence above and prove that VS v18's behavior has changed.
+
+The main VSIX must include:
+
+- `Microsoft.VisualStudio.VsPackage` asset in `extension.vsixmanifest` pointing at the package pkgdef
+- `ContextRelay.VSExtension.Package.pkgdef` (VSSDK-generated, never a static checked-in copy)
+- `ContextRelay.VSExtension.Package.dll`
+- `Community.VisualStudio.Toolkit.dll` beside the package DLL
+
+The main extension manifest must declare `ExtensionType="VSSDK+VisualStudio.Extensibility"` (this is the same pattern Microsoft's own preinstalled `Microsoft.VisualStudio.Copilot.Testing.UI` uses on Insiders v18) so the single VSIX carries both the net8 OOP extension and the net48 in-proc Package.
 
 ### Sync install targets from the source manifest after detokenization
 
@@ -155,20 +169,24 @@ If this message is present, the options category can still appear while the prop
    - If the options node is visible but the page fails to load, search first for `No InprocServer32 registered for package [ContextRelayOptionsPackage]`.
    - If editor components are involved, also inspect `%LOCALAPPDATA%\Microsoft\VisualStudio\<version>\ComponentModelCache\Microsoft.VisualStudio.Default.err`.
 6. **Fallback registration**
-   - Only after the above, inspect sidecar deployment for the matching instance.
    - Do not use `VsRegEdit.exe` to replay pkgdef-style macro values like `$WinDir$\SYSTEM32\MSCOREE.DLL`; pkgdef macros are expanded by the pkgdef engine, not by `VsRegEdit.exe`.
+   - Do not hand-place a sidecar folder under `%LOCALAPPDATA%\...\Extensions\Publisher\...\`. VS Insiders v18 ignores that layout (see "Sidecar drop-in registration does NOT work…" above). The only supported debug path is `VSIXInstaller.exe /rootSuffix:Exp <built.vsix>` or the equivalent F5 deploy.
 
 ## Repository-Specific Notes
 
 - The current running VS can be a normal Insiders instance even while development work targets `Exp`.
-- The main extension is net8 OOP and the options package is net48 in-proc.
+- The main extension is net8 OOP and the options package is net48 in-proc; both ship in a single VSIX.
 - Reintroducing hybrid in-proc hosting for the OOP tool window provider causes `System.Runtime, Version=8.0.0.0` load failures.
-- The current repo now sets `StartArguments` with `/rootsuffix Exp /log "$(VisualStudioActivityLogPath)"` in both the main extension project and the package project so F5 sessions emit a deterministic log file.
+- Do not set `VssdkcompatibleExtension=true` on the main extension project — that property forces VSSDK in-proc hosting onto the net8 assembly and breaks the OOP host (regression seen in PR #43).
+- The current repo sets `StartArguments` with `/rootsuffix Exp /log "$(VisualStudioActivityLogPath)"` in both the main extension project and the package project so F5 sessions emit a deterministic log file.
 - Another known ContextRelay regression signature is `No InprocServer32 registered for package [ContextRelayOptionsPackage]`, which means the options node may be visible while the page itself still cannot load.
 - The packaged VSIX manifest must preserve Community, Pro, and Enterprise install targets by syncing `Installation`, `Dependencies`, and `Prerequisites` from `source.extension.vsixmanifest` after detokenization.
 - Community, Professional, and Enterprise SKU support is a hard requirement for this repository. Do not merge a fix until all three targets remain present in the packaged manifest and the runtime path is consistent with that manifest.
 - The main VSIX must include `Community.VisualStudio.Toolkit.dll` beside `ContextRelay.VSExtension.Package.dll`; otherwise `ContextRelayOptionsPackage` can fail to load even when pkgdef registration itself is present.
-- The Experimental sidecar should live under `Extensions\KazushiKamegawa\ContextRelay.Package\<version>` so debug deployment follows the same discovery conventions as a normal installed extension.
+- The main extension's `source.extension.vsixmanifest` must use `ExtensionType="VSSDK+VisualStudio.Extensibility"` so a single VSIX carries both the net8 OOP extension and the net48 in-proc Package.
+- The main extension's `source.extension.vsixmanifest` must never carry `Version="0.0.0.0"`; assert real product version at build time.
+- Any project-output-group reference in the VSIX inclusion list must resolve to file paths at build time. If the produced `extension.vsixmanifest` contains literal `|...|` tokens such as `%CurrentProject%;PkgdefProjectOutputGroup`, the build must fail. Leaking such tokens produces ActivityLog errors like `Invalid path found for content "|%CurrentProject%;PkgdefProjectOutputGroup|"`.
+- Do not introduce a debug-only sidecar deploy that copies the in-proc Package outside the main VSIX. F5 deploy and Marketplace install must produce and consume the **same** VSIX through the Extension Manager. See "Sidecar drop-in registration does NOT work on Visual Studio Insiders v18" above.
 
 ## Learn More
 
