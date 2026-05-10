@@ -110,17 +110,17 @@ public sealed class ContextRelaySettingsSnapshot
     /// <summary>
     /// Gets or sets a value indicating whether OneNote search is enabled.
     /// </summary>
-    public bool OneNoteEnabled { get; set; }
+    public bool OneNoteEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Planner search is enabled.
     /// </summary>
-    public bool PlannerEnabled { get; set; }
+    public bool PlannerEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Microsoft To Do search is enabled.
     /// </summary>
-    public bool TodoEnabled { get; set; }
+    public bool TodoEnabled { get; set; } = true;
 
     /// <summary>
     /// Converts the settings into authentication settings.

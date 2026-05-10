@@ -170,7 +170,10 @@
                                             </Grid.RowDefinitions>
                                             <DockPanel Grid.Row="0">
                                                 <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
-                                                <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Text="{Binding Source}" Style="{StaticResource MutedTextStyle}" />
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                                                    <TextBlock Text="{Binding SourceIcon}" Margin="0,0,4,0" Style="{StaticResource MutedTextStyle}" />
+                                                    <TextBlock Text="{Binding SourceLabel}" Style="{StaticResource MutedTextStyle}" />
+                                                </StackPanel>
                                             </DockPanel>
                                             <TextBlock Grid.Row="1" Margin="0,4,0,0" Text="{Binding Snippet}" TextWrapping="Wrap" />
                                             <StackPanel Grid.Row="2" Margin="0,6,0,0" Orientation="Horizontal">
@@ -194,7 +197,8 @@
                                             <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
                                             <TextBlock Margin="0,2,0,0" Text="{Binding Snippet}" TextWrapping="Wrap" />
                                             <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
-                                                <TextBlock Margin="0,0,12,0" Text="{Binding Source}" Style="{StaticResource MutedTextStyle}" />
+                                                <TextBlock Margin="0,0,4,0" Text="{Binding SourceIcon}" Style="{StaticResource MutedTextStyle}" />
+                                                <TextBlock Margin="0,0,12,0" Text="{Binding SourceLabel}" Style="{StaticResource MutedTextStyle}" />
                                                 <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}" />
                                                 <Button Style="{StaticResource ThemedButtonStyle}" Padding="8,2" Content="{Binding DeleteButtonText}" Command="{Binding DeleteCommand}" />
                                             </StackPanel>
@@ -230,7 +234,10 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="8,4">
-                                    <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Icon}" Margin="0,0,4,0" />
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                    </StackPanel>
                                     <TextBlock Margin="0,2,0,0" Text="{Binding Description}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
                                 </StackPanel>
                             </DataTemplate>

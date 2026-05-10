@@ -214,8 +214,8 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     [Category("Features")]
     [DisplayName("OneNote")]
     [Description("Enables OneNote page search integration.")]
-    [DefaultValue(false)]
-    public bool OneNoteEnabled { get; set; }
+    [DefaultValue(true)]
+    public bool OneNoteEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Microsoft Planner task search integration is enabled.
@@ -223,8 +223,8 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     [Category("Features")]
     [DisplayName("Planner")]
     [Description("Enables Microsoft Planner task search integration.")]
-    [DefaultValue(false)]
-    public bool PlannerEnabled { get; set; }
+    [DefaultValue(true)]
+    public bool PlannerEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Microsoft To Do task search integration is enabled.
@@ -232,8 +232,8 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     [Category("Features")]
     [DisplayName("To Do")]
     [Description("Enables Microsoft To Do task search integration.")]
-    [DefaultValue(false)]
-    public bool TodoEnabled { get; set; }
+    [DefaultValue(true)]
+    public bool TodoEnabled { get; set; } = true;
 
     /// <inheritdoc />
     public override void Load()

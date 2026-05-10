@@ -185,6 +185,7 @@ internal static class ContextRelayLocalizedStrings
 
             suggestions.Add(new SlashCommandSuggestion
             {
+                Icon = SourcePresentation.GetCommandIcon(command),
                 Name = command,
                 Description = GetCommandDescription(command)
             });

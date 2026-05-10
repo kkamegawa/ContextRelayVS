@@ -22,6 +22,7 @@ using ContextRelay.Core.Router;
 using ContextRelay.Core.Settings;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Snippets;
+using ContextRelay.Core.Utilities;
 using ContextRelay.VSExtension.ToolWindows;
 
 namespace ContextRelay.VSExtension.Services;
@@ -526,16 +527,24 @@ internal sealed class ContextRelayHost : IDisposable
 
     public void OpenExternalUrl(string? url)
     {
-        if (string.IsNullOrWhiteSpace(url))
+        if (!ExternalUrlSafety.TryNormalizeExternalUrl(url, out var safeUrl))
         {
+            logger.LogWarning("Blocked unsafe external URL open attempt.");
             return;
         }
 
-        Process.Start(new ProcessStartInfo
+        try
         {
-            FileName = url,
-            UseShellExecute = true
-        });
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = safeUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError($"Failed to open external URL '{safeUrl}'.", ex);
+        }
     }
 
     public void Dispose()
