@@ -27,6 +27,9 @@ public sealed class OptionsSidecarRegistrationTests
         Assert.Contains("Microsoft.VisualStudio.VsPackage", buildProps, StringComparison.Ordinal);
         Assert.Contains("ContextRelay.VSExtension.Package.pkgdef", buildProps, StringComparison.Ordinal);
         Assert.Contains("VsRegEdit.exe", extensionProject, StringComparison.Ordinal);
+        Assert.Contains("<_VsRegEditPath Include=", extensionProject, StringComparison.Ordinal);
+        Assert.Contains("%(_VsRegEditPath.Identity)", extensionProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("<_VsRegEditPath Condition=\"'$(_VsRegEditPath)' == ''", extensionProject, StringComparison.Ordinal);
         Assert.Contains(@"ToolsOptionsPages\ContextRelay", extensionProject, StringComparison.Ordinal);
         Assert.Contains("ProductArchitecture>amd64", buildProps, StringComparison.Ordinal);
         Assert.Contains("ProductArchitecture>arm64", buildProps, StringComparison.Ordinal);
