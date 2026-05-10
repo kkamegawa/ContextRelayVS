@@ -32,6 +32,11 @@ public sealed class ExtensionHostConfigurationTests
         Assert.Contains(
             services,
             service => service.GetProperty("name").GetString() == "ContextRelay.VSExtension.GeneratedToolWindowProvider");
+        Assert.All(
+            services,
+            service => Assert.False(
+                service.GetProperty("allowHostingInProcess").GetBoolean(),
+                $"Service '{service.GetProperty("name").GetString()}' must remain out-of-process so devenv.exe does not try to load the net8 extension assembly in-process."));
         Assert.Contains(
             toolWindows,
             toolWindow => toolWindow.GetProperty("identifier").GetString() == "ContextRelay.VSExtension.ToolWindows.ContextRelayToolWindowDef");

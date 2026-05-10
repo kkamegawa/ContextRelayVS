@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     Shared MSBuild UsingTask definitions for ContextRelay build infrastructure.
@@ -43,8 +43,8 @@
             );
 
             // Regex 2: Replace numeric resource references (@="#0") with literal display names
-            content = Regex.Replace(content, @"@=""#0""", "\"ContextRelay\"", RegexOptions.IgnoreCase);
-            content = Regex.Replace(content, @"@=""#1""", "\"General\"", RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, @"@=""#0""", "@=\"ContextRelay\"", RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, @"@=""#1""", "@=\"General\"", RegexOptions.IgnoreCase);
 
             File.WriteAllText(PkgdefPath, content, new System.Text.UTF8Encoding(false));
             Log.LogMessage(MessageImportance.High, "Patched pkgdef file: {0}", PkgdefPath);
@@ -77,10 +77,112 @@
     <Task>
       <Using Namespace="System.Xml" />
       <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
       <Code>
         <![CDATA[
         try
         {
+            const string ManifestNamespace = "http://schemas.microsoft.com/developer/vsx-schema/2011";
+
+            void RemoveDirectChild(XmlElement root, string localName)
+            {
+                var existing = root.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == localName && node.NamespaceURI == ManifestNamespace);
+                if (existing != null)
+                {
+                    root.RemoveChild(existing);
+                }
+            }
+
+            XmlElement EnsureSection(XmlDocument targetDocument, XmlElement targetRoot, string sectionName)
+            {
+                XmlElement existingSection = targetRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == sectionName && node.NamespaceURI == ManifestNamespace) as XmlElement;
+                if (existingSection != null)
+                {
+                    return existingSection;
+                }
+
+                XmlElement newSection = targetDocument.CreateElement(sectionName, ManifestNamespace);
+                if (sectionName == "Installation")
+                {
+                    XmlNode metadataNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Metadata" && node.NamespaceURI == ManifestNamespace);
+                    if (metadataNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, metadataNode);
+                        return newSection;
+                    }
+                }
+
+                if (sectionName == "Dependencies")
+                {
+                    XmlNode installationNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Installation" && node.NamespaceURI == ManifestNamespace);
+                    if (installationNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, installationNode);
+                        return newSection;
+                    }
+                }
+
+                if (sectionName == "Prerequisites")
+                {
+                    XmlNode dependenciesNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Dependencies" && node.NamespaceURI == ManifestNamespace);
+                    if (dependenciesNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, dependenciesNode);
+                        return newSection;
+                    }
+
+                    XmlNode installationNode = targetRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Installation" && node.NamespaceURI == ManifestNamespace);
+                    if (installationNode != null)
+                    {
+                        targetRoot.InsertAfter(newSection, installationNode);
+                        return newSection;
+                    }
+                }
+
+                XmlNode assetsNode = targetRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == "Assets" && node.NamespaceURI == ManifestNamespace);
+                if (assetsNode != null)
+                {
+                    targetRoot.InsertBefore(newSection, assetsNode);
+                    return newSection;
+                }
+
+                targetRoot.AppendChild(newSection);
+                return newSection;
+            }
+
+            void SyncSection(XmlDocument targetDocument, XmlElement targetRoot, XmlDocument sourceDocument, string sectionName)
+            {
+                RemoveDirectChild(targetRoot, sectionName);
+
+                XmlElement sourceRoot = sourceDocument.DocumentElement;
+                XmlElement sourceSection = sourceRoot == null ? null : sourceRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(node => node.NodeType == XmlNodeType.Element && node.LocalName == sectionName && node.NamespaceURI == ManifestNamespace) as XmlElement;
+
+                if (sourceSection == null)
+                {
+                    return;
+                }
+
+                XmlNode importedNode = targetDocument.ImportNode(sourceSection, true);
+                XmlElement sectionContainer = EnsureSection(targetDocument, targetRoot, sectionName);
+                targetRoot.ReplaceChild(importedNode, sectionContainer);
+            }
+
             // If SourceManifestPath is provided, verify it exists to prevent silent failures
             if (!string.IsNullOrEmpty(SourceManifestPath) && !File.Exists(SourceManifestPath))
             {
@@ -91,26 +193,36 @@
             XmlDocument doc = new XmlDocument();
             doc.Load(ManifestPath);
             XmlNamespaceManager ns = new XmlNamespaceManager(doc.NameTable);
-            ns.AddNamespace("x", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+            ns.AddNamespace("x", ManifestNamespace);
+            XmlElement root = doc.DocumentElement;
+            if (root == null)
+            {
+                Log.LogError("Manifest '{0}' did not contain a document element", ManifestPath);
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(SourceManifestPath))
+            {
+                XmlDocument sourceDoc = new XmlDocument();
+                sourceDoc.Load(SourceManifestPath);
+                SyncSection(doc, root, sourceDoc, "Installation");
+                SyncSection(doc, root, sourceDoc, "Dependencies");
+                SyncSection(doc, root, sourceDoc, "Prerequisites");
+                Log.LogMessage(MessageImportance.High, "Synchronized manifest installation metadata from source manifest: {0}", SourceManifestPath);
+            }
 
             // Ensure Assets element exists
-            XmlNode assetsNode = doc.SelectSingleNode("//x:Assets", ns);
-            if (assetsNode == null)
-            {
-                XmlElement root = doc.DocumentElement;
-                assetsNode = doc.CreateElement("Assets", "http://schemas.microsoft.com/developer/vsx-schema/2011");
-                root.AppendChild(assetsNode);
-            }
+            XmlElement assetsElement = EnsureSection(doc, root, "Assets");
 
             // Find or create Microsoft.VisualStudio.VsPackage asset
             XmlNode pkgAsset = doc.SelectSingleNode("//x:Asset[@Type='Microsoft.VisualStudio.VsPackage']", ns);
             if (pkgAsset == null)
             {
-                pkgAsset = doc.CreateElement("Asset", "http://schemas.microsoft.com/developer/vsx-schema/2011");
+                pkgAsset = doc.CreateElement("Asset", ManifestNamespace);
                 XmlElement pkgElement = (XmlElement)pkgAsset;
                 pkgElement.SetAttribute("Type", "Microsoft.VisualStudio.VsPackage");
                 pkgElement.SetAttribute("Path", PkgdefFileName);
-                assetsNode.AppendChild(pkgAsset);
+                assetsElement.AppendChild(pkgAsset);
             }
             else
             {
@@ -130,335 +242,232 @@
   </UsingTask>
 
   <!--
-    RemoveDuplicateExperimentalExtensions Task: Cleans up duplicate VS extension deployments
+    PatchVsixForInProcPackage Task: Repacks the produced VSIX zip so VS treats it
+    as a hybrid OOP + in-proc extension and can register the in-proc Tools > Options
+    package after a standard VSIXInstaller / Marketplace install.
     
-    Visual Studio may leave multiple hashed extension folders for the same VSIX ID.
-    This task keeps only the newest deployment and removes older duplicates, then
-    touches extensions.configurationchanged to invalidate the VS cache.
-    
-    Parameters:
-    - VsLocalAppData: Path to VS local AppData root (e.g., %LocalAppData%\Microsoft\VisualStudio)
-    - RootSuffix: Experimental instance root suffix (default: Exp)
-    - ExtensionId: VSIX identity to deduplicate
-  -->
-  <UsingTask TaskName="RemoveDuplicateExperimentalExtensions" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-    <ParameterGroup>
-      <VsLocalAppData ParameterType="System.String" Required="true" />
-      <RootSuffix ParameterType="System.String" Required="false" />
-      <ExtensionId ParameterType="System.String" Required="true" />
-    </ParameterGroup>
-    <Task>
-      <Using Namespace="System.IO" />
-      <Using Namespace="System.Xml" />
-      <Using Namespace="System.Text.RegularExpressions" />
-      <Using Namespace="System.Collections.Generic" />
-      <Using Namespace="System.Linq" />
-      <Code>
-        <![CDATA[
-        try
-        {
-            string rootSuffix = string.IsNullOrEmpty(RootSuffix) ? "Exp" : RootSuffix;
-            string expPattern = @"\d+\.\d+_[0-9a-fA-F]+" + Regex.Escape(rootSuffix) + "$";
-
-            DirectoryInfo vsAppData = new DirectoryInfo(VsLocalAppData);
-            if (!vsAppData.Exists)
-            {
-                Log.LogWarning("Visual Studio AppData path not found: {0}", VsLocalAppData);
-            }
-
-            // Find all experimental instance directories
-            var expDirs = vsAppData.GetDirectories()
-                .Where(d => Regex.IsMatch(d.Name, expPattern))
-                .ToList();
-
-            if (expDirs.Count == 0)
-            {
-                Log.LogMessage(MessageImportance.Low, "No experimental instance directories found under {0}", VsLocalAppData);
-            }
-
-            foreach (DirectoryInfo expDir in expDirs)
-            {
-                DirectoryInfo extensionsRoot = new DirectoryInfo(Path.Combine(expDir.FullName, "Extensions"));
-                if (!extensionsRoot.Exists)
-                {
-                    continue;
-                }
-
-                // Find all extension deployments matching ExtensionId
-                var matchingDirs = new List<(DirectoryInfo Dir, DateTime LastWriteTime)>();
-                foreach (DirectoryInfo extDir in extensionsRoot.GetDirectories())
-                {
-                    string manifestPath = Path.Combine(extDir.FullName, "extension.vsixmanifest");
-                    if (!File.Exists(manifestPath))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        string manifestContent = File.ReadAllText(manifestPath);
-                        if (manifestContent.Contains("Id=\"" + ExtensionId + "\""))
-                        {
-                            matchingDirs.Add((extDir, extDir.LastWriteTimeUtc));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.LogWarning("Failed to read manifest {0}: {1}", manifestPath, ex.Message);
-                    }
-                }
-
-                if (matchingDirs.Count <= 1)
-                {
-                    continue;
-                }
-
-                // Sort by LastWriteTime descending (newest first), keep only the first
-                var sorted = matchingDirs.OrderByDescending(x => x.LastWriteTime).ToList();
-                for (int i = 1; i < sorted.Count; i++)
-                {
-                    try
-                    {
-                        Directory.Delete(sorted[i].Dir.FullName, recursive: true);
-                        Log.LogMessage(MessageImportance.High, "Removed duplicate extension deployment: {0}", sorted[i].Dir.FullName);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.LogWarning("Failed to remove duplicate extension {0}: {1}", sorted[i].Dir.FullName, ex.Message);
-                    }
-                }
-
-                // Touch extensions.configurationchanged to invalidate cache
-                try
-                {
-                    string changeFile = Path.Combine(extensionsRoot.FullName, "extensions.configurationchanged");
-                    File.WriteAllText(changeFile, DateTime.UtcNow.ToString("o"));
-                    Log.LogMessage(MessageImportance.High, "Touched extensions.configurationchanged: {0}", changeFile);
-                }
-                catch (Exception ex)
-                {
-                    Log.LogWarning("Failed to touch extensions.configurationchanged: {0}", ex.Message);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.LogError("RemoveDuplicateExperimentalExtensions task failed: {0}", ex.Message);
-        }
-        ]]>
-      </Code>
-    </Task>
-  </UsingTask>
-
-  <!--
-    DeployInProcPackage Task: Deploys in-proc VSSDK package to VS Extensions folder
-    
-    The OOP Extensibility host deploys to VSExtensions\, but the pkgdef engine
-    only scans Extensions\ (user) and Program Files (system). This task bridges the gap
-    by placing the pkgdef and DLL in the Extensions folder so VS can register
-    Tools > Options pages at startup.
+    The Microsoft.VisualStudio.Extensibility OOP build pipeline overwrites the
+    detokenized extension.vsixmanifest with a synthesized one (Identity Version
+    0.0.0.0, Community-only target). This task patches that manifest INSIDE the
+    .vsix zip after CreateVsixContainer using the project's source.extension.vsixmanifest
+    as the authority for Identity, Installation, Dependencies, and Prerequisites,
+    keeps the OOP-only ExtensionType/DotnetTargetVersions, adds the
+    Microsoft.VisualStudio.VsPackage asset, and copies the in-proc package payload
+    (DLL, pkgdef, supporting assemblies) into the VSIX so VS can load it in proc.
     
     Parameters:
-    - PkgdefPath: Full path to the generated pkgdef file
-    - DllPath: Full path to the compiled package DLL
-    - VsLocalAppData: Path to VS local AppData root
-    - RootSuffix: Experimental instance root suffix (default: Exp)
-    - SupportingAssemblies: Optional semicolon-separated list of supporting assembly paths
-    - ExtensionId: Optional VSIX identity; if provided, supporting assemblies also copied to main extension
+    - VsixPath: Full path to the produced .vsix archive.
+    - SourceManifestPath: Full path to source.extension.vsixmanifest.
+    - PackageDllPath: Full path to the in-proc package DLL.
+    - PackagePkgdefPath: Full path to the generated package pkgdef.
+    - SupportingAssemblies: Optional semicolon-separated list of supporting assemblies (e.g., Community.VisualStudio.Toolkit.dll) to copy into the VSIX.
   -->
-  <UsingTask TaskName="DeployInProcPackage" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+  <UsingTask TaskName="PatchVsixForInProcPackage" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
-      <PkgdefPath ParameterType="System.String" Required="true" />
-      <DllPath ParameterType="System.String" Required="true" />
-      <VsLocalAppData ParameterType="System.String" Required="true" />
-      <RootSuffix ParameterType="System.String" Required="false" />
+      <VsixPath ParameterType="System.String" Required="true" />
+      <SourceManifestPath ParameterType="System.String" Required="true" />
+      <PackageDllPath ParameterType="System.String" Required="true" />
+      <PackagePkgdefPath ParameterType="System.String" Required="true" />
       <SupportingAssemblies ParameterType="System.String" Required="false" />
-      <ExtensionId ParameterType="System.String" Required="false" />
     </ParameterGroup>
     <Task>
+      <Using Namespace="System" />
       <Using Namespace="System.IO" />
-      <Using Namespace="System.Xml" />
-      <Using Namespace="System.Text.RegularExpressions" />
-      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO.Compression" />
       <Using Namespace="System.Linq" />
+      <Using Namespace="System.Xml" />
       <Code>
         <![CDATA[
+        const string Ns = "http://schemas.microsoft.com/developer/vsx-schema/2011";
+
         try
         {
-            string rootSuffix = string.IsNullOrEmpty(RootSuffix) ? "Exp" : RootSuffix;
-            string expPattern = @"\d+\.\d+_[0-9a-fA-F]+" + Regex.Escape(rootSuffix) + "$";
-
-            DirectoryInfo vsAppData = new DirectoryInfo(VsLocalAppData);
-            if (!vsAppData.Exists)
+            if (!File.Exists(VsixPath))
             {
-                Log.LogWarning("Visual Studio AppData path not found: {0}", VsLocalAppData);
+                Log.LogError("VSIX not found at {0}", VsixPath);
+                return false;
+            }
+            if (!File.Exists(SourceManifestPath))
+            {
+                Log.LogError("Source manifest not found at {0}", SourceManifestPath);
+                return false;
+            }
+            if (!File.Exists(PackageDllPath))
+            {
+                Log.LogError("In-proc package DLL not found at {0}", PackageDllPath);
+                return false;
+            }
+            if (!File.Exists(PackagePkgdefPath))
+            {
+                Log.LogError("In-proc package pkgdef not found at {0}", PackagePkgdefPath);
+                return false;
             }
 
-            // Parse supporting assemblies (semicolon-separated)
-            var supportingAssemblies = string.IsNullOrWhiteSpace(SupportingAssemblies)
-                ? new List<string>()
-                : SupportingAssemblies.Split(new[] { ';' }, System.StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => s.Trim())
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .ToList();
-
-            // Find experimental instance directory
-            var expDirs = vsAppData.GetDirectories()
-                .Where(d => Regex.IsMatch(d.Name, expPattern))
-                .ToList();
-
-            if (expDirs.Count == 0)
+            string workDir = Path.Combine(Path.GetDirectoryName(VsixPath), "_vsix_patch_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(workDir);
+            try
             {
-                Log.LogWarning("No experimental instance directory found under {0} matching *{1}", VsLocalAppData, rootSuffix);
-            }
+                ZipFile.ExtractToDirectory(VsixPath, workDir);
 
-            foreach (DirectoryInfo expDir in expDirs)
-            {
-                string extensionsPath = Path.Combine(expDir.FullName, "Extensions");
-                if (!Directory.Exists(extensionsPath))
+                string manifestPath = Path.Combine(workDir, "extension.vsixmanifest");
+                if (!File.Exists(manifestPath))
                 {
-                    Directory.CreateDirectory(extensionsPath);
-                    Log.LogMessage(MessageImportance.High, "Created Extensions folder: {0}", extensionsPath);
+                    Log.LogError("Produced VSIX is missing extension.vsixmanifest");
+                    return false;
                 }
 
-                // Find or create Extensions-{version} subfolder
-                string expName = expDir.Name.Replace(rootSuffix, "");
-                string expectedSubDir = "Extensions-" + expName;
-                string subDirPath = Path.Combine(extensionsPath, expectedSubDir);
+                // Load both manifests
+                XmlDocument synthDoc = new XmlDocument { PreserveWhitespace = false };
+                synthDoc.Load(manifestPath);
 
-                if (!Directory.Exists(subDirPath))
+                XmlDocument sourceDoc = new XmlDocument { PreserveWhitespace = false };
+                sourceDoc.Load(SourceManifestPath);
+
+                XmlElement synthRoot = synthDoc.DocumentElement;
+                XmlElement sourceRoot = sourceDoc.DocumentElement;
+
+                if (synthRoot == null || sourceRoot == null)
                 {
-                    Directory.CreateDirectory(subDirPath);
-                    Log.LogMessage(MessageImportance.High, "Created Extensions subfolder: {0}", subDirPath);
+                    Log.LogError("Manifest documents are missing root element");
+                    return false;
                 }
 
-                // Create target directory for in-proc package
-                string targetDir = Path.Combine(subDirPath, "KazushiKamegawa", "ContextRelay.Package");
-                Directory.CreateDirectory(targetDir);
+                // Start fresh from a copy of the source manifest so Identity, Installation,
+                // Dependencies, Prerequisites and Metadata are authoritatively from source.
+                XmlDocument outDoc = (XmlDocument)sourceDoc.CloneNode(true);
+                XmlElement outRoot = outDoc.DocumentElement;
 
-                // Copy pkgdef
-                if (File.Exists(PkgdefPath))
-                {
-                    string destPkgdef = Path.Combine(targetDir, Path.GetFileName(PkgdefPath));
-                    File.Copy(PkgdefPath, destPkgdef, overwrite: true);
-                    Log.LogMessage(MessageImportance.High, "Copied pkgdef -> {0}", targetDir);
-                }
-                else
-                {
-                    Log.LogWarning("pkgdef not found: {0}", PkgdefPath);
-                }
+                // Preserve OOP-only Installation attributes from the synthesized manifest.
+                // The synth Installation declares ExtensionType="VisualStudio.Extensibility"
+                // and contains <DotnetTargetVersions>net8.0</DotnetTargetVersions>. We need
+                // both to keep the OOP host loading the net8 extension; we also need the
+                // VSSDK side to load the in-proc package, so ExtensionType is rewritten to
+                // the hybrid form used by Microsoft.VisualStudio.Copilot.Testing.UI.
+                XmlElement synthInstallation = synthRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Installation" && n.NamespaceURI == Ns) as XmlElement;
+                XmlElement outInstallation = outRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Installation" && n.NamespaceURI == Ns) as XmlElement;
 
-                // Copy DLL
-                if (File.Exists(DllPath))
+                if (outInstallation == null)
                 {
-                    string destDll = Path.Combine(targetDir, Path.GetFileName(DllPath));
-                    File.Copy(DllPath, destDll, overwrite: true);
-                    Log.LogMessage(MessageImportance.High, "Copied DLL    -> {0}", targetDir);
-                }
-                else
-                {
-                    Log.LogWarning("DLL not found: {0}", DllPath);
+                    Log.LogError("Source manifest is missing <Installation>");
+                    return false;
                 }
 
-                // Copy supporting assemblies
-                foreach (string assemblyPath in supportingAssemblies)
+                outInstallation.SetAttribute("ExtensionType", "VSSDK+VisualStudio.Extensibility");
+
+                if (synthInstallation != null)
                 {
-                    if (File.Exists(assemblyPath))
+                    foreach (XmlNode synthChild in synthInstallation.ChildNodes)
                     {
-                        string destAssembly = Path.Combine(targetDir, Path.GetFileName(assemblyPath));
-                        File.Copy(assemblyPath, destAssembly, overwrite: true);
-                        Log.LogMessage(MessageImportance.High, "Copied dependency -> {0}", destAssembly);
-                    }
-                    else if (!string.IsNullOrWhiteSpace(assemblyPath))
-                    {
-                        Log.LogWarning("Dependency not found: {0}", assemblyPath);
-                    }
-                }
-
-                // Write extension.vsixmanifest
-                string manifestContent = @"<PackageManifest Version=""2.0.0"" xmlns=""http://schemas.microsoft.com/developer/vsx-schema/2011"">
-  <Metadata>
-    <Identity Id=""ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package"" Version=""0.3.0.0"" Language=""en-US"" Publisher=""KazushiKamegawa"" />
-    <DisplayName>ContextRelay for Visual Studio (Package)</DisplayName>
-    <Description xml:space=""preserve"">In-proc VSSDK package for ContextRelay Tools &gt; Options registration.</Description>
-  </Metadata>
-  <Installation>
-    <InstallationTarget Id=""Microsoft.VisualStudio.Enterprise"" Version=""[17.9,)"">
-      <ProductArchitecture>amd64</ProductArchitecture>
-    </InstallationTarget>
-    <InstallationTarget Id=""Microsoft.VisualStudio.Pro"" Version=""[17.9,)"">
-      <ProductArchitecture>amd64</ProductArchitecture>
-    </InstallationTarget>
-    <InstallationTarget Id=""Microsoft.VisualStudio.Community"" Version=""[17.9,)"">
-      <ProductArchitecture>amd64</ProductArchitecture>
-    </InstallationTarget>
-  </Installation>
-  <Prerequisites>
-    <Prerequisite Id=""Microsoft.VisualStudio.Component.CoreEditor"" Version=""[17.9,)"" DisplayName=""Visual Studio core editor"" />
-  </Prerequisites>
-  <Assets>
-    <Asset Type=""Microsoft.VisualStudio.VsPackage"" Path=""ContextRelay.VSExtension.Package.pkgdef"" />
-  </Assets>
-</PackageManifest>";
-                string manifestPath = Path.Combine(targetDir, "extension.vsixmanifest");
-                File.WriteAllText(manifestPath, manifestContent, System.Text.Encoding.UTF8);
-                Log.LogMessage(MessageImportance.High, "Wrote extension.vsixmanifest -> {0}", targetDir);
-
-                // Touch extensions.configurationchanged to invalidate cache
-                string changeFile = Path.Combine(extensionsPath, "extensions.configurationchanged");
-                File.WriteAllText(changeFile, DateTime.UtcNow.ToString("o"));
-                Log.LogMessage(MessageImportance.High, "Touched extensions.configurationchanged");
-
-                // If ExtensionId provided, copy supporting assemblies to main extension deployment
-                if (!string.IsNullOrWhiteSpace(ExtensionId))
-                {
-                    DirectoryInfo extensionsRootDir = new DirectoryInfo(extensionsPath);
-                    var mainExtDirs = new List<string>();
-
-                    foreach (DirectoryInfo dir in extensionsRootDir.GetDirectories())
-                    {
-                        string mPath = Path.Combine(dir.FullName, "extension.vsixmanifest");
-                        if (File.Exists(mPath))
+                        if (synthChild.NodeType != XmlNodeType.Element) continue;
+                        if (synthChild.LocalName == "DotnetTargetVersions" && synthChild.NamespaceURI == Ns)
                         {
-                            try
-                            {
-                                string mContent = File.ReadAllText(mPath);
-                                if (mContent.Contains("Id=\"" + ExtensionId + "\""))
-                                {
-                                    mainExtDirs.Add(dir.FullName);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.LogWarning("Failed to check manifest {0}: {1}", mPath, ex.Message);
-                            }
-                        }
-                    }
-
-                    foreach (string mainExtDir in mainExtDirs)
-                    {
-                        foreach (string assemblyPath in supportingAssemblies)
-                        {
-                            if (File.Exists(assemblyPath))
-                            {
-                                string destAssembly = Path.Combine(mainExtDir, Path.GetFileName(assemblyPath));
-                                File.Copy(assemblyPath, destAssembly, overwrite: true);
-                                Log.LogMessage(MessageImportance.High, "Copied dependency -> {0}", destAssembly);
-                            }
+                            XmlNode imported = outDoc.ImportNode(synthChild, true);
+                            outInstallation.AppendChild(imported);
                         }
                     }
                 }
-            }
 
-            Log.LogMessage(MessageImportance.High, "DeployInProcPackage complete");
+                // Ensure Assets contains the VsPackage asset for the generated pkgdef.
+                XmlElement outAssets = outRoot.ChildNodes
+                    .OfType<XmlNode>()
+                    .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Assets" && n.NamespaceURI == Ns) as XmlElement;
+                if (outAssets == null)
+                {
+                    outAssets = outDoc.CreateElement("Assets", Ns);
+                    outRoot.AppendChild(outAssets);
+                }
+
+                string pkgdefFileName = Path.GetFileName(PackagePkgdefPath);
+                bool hasVsPackage = outAssets.ChildNodes
+                    .OfType<XmlNode>()
+                    .Any(n => n.NodeType == XmlNodeType.Element
+                        && n.LocalName == "Asset"
+                        && n.NamespaceURI == Ns
+                        && ((XmlElement)n).GetAttribute("Type") == "Microsoft.VisualStudio.VsPackage");
+                if (!hasVsPackage)
+                {
+                    XmlElement vsPackage = outDoc.CreateElement("Asset", Ns);
+                    vsPackage.SetAttribute("Type", "Microsoft.VisualStudio.VsPackage");
+                    vsPackage.SetAttribute("Path", pkgdefFileName);
+                    outAssets.AppendChild(vsPackage);
+                }
+
+                // Save patched manifest
+                using (var writer = new StreamWriter(manifestPath, false, new System.Text.UTF8Encoding(true)))
+                {
+                    outDoc.Save(writer);
+                }
+
+                // Copy in-proc package payload into the VSIX root
+                string destDll = Path.Combine(workDir, Path.GetFileName(PackageDllPath));
+                File.Copy(PackageDllPath, destDll, overwrite: true);
+
+                string destPkgdef = Path.Combine(workDir, pkgdefFileName);
+                File.Copy(PackagePkgdefPath, destPkgdef, overwrite: true);
+
+                if (!string.IsNullOrEmpty(SupportingAssemblies))
+                {
+                    foreach (string sa in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string trimmed = sa.Trim();
+                        if (string.IsNullOrEmpty(trimmed) || !File.Exists(trimmed)) continue;
+                        string destSa = Path.Combine(workDir, Path.GetFileName(trimmed));
+                        File.Copy(trimmed, destSa, overwrite: true);
+                    }
+                }
+
+                // Patch [Content_Types].xml to register .pkgdef
+                string contentTypesPath = Path.Combine(workDir, "[Content_Types].xml");
+                if (File.Exists(contentTypesPath))
+                {
+                    XmlDocument ctDoc = new XmlDocument { PreserveWhitespace = false };
+                    ctDoc.Load(contentTypesPath);
+                    string ctNs = "http://schemas.openxmlformats.org/package/2006/content-types";
+                    bool hasPkgdef = ctDoc.DocumentElement.ChildNodes
+                        .OfType<XmlNode>()
+                        .Any(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Default"
+                            && ((XmlElement)n).GetAttribute("Extension").Equals("pkgdef", StringComparison.OrdinalIgnoreCase));
+                    if (!hasPkgdef)
+                    {
+                        XmlElement def = ctDoc.CreateElement("Default", ctNs);
+                        def.SetAttribute("Extension", "pkgdef");
+                        def.SetAttribute("ContentType", "text/plain");
+                        ctDoc.DocumentElement.AppendChild(def);
+                        using (var writer = new StreamWriter(contentTypesPath, false, new System.Text.UTF8Encoding(true)))
+                        {
+                            ctDoc.Save(writer);
+                        }
+                    }
+                }
+
+                // Repack VSIX
+                string repackPath = VsixPath + ".tmp";
+                if (File.Exists(repackPath)) File.Delete(repackPath);
+                ZipFile.CreateFromDirectory(workDir, repackPath, CompressionLevel.Optimal, includeBaseDirectory: false);
+                File.Delete(VsixPath);
+                File.Move(repackPath, VsixPath);
+
+                Log.LogMessage(MessageImportance.High,
+                    "Patched VSIX for in-proc package: manifest updated, payload + pkgdef + supporting assemblies injected ({0})",
+                    VsixPath);
+            }
+            finally
+            {
+                try { Directory.Delete(workDir, recursive: true); } catch { }
+            }
         }
         catch (Exception ex)
         {
-            Log.LogError("DeployInProcPackage task failed: {0}", ex.Message);
+            Log.LogError("PatchVsixForInProcPackage failed: {0}", ex.ToString());
+            return false;
         }
+        return true;
         ]]>
       </Code>
     </Task>
   </UsingTask>
 </Project>
-

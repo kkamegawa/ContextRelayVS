@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	<TargetFramework>net48</TargetFramework>
 	<VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">17.0</VisualStudioVersion>
@@ -9,10 +9,14 @@
 	<AssemblyName>ContextRelay.VSExtension.Package</AssemblyName>
 	<RootNamespace>ContextRelay.VSExtension.Package</RootNamespace>
 	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	<!-- Mirror the main extension's explicit /log configuration so either
+	     startup project records an activity log during debugging. -->
+	<VisualStudioActivityLogPath>$([System.IO.Path]::Combine('$(APPDATA)', 'Microsoft', 'VisualStudio', 'ContextRelayVS-Exp-ActivityLog.xml'))</VisualStudioActivityLogPath>
+	<!-- Use the VSSDK-generated pkgdef as the authoritative registration source.
+	     The generated output matches the packaging flow that originally surfaced
+	     the Tools > Options page in PR #36. -->
 	<GeneratePkgDefFile>true</GeneratePkgDefFile>
 	<UseCodebase>true</UseCodebase>
-	<!-- This project only produces a DLL + pkgdef for inclusion in the main VSIX.
-		 Disable VSIX container creation to prevent VSSDK1048 during F5 debug. -->
 	<CreateVsixContainer>false</CreateVsixContainer>
 	<CopyVsixManifestToOutput>false</CopyVsixManifestToOutput>
 	<PkgdefProjectOutputGroupDependsOn>$(PkgdefProjectOutputGroupDependsOn);GeneratePkgDef;PatchPkgdefOptionsRegistration</PkgdefProjectOutputGroupDependsOn>
@@ -23,7 +27,7 @@
 	<DeployExtension>false</DeployExtension>
 	<StartAction>Program</StartAction>
 	<StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
-	<StartArguments>/rootsuffix Exp</StartArguments>
+	<StartArguments>/rootsuffix Exp /log &quot;$(VisualStudioActivityLogPath)&quot;</StartArguments>
   </PropertyGroup>
   <ItemGroup>
 	<ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
@@ -34,20 +38,29 @@
   <ItemGroup>
 	<PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" />
 	<PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" ExcludeAssets="runtime" />
-	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" />
+	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" GeneratePathProperty="true" />
+	<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
   <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets" Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
   <Import Project="..\..\build\ContextRelay.Build.props" />
-	<Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
+  <Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
 	<PropertyGroup>
 	  <CreatePkgDefAssemblyToProcess>$(TargetPath)</CreatePkgDefAssemblyToProcess>
 	</PropertyGroup>
   </Target>
-
+  <!-- VSSDK's GeneratePkgDef is only chained into PrepareForRun, which "dotnet build" does
+       not invoke. Hook it into the Build chain so CLI builds produce the same pkgdef the
+       VS in-IDE F5 build produces. -->
+  <Target Name="EnsureGeneratePkgDefDuringBuild"
+          AfterTargets="Build"
+          DependsOnTargets="GeneratePkgDef"
+          Condition="'$(GeneratePkgDefFile)'=='true'" />
+  <!-- Patch the generated pkgdef after VSSDK produces it so the page stays visible
+       in the legacy Tools > Options tree and uses readable display names. -->
   <Target Name="PatchPkgdefOptionsRegistration" AfterTargets="GeneratePkgDef;Build">
 	<PropertyGroup>
-	  <PkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).pkgdef'))</PkgdefFullPath>
-	  <LatestPkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).latest.pkgdef'))</LatestPkgdefFullPath>
+	  <PkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(AssemblyName).pkgdef'))</PkgdefFullPath>
+	  <LatestPkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(AssemblyName).latest.pkgdef'))</LatestPkgdefFullPath>
 	</PropertyGroup>
 	<PatchPkgdefFile PkgdefPath="$(PkgdefFullPath)" Condition="Exists('$(PkgdefFullPath)')" />
 	<PatchPkgdefFile PkgdefPath="$(LatestPkgdefFullPath)" Condition="Exists('$(LatestPkgdefFullPath)')" />

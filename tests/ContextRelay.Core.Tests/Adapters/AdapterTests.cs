@@ -233,6 +233,14 @@ public sealed class AdapterTests
     }
 
     [Fact]
+    public void QueryIntentParser_IgnoresSourceHintWords()
+    {
+        var intent = QueryIntentParser.Parse("onenote todo release checklist");
+
+        Assert.Equal(new[] { "release", "checklist" }, intent.SearchTerms);
+    }
+
+    [Fact]
     public async Task PlannerSearchAdapter_IncludesMetadataAndCommentFallbackText()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

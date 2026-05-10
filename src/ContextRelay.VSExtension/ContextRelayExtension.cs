@@ -13,6 +13,10 @@ internal sealed class ContextRelayExtension : Extension
 {
     public override ExtensionConfiguration ExtensionConfiguration => new()
     {
+        // PR #43 intentionally kept the net8 tool window provider out-of-process.
+        // The in-proc package is only for Options registration; letting devenv.exe try
+        // to activate the net8 main extension in-process reintroduces the System.Runtime
+        // load failure seen in the ActivityLog.
         Metadata = new(
             id: "ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
             version: ExtensionAssemblyVersion,
