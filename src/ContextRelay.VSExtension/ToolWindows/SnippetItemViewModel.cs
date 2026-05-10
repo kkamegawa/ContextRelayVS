@@ -14,6 +14,8 @@ internal sealed class SnippetItemViewModel
         Name = item.Name;
         Snippet = item.Snippet;
         Source = item.Source;
+        SourceLabel = SourcePresentation.GetSourceLabel(Source);
+        SourceIcon = SourcePresentation.GetSourceIcon(Source);
         SourceUrl = item.SourceUrl ?? string.Empty;
         OpenButtonText = ContextRelayLocalizedStrings.OpenButtonText;
         DeleteButtonText = ContextRelayLocalizedStrings.DeleteButtonText;
@@ -25,6 +27,8 @@ internal sealed class SnippetItemViewModel
     [DataMember] public string Name { get; private set; }
     [DataMember] public string Snippet { get; private set; }
     [DataMember] public string Source { get; private set; }
+    [DataMember] public string SourceLabel { get; private set; }
+    [DataMember] public string SourceIcon { get; private set; }
     [DataMember] public string SourceUrl { get; private set; }
     [DataMember] public string OpenButtonText { get; private set; }
     [DataMember] public string DeleteButtonText { get; private set; }

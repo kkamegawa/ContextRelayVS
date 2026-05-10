@@ -168,6 +168,134 @@ public sealed class AdapterTests
     }
 
     [Fact]
+    public async Task OneNoteSearchAdapter_MapsPagePreviewAndHierarchy()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    {
+                      "id": "page-1",
+                      "title": "Architecture decision log",
+                      "createdDateTime": "2026-04-19T10:00:00Z",
+                      "lastModifiedDateTime": "2026-04-19T12:00:00Z",
+                      "contentUrl": "https://contoso.example/page-1/content",
+                      "links": { "oneNoteWebUrl": { "href": "https://contoso.example/onenote/page-1" } },
+                      "parentSection": { "id": "section-1", "displayName": "Architecture" },
+                      "parentNotebook": { "id": "notebook-1", "displayName": "Engineering Notes" }
+                    }
+                  ]
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                { "previewText": "Recorded release onboarding notes." }
+                """)));
+
+        var adapter = new OneNoteSearchAdapter(new GraphHttpClient(httpClient));
+        var results = await adapter.SearchAsync("token", "section onboarding", 10, cancellationToken);
+
+        Assert.Single(results);
+        Assert.Equal(ContextSource.OneNote, results[0].Source);
+        Assert.Equal("Architecture decision log", results[0].Title);
+        Assert.Contains("Architecture", results[0].Snippet);
+        Assert.Contains("Recorded release onboarding notes.", results[0].Snippet);
+        Assert.Equal("https://contoso.example/onenote/page-1", results[0].Url);
+    }
+
+    [Fact]
+    public async Task PlannerSearchAdapter_IncludesMetadataAndCommentFallbackText()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    {
+                      "id": "task-1",
+                      "title": "Release onboarding checklist",
+                      "planId": "plan-1",
+                      "bucketId": "bucket-1",
+                      "conversationThreadId": "thread-1",
+                      "percentComplete": 50,
+                      "hasDescription": true,
+                      "createdDateTime": "2026-04-19T09:00:00Z",
+                      "dueDateTime": "2026-04-30T09:00:00Z"
+                    }
+                  ]
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "description": "Finish the onboarding release plan.",
+                  "checklist": {
+                    "item-1": { "title": "Collect approvals" }
+                  }
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                { "id": "plan-1", "title": "Product Plan" }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                { "id": "bucket-1", "name": "Sprint Backlog" }
+                """)));
+
+        var adapter = new PlannerSearchAdapter(new GraphHttpClient(httpClient));
+        var results = await adapter.SearchAsync("token", "metadata comments onboarding", 10, cancellationToken);
+
+        Assert.Single(results);
+        Assert.Equal(ContextSource.Planner, results[0].Source);
+        Assert.Contains("Finish the onboarding release plan.", results[0].Snippet);
+        Assert.Contains("Plan: Product Plan", results[0].Snippet);
+        Assert.Contains("Bucket: Sprint Backlog", results[0].Snippet);
+        Assert.Contains("Checklist: Collect approvals", results[0].Snippet);
+        Assert.Contains("Comments were requested", results[0].Snippet);
+    }
+
+    [Fact]
+    public async Task TodoSearchAdapter_IncludesListMetadataAndNormalizesHtmlBody()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    { "id": "list-1", "displayName": "Backlog", "wellknownListName": "defaultList" }
+                  ]
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    {
+                      "id": "todo-1",
+                      "title": "Onboarding package",
+                      "status": "notStarted",
+                      "importance": "high",
+                      "categories": [ "Release" ],
+                      "body": {
+                        "contentType": "html",
+                        "content": "<p>Review <strong>onboarding</strong> notes.</p>"
+                      },
+                      "createdDateTime": "2026-04-19T09:00:00Z",
+                      "lastModifiedDateTime": "2026-04-19T12:00:00Z"
+                    }
+                  ]
+                }
+                """)));
+
+        var adapter = new TodoSearchAdapter(new GraphHttpClient(httpClient));
+        var results = await adapter.SearchAsync("token", "metadata onboarding", 10, cancellationToken);
+
+        Assert.Single(results);
+        Assert.Equal(ContextSource.Todo, results[0].Source);
+        Assert.Contains("Review onboarding notes.", results[0].Snippet);
+        Assert.Contains("List: Backlog", results[0].Snippet);
+        Assert.Contains("Status: notStarted", results[0].Snippet);
+        Assert.Contains("Categories: Release", results[0].Snippet);
+    }
+
+    [Fact]
     public async Task CopilotChatAdapter_ReturnsAssistantReply()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

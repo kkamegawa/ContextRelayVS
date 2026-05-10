@@ -15,6 +15,8 @@ internal sealed class ContextItemViewModel
         Title = item.Title;
         Snippet = item.Snippet;
         Source = item.Source.ToString();
+        SourceLabel = SourcePresentation.GetSourceLabel(Source);
+        SourceIcon = SourcePresentation.GetSourceIcon(Source);
         Timestamp = item.Timestamp ?? string.Empty;
         Url = item.Url ?? string.Empty;
         PinButtonText = ContextRelayLocalizedStrings.PinButtonText;
@@ -31,6 +33,8 @@ internal sealed class ContextItemViewModel
     [DataMember] public string Title { get; private set; }
     [DataMember] public string Snippet { get; private set; }
     [DataMember] public string Source { get; private set; }
+    [DataMember] public string SourceLabel { get; private set; }
+    [DataMember] public string SourceIcon { get; private set; }
     [DataMember] public string Timestamp { get; private set; }
     [DataMember] public string Url { get; private set; }
     [DataMember] public string PinButtonText { get; private set; }

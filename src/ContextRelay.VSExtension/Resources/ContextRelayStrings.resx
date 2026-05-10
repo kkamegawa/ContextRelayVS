@@ -98,4 +98,14 @@
   <data name="CommandDescription_clear" xml:space="preserve"><value>Clear the current chat transcript and pinned snippets.</value></data>
   <data name="LanguageDisplay_shellscript" xml:space="preserve"><value>Shell script</value></data>
   <data name="LanguageDisplay_plaintext" xml:space="preserve"><value>Plain text</value></data>
+  <data name="SourceLabel_mail" xml:space="preserve"><value>Exchange Mail</value></data>
+  <data name="SourceLabel_teams" xml:space="preserve"><value>Teams</value></data>
+  <data name="SourceLabel_sharepoint" xml:space="preserve"><value>SharePoint</value></data>
+  <data name="SourceLabel_onedrive" xml:space="preserve"><value>OneDrive</value></data>
+  <data name="SourceLabel_onenote" xml:space="preserve"><value>OneNote</value></data>
+  <data name="SourceLabel_planner" xml:space="preserve"><value>Planner</value></data>
+  <data name="SourceLabel_todo" xml:space="preserve"><value>Microsoft To Do</value></data>
+  <data name="SourceLabel_connectors" xml:space="preserve"><value>Connectors</value></data>
+  <data name="SourceLabel_all" xml:space="preserve"><value>All Sources</value></data>
+  <data name="SourceLabel_default" xml:space="preserve"><value>Source</value></data>
 </root>
