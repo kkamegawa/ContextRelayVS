@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Models;
@@ -12,6 +13,12 @@ namespace ContextRelay.Core.Adapters;
 
 public sealed class PlannerSearchAdapter : IContextSearchAdapter
 {
+    private static readonly TimeSpan HtmlNormalizationTimeout = TimeSpan.FromMilliseconds(250);
+    private static readonly Regex ScriptBlockRegex = new Regex("<script\\b[^>]*>.*?</script>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex StyleBlockRegex = new Regex("<style\\b[^>]*>.*?</style>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex HtmlTagRegex = new Regex("<[^>]+>", RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+    private static readonly Regex WhitespaceRegex = new Regex("\\s+", RegexOptions.CultureInvariant, HtmlNormalizationTimeout);
+
     private readonly GraphHttpClient graphClient;
 
     public PlannerSearchAdapter(GraphHttpClient? graphClient = null)
@@ -41,7 +48,7 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
         var candidates = tasks.Select(task =>
         {
             var details = task.Id is not null && detailsMap.TryGetValue(task.Id, out var d) ? d : null;
-            var description = details?.Description?.Trim() ?? string.Empty;
+            var description = NormalizePlannerText(details?.Description);
             var checklistTitles = ExtractChecklistTitles(details);
             var planTitle = task.PlanId is not null && planTitles.TryGetValue(task.PlanId, out var pt) ? pt : null;
             var bucketName = task.BucketId is not null && bucketNames.TryGetValue(task.BucketId, out var bn) ? bn : null;
@@ -271,9 +278,32 @@ public sealed class PlannerSearchAdapter : IContextSearchAdapter
         }
 
         return details.Checklist.Values
-            .Select(item => item.Title?.Trim() ?? string.Empty)
+            .Select(item => NormalizePlannerText(item.Title))
             .Where(title => title.Length > 0)
             .ToArray();
+    }
+
+    private static string NormalizePlannerText(string? value)
+    {
+        var content = value?.Trim() ?? string.Empty;
+        if (content.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        content = System.Net.WebUtility.HtmlDecode(content);
+        try
+        {
+            content = ScriptBlockRegex.Replace(content, " ");
+            content = StyleBlockRegex.Replace(content, " ");
+            content = HtmlTagRegex.Replace(content, " ");
+            content = WhitespaceRegex.Replace(content, " ");
+            return content.Trim();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return string.Empty;
+        }
     }
 
     private static int ComputePlannerScore(
