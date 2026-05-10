@@ -13,9 +13,12 @@ internal sealed class ContextRelayExtension : Extension
 {
     public override ExtensionConfiguration ExtensionConfiguration => new()
     {
-        // RequiresInProcessHosting = true is required for VSSDK+VisualStudio.Extensibility hybrid mode.
-        // When set to true, Metadata must be null - it is read from source.extension.vsixmanifest instead.
-        RequiresInProcessHosting = true,
+        Metadata = new(
+            id: "ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
+            version: ExtensionAssemblyVersion,
+            publisherName: "KazushiKamegawa",
+            displayName: "ContextRelay for Visual Studio",
+            description: "Surface Microsoft 365 context in a Visual Studio tool window."),
     };
 
     protected override void InitializeServices(IServiceCollection serviceCollection)

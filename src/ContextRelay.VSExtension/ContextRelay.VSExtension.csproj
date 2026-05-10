@@ -12,8 +12,10 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/kkamegawa/ContextRelayVS</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- Required by VSEXT0008: enables VSSDK+VisualStudio.Extensibility hybrid in-process hosting -->
-    <VssdkcompatibleExtension>true</VssdkcompatibleExtension>
+    <!-- Path properties for the in-proc package sidecar deployment.
+         The package is NOT embedded in the VSIX (hybrid mode causes System.Runtime load failures).
+         Instead, it is deployed as a separate extension to the VS Extensions folder so the pkgdef
+         engine discovers it and registers Tools > Options pages. -->
     <InProcPackageTargetFramework>net48</InProcPackageTargetFramework>
     <VsixExtensionId>ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11</VsixExtensionId>
     <InProcPackageOutputDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageOutputDir>
@@ -28,11 +30,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
+    <!-- Build the in-proc package so it is ready for sidecar deployment.
+         ReferenceOutputAssembly=false: we do not reference the net48 DLL from our net8.0 code.
+         No IncludeOutputGroupsInVSIX: the package is NOT bundled in the VSIX. -->
     <ProjectReference Include="..\ContextRelay.VSExtension.Package\ContextRelay.VSExtension.Package.csproj">
       <Name>ContextRelay.VSExtension.Package</Name>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup;PkgdefProjectOutputGroup</IncludeOutputGroupsInVSIX>
-      <IncludeOutputGroupsInVSIXLocalOnly>DebugSymbolsProjectOutputGroup</IncludeOutputGroupsInVSIXLocalOnly>
     </ProjectReference>
   </ItemGroup>
 
@@ -42,17 +45,6 @@
     </Content>
     <Content Include="LICENSE.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="source.extension.vsixmanifest">
-      <IncludeInVSIX>true</IncludeInVSIX>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup Condition="Exists('$(InProcToolkitAssemblyPath)')">
-    <Content Include="$(InProcToolkitAssemblyPath)">
-      <IncludeInVSIX>true</IncludeInVSIX>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>Community.VisualStudio.Toolkit.dll</Link>
     </Content>
   </ItemGroup>
 
@@ -93,33 +85,10 @@
   </Target>
 
   <!--
-    After VSIX manifest is tokenized, inject the VsPackage asset if it is missing.
-    Uses the InjectVsPackageAsset C# UsingTask from ContextRelay.Build.props.
-  -->
-  <Target Name="EnsureVsPackageAssetInManifest" AfterTargets="DetokenizeVsixManifestFile" BeforeTargets="CreateVsixContainer">
-    <InjectVsPackageAsset
-      ManifestPath="$(IntermediateOutputPath)extension.vsixmanifest"
-      PkgdefFileName="ContextRelay.VSExtension.Package.pkgdef"
-      SourceManifestPath="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" />
-  </Target>
-
-  <!--
-    Patch the pkgdef collected from the package project just before VSIX packaging.
-    Uses the PatchPkgdefFile C# UsingTask from ContextRelay.Build.props.
-  -->
-  <Target Name="PatchPackagePkgdefBeforeVsix" BeforeTargets="CreateVsixContainer" AfterTargets="GetVsixSourceItems">
-    <PropertyGroup>
-      <PackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</PackagePkgdefPath>
-      <LatestPackagePkgdefPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.latest.pkgdef'))</LatestPackagePkgdefPath>
-    </PropertyGroup>
-    <PatchPkgdefFile PkgdefPath="$(PackagePkgdefPath)" Condition="Exists('$(PackagePkgdefPath)')" />
-    <PatchPkgdefFile PkgdefPath="$(LatestPackagePkgdefPath)" Condition="Exists('$(LatestPackagePkgdefPath)')" />
-  </Target>
-
-  <!--
-    After build, deploy the in-proc package to the VS Extensions folder so the pkgdef
-    engine registers Tools > Options pages. Only runs in Debug or when DeployExtension is true.
-    Uses DeployInProcPackage and RemoveDuplicateExperimentalExtensions C# UsingTasks.
+    Sidecar deployment: copy the in-proc package (pkgdef + DLL + toolkit) to the VS Extensions
+    folder as a separate pseudo-extension. This lets the VS pkgdef engine discover the package
+    and register Tools > Options pages without embedding the net48 assemblies in the OOP VSIX.
+    Runs during Debug builds and whenever DeployExtension is true.
   -->
   <Target Name="DeployInProcPackageToExtensions" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' Or '$(DeployExtension)' == 'true'">
     <PropertyGroup>
