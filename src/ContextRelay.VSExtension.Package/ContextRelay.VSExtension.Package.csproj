@@ -9,13 +9,13 @@
 	<AssemblyName>ContextRelay.VSExtension.Package</AssemblyName>
 	<RootNamespace>ContextRelay.VSExtension.Package</RootNamespace>
 	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-	<GeneratePkgDefFile>true</GeneratePkgDefFile>
+	<!-- Disable VSSDK auto-generation; use the handcrafted static pkgdef instead.
+	     The VSSDK GeneratePkgDef target silently skips on SDK-style projects when
+	     CreatePkgDefAssemblyToProcess is empty, producing no output on clean builds. -->
+	<GeneratePkgDefFile>false</GeneratePkgDefFile>
 	<UseCodebase>true</UseCodebase>
-	<!-- This project only produces a DLL + pkgdef for inclusion in the main VSIX.
-		 Disable VSIX container creation to prevent VSSDK1048 during F5 debug. -->
 	<CreateVsixContainer>false</CreateVsixContainer>
 	<CopyVsixManifestToOutput>false</CopyVsixManifestToOutput>
-	<PkgdefProjectOutputGroupDependsOn>$(PkgdefProjectOutputGroupDependsOn);GeneratePkgDef;PatchPkgdefOptionsRegistration</PkgdefProjectOutputGroupDependsOn>
 	<IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
 	<IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
 	<IncludeDebugSymbolsInLocalVSIXDeployment>false</IncludeDebugSymbolsInLocalVSIXDeployment>
@@ -31,42 +31,18 @@
   <ItemGroup>
 	<Reference Include="System.Text.Json" />
   </ItemGroup>
-	<ItemGroup>
+  <ItemGroup>
 	<PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" />
 	<PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" ExcludeAssets="runtime" />
 	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" />
 	<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-	</ItemGroup>
+  </ItemGroup>
+  <!-- Copy the static pkgdef to the output directory so the deployment target can find it. -->
+  <ItemGroup>
+	<None Include="ContextRelay.VSExtension.Package.pkgdef">
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+  </ItemGroup>
   <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets" Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
   <Import Project="..\..\build\ContextRelay.Build.props" />
-	<Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
-	<PropertyGroup>
-	  <CreatePkgDefAssemblyToProcess>$(TargetPath)</CreatePkgDefAssemblyToProcess>
-	</PropertyGroup>
-  </Target>
-
-  <Target Name="PatchPkgdefOptionsRegistration" AfterTargets="GeneratePkgDef;Build">
-	<PropertyGroup>
-	  <PkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).pkgdef'))</PkgdefFullPath>
-	  <LatestPkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).latest.pkgdef'))</LatestPkgdefFullPath>
-	</PropertyGroup>
-	<PatchPkgdefFile PkgdefPath="$(PkgdefFullPath)" Condition="Exists('$(PkgdefFullPath)')" />
-	<PatchPkgdefFile PkgdefPath="$(LatestPkgdefFullPath)" Condition="Exists('$(LatestPkgdefFullPath)')" />
-  </Target>
-
-  <Target Name="DeployInProcPackageToExperimentalInstance"
-          AfterTargets="Build"
-          Condition="'$(BuildingInsideVisualStudio)' == 'true' and Exists('$(DevEnvDir)devenv.exe')">
-    <PropertyGroup>
-      <PkgdefFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', 'obj', '$(Configuration)', '$(TargetFramework)', '$(ProjectName).pkgdef'))</PkgdefFullPath>
-      <VsLocalAppData>$(LocalAppData)\Microsoft\VisualStudio</VsLocalAppData>
-      <SupportingAssemblies>$(TargetDir)ContextRelay.Core.dll</SupportingAssemblies>
-    </PropertyGroup>
-    <DeployInProcPackage
-      PkgdefPath="$(PkgdefFullPath)"
-      DllPath="$(TargetPath)"
-      VsLocalAppData="$(VsLocalAppData)"
-      RootSuffix="Exp"
-      SupportingAssemblies="$(SupportingAssemblies)" />
-  </Target>
 </Project>

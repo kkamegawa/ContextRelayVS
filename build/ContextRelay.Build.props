@@ -43,8 +43,8 @@
             );
 
             // Regex 2: Replace numeric resource references (@="#0") with literal display names
-            content = Regex.Replace(content, @"@=""#0""", "\"ContextRelay\"", RegexOptions.IgnoreCase);
-            content = Regex.Replace(content, @"@=""#1""", "\"General\"", RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, @"@=""#0""", "@=\"ContextRelay\"", RegexOptions.IgnoreCase);
+            content = Regex.Replace(content, @"@=""#1""", "@=\"General\"", RegexOptions.IgnoreCase);
 
             File.WriteAllText(PkgdefPath, content, new System.Text.UTF8Encoding(false));
             Log.LogMessage(MessageImportance.High, "Patched pkgdef file: {0}", PkgdefPath);

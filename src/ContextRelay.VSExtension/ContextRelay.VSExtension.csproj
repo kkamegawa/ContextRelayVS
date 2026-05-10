@@ -94,7 +94,7 @@
     <PropertyGroup>
       <_VsExpSuffix Condition="'$(_VsExpSuffix)' == ''">Exp</_VsExpSuffix>
       <_VsLocalAppData>$(LocalAppData)\Microsoft\VisualStudio</_VsLocalAppData>
-      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
+      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
       <_DllSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.dll'))</_DllSrc>
       <_ToolkitDllSrc>$(InProcToolkitAssemblyPath)</_ToolkitDllSrc>
     </PropertyGroup>
