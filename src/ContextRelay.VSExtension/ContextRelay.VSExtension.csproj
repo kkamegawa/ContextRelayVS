@@ -99,29 +99,26 @@
   </Target>
 
   <!--
-    Supplemental debug registration: copy the in-proc package (generated pkgdef + DLL + toolkit)
-    to the Experimental Instance Extensions folder as a separate VSSDK payload using a
-    standard VSIX-like publisher/name/version layout. This keeps F5/debug runs aligned with
-    the packaged VSIX without relying on extra direct hive writes.
+    Deploy the in-proc package sidecar to the Experimental Instance Extensions folder.
+    Uses the static pkgdef checked into the repository (not the VSSDK-generated one from obj/)
+    because GeneratePkgDef may not run reliably in all build environments.
+    The static pkgdef is the authoritative registration source for Tools > Options.
     Runs during Debug builds and whenever DeployExtension is true.
   -->
   <Target Name="DeployInProcPackageToExtensions" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' Or '$(DeployExtension)' == 'true'">
     <PropertyGroup>
       <_VsExpSuffix Condition="'$(_VsExpSuffix)' == ''">Exp</_VsExpSuffix>
       <_VsLocalAppData>$(LocalAppData)\Microsoft\VisualStudio</_VsLocalAppData>
-      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
+      <!-- Use the static pkgdef from the project directory instead of the generated
+           one from obj/. The VSSDK GeneratePkgDef target may not produce output in all
+           build configurations, but the static pkgdef is always available. -->
+      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
       <_DllSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.dll'))</_DllSrc>
-      <_ToolkitDllSrc>$(InProcToolkitAssemblyPath)</_ToolkitDllSrc>
+      <!-- Runtime dependencies required by the in-proc package when the options page loads.
+           ContextRelay.Core.dll provides settings types and CloudEnvironment enum.
+           System.Text.Json.dll and polyfills are needed for JSON settings serialization. -->
+      <_SupportingAssemblies>$(InProcToolkitAssemblyPath);$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'ContextRelay.Core.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'Newtonsoft.Json.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'System.Text.Json.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'System.Text.Encodings.Web.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'System.Buffers.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'System.Memory.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'System.Numerics.Vectors.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'System.Runtime.CompilerServices.Unsafe.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'System.Threading.Tasks.Extensions.dll'));$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'Microsoft.Bcl.AsyncInterfaces.dll'))</_SupportingAssemblies>
     </PropertyGroup>
-    <ItemGroup>
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VsRegEdit.exe')" />
-    </ItemGroup>
     <RemoveDuplicateExperimentalExtensions
       VsLocalAppData="$(_VsLocalAppData)"
       RootSuffix="$(_VsExpSuffix)"
@@ -131,42 +128,11 @@
       DllPath="$(_DllSrc)"
       VsLocalAppData="$(_VsLocalAppData)"
       RootSuffix="$(_VsExpSuffix)"
-      SupportingAssemblies="$(_ToolkitDllSrc)"
+      SupportingAssemblies="$(_SupportingAssemblies)"
       ExtensionId="$(VsixExtensionId)"
       PublisherName="KazushiKamegawa"
       SidecarName="ContextRelay.Package"
       SidecarVersion="$(Version)" />
-    <Warning Condition="'@(_VsRegEditPath)' == ''" Text="VsRegEdit.exe was not found; skipping direct Experimental Instance options registration." />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; @ string &quot;ContextRelay&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; PID string &quot;0.3.0&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; ProductDetails string &quot;ContextRelay options integration.&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; @ string &quot;ContextRelayOptionsPackage&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; InprocServer32 string &quot;$WinDir$\SYSTEM32\MSCOREE.DLL&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; Class string &quot;ContextRelay.VSExtension.Package.Options.ContextRelayOptionsPackage&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; CodeBase string &quot;$(_DllSrc)&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; AllowsBackgroundLoad dword 1" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay&quot; @ string &quot;ContextRelay&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; @ string &quot;General&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; Page string &quot;{68a2d2d2-54f0-4d97-9ae7-861330f6231f}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; IsServerAware dword 0" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; IsInUnifiedSettings dword 0" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; Keywords string &quot;contextrelay;settings;options&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;AutomationProperties\ContextRelay&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;AutomationProperties\ContextRelay\General&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;AutomationProperties\ContextRelay\General&quot; Name string &quot;ContextRelay.General&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; @ string &quot;0&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; Category string &quot;{68a2d2d2-54f0-4d97-9ae7-861330f6231f}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; ToolsOptionsPath string &quot;ContextRelay&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; VSSettingsMigration dword 0" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; name string &quot;Community.VisualStudio.Toolkit&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; publicKeyToken string &quot;79441d341a79572c&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; culture string &quot;neutral&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; version string &quot;17.0.551.0&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; codeBase string &quot;$(_ToolkitDllSrc)&quot;" />
-    <Message Importance="High" Condition="'@(_VsRegEditPath)' != ''" Text="Registered ContextRelay options page in the $(_VsExpSuffix) Experimental Instance hives for: @(_VsRegEditPath)" />
-    <Message Importance="High" Text="Deployed the in-proc package sidecar using standard VSIX discovery layout under the Experimental Instance Extensions folder." />
+    <Message Importance="High" Text="Deployed the in-proc package sidecar to the Experimental Instance Extensions folder." />
   </Target>
 </Project>
