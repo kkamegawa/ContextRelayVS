@@ -325,6 +325,44 @@ public sealed class AdapterTests
     }
 
     [Fact]
+    public async Task TodoSearchAdapter_RemovesScriptAndStyleBlocksFromHtmlBody()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var httpClient = new HttpClient(new QueueHttpMessageHandler(
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    { "id": "list-1", "displayName": "Backlog", "wellknownListName": "defaultList" }
+                  ]
+                }
+                """),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "value": [
+                    {
+                      "id": "todo-1",
+                      "title": "Security check",
+                      "body": {
+                        "contentType": "html",
+                        "content": "<style>.x{color:red;}</style>&lt;script&gt;alert('encoded')&lt;/script&gt;<script>alert('xss')</script><p>Keep visible content.</p>"
+                      },
+                      "createdDateTime": "2026-04-19T09:00:00Z"
+                    }
+                  ]
+                }
+                """)));
+
+        var adapter = new TodoSearchAdapter(new GraphHttpClient(httpClient));
+        var results = await adapter.SearchAsync("token", "visible", 10, cancellationToken);
+
+        Assert.Single(results);
+        Assert.Contains("Keep visible content.", results[0].Snippet);
+        Assert.DoesNotContain("alert('xss')", results[0].Snippet);
+        Assert.DoesNotContain("alert('encoded')", results[0].Snippet);
+        Assert.DoesNotContain(".x{color:red;}", results[0].Snippet);
+    }
+
+    [Fact]
     public async Task CopilotChatAdapter_ReturnsAssistantReply()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
