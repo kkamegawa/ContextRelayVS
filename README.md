@@ -1,4 +1,4 @@
-# ContextRelay for Visual Studio
+﻿# ContextRelay for Visual Studio
 
 [![CI](https://github.com/kkamegawa/ContextRelayVS/actions/workflows/ci.yml/badge.svg)](https://github.com/kkamegawa/ContextRelayVS/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/kkamegawa/ContextRelayVS/branch/main/graph/badge.svg)](https://codecov.io/gh/kkamegawa/ContextRelayVS)
@@ -124,7 +124,7 @@ UI is native WPF bound to `VsBrushes` / `EnvironmentColors` so it follows the VS
 ## Current known gaps
 
 - Experimental Instance behavior still needs host-side manual validation.
-- Visual Studio **Tools > Options** integration is deployed as a sidecar in-proc package to the VS Extensions folder during Debug builds.
+- Visual Studio **Tools > Options** integration is deployed as a sidecar in-proc package and registered in the Experimental Instance hive during Debug builds.
 - Marketplace publishing still requires PAT provisioning and a manual release trigger.
 - The VS Code repository still needs its separate shared-store migration PR.
 - Prompt injection into GitHub Copilot Chat is still clipboard-based in Visual Studio; unlike VS Code, there is no supported prompt-prefill API wired into this extension.

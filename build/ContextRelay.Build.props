@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     Shared MSBuild UsingTask definitions for ContextRelay build infrastructure.
@@ -321,19 +321,82 @@
                     Log.LogMessage(MessageImportance.High, "Created Extensions folder: {0}", extensionsPath);
                 }
 
-                // Find or create Extensions-{version} subfolder
+                // Old deployments incorrectly used the Extensions-<instance> cache folder.
+                // Keep the path only so those stale deployments can be removed.
                 string expName = expDir.Name.Replace(rootSuffix, "");
-                string expectedSubDir = "Extensions-" + expName;
-                string subDirPath = Path.Combine(extensionsPath, expectedSubDir);
+                string legacySubDirPath = Path.Combine(extensionsPath, "Extensions-" + expName);
 
-                if (!Directory.Exists(subDirPath))
+                string sidecarExtensionId = string.IsNullOrWhiteSpace(ExtensionId)
+                    ? "ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package"
+                    : ExtensionId + ".Package";
+
+                // VS scans extension manifests from immediate child folders under Extensions.
+                // Keep the sidecar flat so its VSSDK pkgdef is merged into the experimental hive.
+                string targetDir = Path.Combine(extensionsPath, "ContextRelay.Package");
+                string fullTargetDir = Path.GetFullPath(targetDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var staleSidecarDirs = new List<string>
                 {
-                    Directory.CreateDirectory(subDirPath);
-                    Log.LogMessage(MessageImportance.High, "Created Extensions subfolder: {0}", subDirPath);
+                    Path.Combine(legacySubDirPath, "ContextRelay.Package"),
+                    Path.Combine(legacySubDirPath, "KazushiKamegawa", "ContextRelay.Package")
+                };
+
+                foreach (string candidateRoot in new[] { extensionsPath, legacySubDirPath }.Where(Directory.Exists))
+                {
+                    foreach (DirectoryInfo candidateDir in new DirectoryInfo(candidateRoot).GetDirectories())
+                    {
+                        string fullCandidateDir = Path.GetFullPath(candidateDir.FullName).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        if (StringComparer.OrdinalIgnoreCase.Equals(fullCandidateDir, fullTargetDir))
+                        {
+                            continue;
+                        }
+
+                        string candidateManifest = Path.Combine(candidateDir.FullName, "extension.vsixmanifest");
+                        if (!File.Exists(candidateManifest))
+                        {
+                            continue;
+                        }
+
+                        try
+                        {
+                            string candidateManifestContent = File.ReadAllText(candidateManifest);
+                            bool isCurrentSidecar = candidateManifestContent.Contains("Id=\"" + sidecarExtensionId + "\"");
+                            bool isStaleHybridPackage = !string.IsNullOrWhiteSpace(ExtensionId)
+                                && candidateManifestContent.Contains("Id=\"" + ExtensionId + "\"")
+                                && candidateManifestContent.Contains("ContextRelay.VSExtension.Package.pkgdef");
+
+                            if (isCurrentSidecar || isStaleHybridPackage)
+                            {
+                                staleSidecarDirs.Add(candidateDir.FullName);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.LogWarning("Failed to inspect sidecar manifest {0}: {1}", candidateManifest, ex.Message);
+                        }
+                    }
                 }
 
-                // Create target directory for in-proc package
-                string targetDir = Path.Combine(subDirPath, "KazushiKamegawa", "ContextRelay.Package");
+                foreach (string staleDir in staleSidecarDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (Directory.Exists(staleDir))
+                    {
+                        Directory.Delete(staleDir, recursive: true);
+                        Log.LogMessage(MessageImportance.High, "Removed stale sidecar deployment: {0}", staleDir);
+                    }
+                }
+
+                string stalePublisherDir = Path.Combine(legacySubDirPath, "KazushiKamegawa");
+                if (Directory.Exists(stalePublisherDir) && !Directory.EnumerateFileSystemEntries(stalePublisherDir).Any())
+                {
+                    Directory.Delete(stalePublisherDir);
+                    Log.LogMessage(MessageImportance.High, "Removed empty sidecar publisher folder: {0}", stalePublisherDir);
+                }
+
+                if (Directory.Exists(targetDir))
+                {
+                    Directory.Delete(targetDir, recursive: true);
+                }
+
                 Directory.CreateDirectory(targetDir);
 
                 // Copy pkgdef
@@ -376,23 +439,33 @@
                 }
 
                 // Write extension.vsixmanifest
-                string manifestContent = @"<PackageManifest Version=""2.0.0"" xmlns=""http://schemas.microsoft.com/developer/vsx-schema/2011"">
+                string manifestContent = $@"<PackageManifest Version=""2.0.0"" xmlns=""http://schemas.microsoft.com/developer/vsx-schema/2011"">
   <Metadata>
-    <Identity Id=""ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package"" Version=""0.3.0.0"" Language=""en-US"" Publisher=""KazushiKamegawa"" />
+    <Identity Id=""{sidecarExtensionId}"" Version=""0.3.0.0"" Language=""en-US"" Publisher=""KazushiKamegawa"" />
     <DisplayName>ContextRelay for Visual Studio (Package)</DisplayName>
     <Description xml:space=""preserve"">In-proc VSSDK package for ContextRelay Tools &gt; Options registration.</Description>
   </Metadata>
-  <Installation>
+  <Installation ExtensionType=""VSSDK"">
     <InstallationTarget Id=""Microsoft.VisualStudio.Enterprise"" Version=""[17.9,)"">
       <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id=""Microsoft.VisualStudio.Enterprise"" Version=""[17.9,)"">
+      <ProductArchitecture>arm64</ProductArchitecture>
     </InstallationTarget>
     <InstallationTarget Id=""Microsoft.VisualStudio.Pro"" Version=""[17.9,)"">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
+    <InstallationTarget Id=""Microsoft.VisualStudio.Pro"" Version=""[17.9,)"">
+      <ProductArchitecture>arm64</ProductArchitecture>
+    </InstallationTarget>
     <InstallationTarget Id=""Microsoft.VisualStudio.Community"" Version=""[17.9,)"">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
+    <InstallationTarget Id=""Microsoft.VisualStudio.Community"" Version=""[17.9,)"">
+      <ProductArchitecture>arm64</ProductArchitecture>
+    </InstallationTarget>
   </Installation>
+  <Dependencies />
   <Prerequisites>
     <Prerequisite Id=""Microsoft.VisualStudio.Component.CoreEditor"" Version=""[17.9,)"" DisplayName=""Visual Studio core editor"" />
   </Prerequisites>
