@@ -3,7 +3,7 @@
     <Metadata>
         <Identity Id="ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11" Version="0.3.0.0" Language="en-US" Publisher="KazushiKamegawa" />
         <DisplayName>ContextRelay for Visual Studio</DisplayName>
-        <Description xml:space="preserve">Surface Microsoft 365 context (SharePoint, OneDrive, Teams, Mail) in a Visual Studio tool window. Out-of-process extension built with Microsoft.VisualStudio.Extensibility SDK.</Description>
+        <Description xml:space="preserve">Surface Microsoft 365 context (SharePoint, OneDrive, Teams, Mail) in a Visual Studio tool window and expose ContextRelay settings through Tools &gt; Options.</Description>
         <MoreInfo>https://github.com/kkamegawa/ContextRelayVS</MoreInfo>
         <License>LICENSE.txt</License>
         <GettingStartedGuide>https://github.com/kkamegawa/ContextRelayVS#readme</GettingStartedGuide>
@@ -11,7 +11,7 @@
         <Tags>copilot;github-copilot;microsoft-365;graph;teams;sharepoint;onedrive;outlook;handoff;productivity</Tags>
         <Preview>true</Preview>
     </Metadata>
-    <Installation>
+    <Installation ExtensionType="VSSDK+VisualStudio.Extensibility">
         <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.9,)">
             <ProductArchitecture>amd64</ProductArchitecture>
         </InstallationTarget>
@@ -30,10 +30,13 @@
         <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.9,)">
             <ProductArchitecture>arm64</ProductArchitecture>
         </InstallationTarget>
+        <DotnetTargetVersions>net8.0</DotnetTargetVersions>
     </Installation>
     <Dependencies />
     <Prerequisites>
         <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.9,)" DisplayName="Visual Studio core editor" />
     </Prerequisites>
-    <Assets />
+    <Assets>
+        <Asset Type="Microsoft.VisualStudio.VsPackage" Path="ContextRelay.VSExtension.Package.pkgdef" />
+    </Assets>
 </PackageManifest>
