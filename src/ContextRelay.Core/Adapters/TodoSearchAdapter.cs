@@ -228,6 +228,8 @@ public sealed class TodoSearchAdapter : IContextSearchAdapter
 
         if (string.Equals(body?.ContentType, "html", StringComparison.OrdinalIgnoreCase))
         {
+            content = Regex.Replace(content, "<script\\b[^>]*>.*?</script>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            content = Regex.Replace(content, "<style\\b[^>]*>.*?</style>", " ", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             content = Regex.Replace(content, "<[^>]+>", " ");
             content = System.Net.WebUtility.HtmlDecode(content);
         }
