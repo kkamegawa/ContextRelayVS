@@ -3,7 +3,7 @@
 [![CI](https://github.com/kkamegawa/ContextRelayVS/actions/workflows/ci.yml/badge.svg)](https://github.com/kkamegawa/ContextRelayVS/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/kkamegawa/ContextRelayVS/branch/main/graph/badge.svg)](https://codecov.io/gh/kkamegawa/ContextRelayVS)
 
-ContextRelay for Visual Studio isa Visual Studio (2022 / 2026) extension that surfaces relevant Microsoft 365 context (Exchange Mail, Microsoft Teams, SharePoint, OneDrive) in a tool window while you design and code. It ports the feature set of the VS Code extension [ContextRelay](https://github.com/kkamegawa/ContextRelay) to the Visual Studio platform, and can share pinned snippets, chat history, and handoff-document pointers with the VS Code version on the same machine.
+ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that surfaces relevant Microsoft 365 context (Exchange Mail, Microsoft Teams, SharePoint, OneDrive, OneNote, Planner, and Microsoft To Do) in a tool window while you design and code. It ports the feature set of the VS Code extension [ContextRelay](https://github.com/kkamegawa/ContextRelay) to the Visual Studio platform, and can share pinned snippets, chat history, and handoff-document pointers with the VS Code version on the same machine.
 
 > **Status**: Implemented preview. The repository builds an installable VSIX locally and now includes the planned in-repo UX features: localized tool-window text, slash-command discovery, result actions, `/connectors`, plain Microsoft 365 Copilot chat, `/ask` context chat, and `/workiq`. Manual Experimental Instance validation is still required before marketplace release.
 
@@ -26,6 +26,50 @@ ContextRelay for Visual Studio isa Visual Studio (2022 / 2026) extension that su
 - **TTL + LRU cache** with workspace persistence.
 - **Cross-editor session sharing** — snippets, chat history, and handoff pointers are shared with the VS Code extension via `%LocalAppData%\ContextRelay\shared\`. See [docs/shared-session-schema.md](docs/shared-session-schema.md).
 
+## Slash commands and sources
+
+| Command | Source |
+|---|---|
+| `/mail <query>` | Exchange Online mail |
+| `/teams <query>` | Microsoft Teams messages |
+| `/sharepoint <query>` | SharePoint sites and pages |
+| `/onedrive <query>` | OneDrive files |
+| `/onenote <query>` | OneNote pages |
+| `/task <query>` | Planner tasks and Microsoft To Do tasks |
+| `/connectors <query>` | Microsoft Graph connectors |
+| `/all <query>` | All enabled sources |
+| `/ask <instruction>` | Send pinned snippets to Microsoft 365 Copilot and show the answer in the panel |
+| `/workiq <query>` | Send a natural language query to Work IQ (A2A protocol) |
+| `/clear` | Clear chat transcript, pinned snippets, and Work IQ conversation context |
+
+## Authentication and delegated permissions
+
+ContextRelay uses Microsoft Entra delegated permissions through the signed-in Visual Studio user. Typical minimum sets by scenario:
+
+| Scenario | Minimum delegated permissions |
+|---|---|
+| Exchange mail search | `User.Read`, `Mail.Read` |
+| Teams message search | `User.Read`, `Chat.Read`, `ChannelMessage.Read.All` |
+| SharePoint and OneDrive search | `User.Read`, `Files.Read.All`, `Sites.Read.All` |
+| OneNote search | `User.Read`, `Notes.Read` |
+| Planner and To Do search (`/task`) | `User.Read`, `Tasks.Read` |
+| Connectors search | `User.Read`, `ExternalItem.Read.All` |
+
+> Notes:
+>
+> - Admin consent is commonly required for `ChannelMessage.Read.All` and `ExternalItem.Read.All`.
+> - `/workiq` uses the non-Graph delegated permission `WorkIQAgent.Ask` on `api://workiq.svc.cloud.microsoft`.
+> - Personal Microsoft accounts are not supported.
+
+## Security model
+
+ContextRelay applies the same security-first posture used in the VS Code extension:
+
+- External links are normalized through an allowlist (`https`, `http`, `mailto`) before launch.
+- Unsafe or malformed URLs are dropped instead of being forwarded to host navigation.
+- Adapter text normalization strips script/style payloads from HTML-derived snippet content.
+- Plain chat and `/ask` keep source attachment explicit to reduce accidental over-sharing of context.
+
 ## Build and package
 
 - Visual Studio 2022 17.8 or later, or Visual Studio 2026 (including Insider).
@@ -37,6 +81,25 @@ ContextRelay for Visual Studio isa Visual Studio (2022 / 2026) extension that su
 pwsh -File build\Invoke-PackageAudit.ps1 -SolutionPath .\ContextRelayVS.sln
 dotnet build ContextRelayVS.sln -v minimal
 dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj -v minimal
+```
+
+```bash
+pwsh -File ./build/Invoke-PackageAudit.ps1 -SolutionPath ./ContextRelayVS.sln
+dotnet build ./ContextRelayVS.sln -v minimal
+dotnet test ./tests/ContextRelay.Core.Tests/ContextRelay.Core.Tests.csproj -v minimal
+```
+
+## Usage quick start
+
+Plain text input starts or continues Microsoft 365 Copilot chat in the tool window without implicit source search.
+
+To search specific sources, use slash commands:
+
+```text
+/all architecture decision
+/onenote release checklist
+/task onboarding
+/ask summarize pinned snippets as release notes
 ```
 
 The VSIX is emitted at:
