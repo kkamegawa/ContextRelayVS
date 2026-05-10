@@ -103,6 +103,11 @@
           Background="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}"
           FocusManager.IsFocusScope="True"
           FocusManager.FocusedElement="{Binding ElementName=QueryTextBox}">
+        <i:Interaction.Triggers>
+            <i:EventTrigger EventName="Loaded">
+                <i:CallMethodAction TargetObject="{Binding ElementName=QueryTextBox}" MethodName="Focus" />
+            </i:EventTrigger>
+        </i:Interaction.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -285,7 +290,7 @@
                      Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="1" Grid.Column="0"
                       Margin="0,0,8,0"
                       Padding="10,8"
-                      Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged, NotifyOnTargetUpdated=True}"
+                      Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
                      ToolTip="{Binding SearchToolTipText}">
                 <TextBox.InputBindings>
                     <KeyBinding Key="Enter" Command="{Binding ConfirmQueryInputCommand}" />
@@ -294,15 +299,7 @@
                     <KeyBinding Key="Tab" Command="{Binding ApplyCommandSelectionCommand}" />
                     <KeyBinding Key="Escape" Command="{Binding CloseCommandPopupCommand}" />
                 </TextBox.InputBindings>
-                <!-- Move caret to end when the ViewModel updates the text (e.g. after slash command apply).
-                     TargetUpdated fires only for VM->View binding updates, not for user keystrokes.
-                     The i: namespace is mc:Ignorable so if behaviors are unavailable in VS's AppDomain
-                     the elements are silently skipped with no error or regression. -->
-                <i:Interaction.Triggers>
-                    <i:EventTrigger EventName="TargetUpdated">
-                        <i:ChangePropertyAction PropertyName="CaretIndex" Value="2147483647" />
-                    </i:EventTrigger>
-                </i:Interaction.Triggers>
+
             </TextBox>
             <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="1" Grid.Column="1" Padding="16,8" Content="{Binding SearchButtonText}" Command="{Binding SearchCommand}" IsEnabled="{Binding IsNotBusy}" />
         </Grid>

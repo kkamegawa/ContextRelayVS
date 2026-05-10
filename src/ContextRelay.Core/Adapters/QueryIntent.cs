@@ -29,6 +29,12 @@ public static class QueryIntentParser
         "section", "sections", "notebook", "notebooks"
     };
 
+    private static readonly HashSet<string> SourceHintWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "onenote",
+        "todo"
+    };
+
     private static readonly HashSet<string> PlannerMetadataWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "assigned", "assignment", "assignments", "bucket", "buckets", "metadata", "meta", "status"
@@ -69,6 +75,7 @@ public static class QueryIntentParser
         {
             if (word.Length >= 2 &&
                 !FillerWords.Contains(word) &&
+                !SourceHintWords.Contains(word) &&
                 !OneNoteHierarchyWords.Contains(word) &&
                 !PlannerMetadataWords.Contains(word) &&
                 !PlannerCommentWords.Contains(word))

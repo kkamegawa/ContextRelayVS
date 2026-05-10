@@ -63,16 +63,13 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("ItemContainerStyle=\"{StaticResource SuggestionListBoxItemStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("FocusManager.IsFocusScope=\"True\"", xaml, StringComparison.Ordinal);
         Assert.Contains("FocusManager.FocusedElement=\"{Binding ElementName=QueryTextBox}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("EventName=\"Loaded\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MethodName=\"Focus\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"QueryTextBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ToolWindowTextBrushKey", xaml, StringComparison.Ordinal);
         Assert.Contains("Focusable\" Value=\"False\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsTabStop\" Value=\"False\"", xaml, StringComparison.Ordinal);
-        // Caret-to-end fix: TargetUpdated fires only when VM pushes text (not on user keystrokes).
-        // mc:Ignorable="i" makes the behaviors elements safe to skip if the assembly is unavailable.
         Assert.Contains("mc:Ignorable=\"i\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("NotifyOnTargetUpdated=True", xaml, StringComparison.Ordinal);
-        Assert.Contains("EventName=\"TargetUpdated\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("PropertyName=\"CaretIndex\"", xaml, StringComparison.Ordinal);
     }
 
     [Theory]
