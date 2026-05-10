@@ -38,7 +38,7 @@
   <ItemGroup>
 	<PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" />
 	<PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" ExcludeAssets="runtime" />
-	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" />
+	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" GeneratePathProperty="true" />
 	<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
   <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets" Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
@@ -48,6 +48,13 @@
 	  <CreatePkgDefAssemblyToProcess>$(TargetPath)</CreatePkgDefAssemblyToProcess>
 	</PropertyGroup>
   </Target>
+  <!-- VSSDK's GeneratePkgDef is only chained into PrepareForRun, which "dotnet build" does
+       not invoke. Hook it into the Build chain so CLI builds produce the same pkgdef the
+       VS in-IDE F5 build produces. -->
+  <Target Name="EnsureGeneratePkgDefDuringBuild"
+          AfterTargets="Build"
+          DependsOnTargets="GeneratePkgDef"
+          Condition="'$(GeneratePkgDefFile)'=='true'" />
   <!-- Patch the generated pkgdef after VSSDK produces it so the page stays visible
        in the legacy Tools > Options tree and uses readable display names. -->
   <Target Name="PatchPkgdefOptionsRegistration" AfterTargets="GeneratePkgDef;Build">

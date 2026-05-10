@@ -16,13 +16,19 @@
          registration failures are diagnosable even when Visual Studio does not
          emit its default ActivityLog.xml automatically. -->
     <VisualStudioActivityLogPath>$([System.IO.Path]::Combine('$(APPDATA)', 'Microsoft', 'VisualStudio', 'ContextRelayVS-Exp-ActivityLog.xml'))</VisualStudioActivityLogPath>
-    <!-- Path properties for the in-proc package registration support.
-         The package remains isolated from the net8 OOP runtime and is deployed
-         as a sidecar for Options registration. -->
+    <!-- Path properties for the in-proc package. The net48 package is built as a
+         peer project; its DLL, generated pkgdef, and toolkit dependency are
+         injected into the produced VSIX zip by PatchVsixForInProcPackage so that
+         VSIXInstaller / Marketplace installs register Tools > Options for VS via
+         the Extension Manager pipeline. We do not perform sidecar deployment. -->
     <InProcPackageTargetFramework>net48</InProcPackageTargetFramework>
     <VsixExtensionId>ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11</VsixExtensionId>
-    <InProcPackageOutputDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageOutputDir>
-    <InProcToolkitAssemblyPath>$([System.IO.Path]::Combine('$(InProcPackageOutputDir)', 'Community.VisualStudio.Toolkit.dll'))</InProcToolkitAssemblyPath>
+    <InProcPackageBinDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageBinDir>
+    <InProcPackageObjDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageObjDir>
+    <InProcPackageDllPath>$([System.IO.Path]::Combine('$(InProcPackageBinDir)', 'ContextRelay.VSExtension.Package.dll'))</InProcPackageDllPath>
+    <InProcPackagePkgdefPath>$([System.IO.Path]::Combine('$(InProcPackageObjDir)', 'ContextRelay.VSExtension.Package.pkgdef'))</InProcPackagePkgdefPath>
+    <InProcToolkitAssemblyPath>$([System.IO.Path]::Combine('$(InProcPackageBinDir)', 'Community.VisualStudio.Toolkit.dll'))</InProcToolkitAssemblyPath>
+    <SourceVsixManifestPath>$(MSBuildProjectDirectory)\source.extension.vsixmanifest</SourceVsixManifestPath>
   </PropertyGroup>
 
   <Import Project="..\..\build\ContextRelay.Build.props" />
@@ -39,13 +45,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
-    <!-- Build the in-proc package for sidecar deployment only.
-         ReferenceOutputAssembly=false keeps the net48 package out of the net8 compile graph. -->
+    <!-- The in-proc package targets net48 and must not enter the net8 OOP compile graph.
+         We build it as a dependency so its DLL and pkgdef exist before we patch the VSIX,
+         but ReferenceOutputAssembly=false keeps its assembly out of the net8 reference set.
+         IncludeOutputGroupsInVSIX is empty to ensure the SDK does not try to materialize
+         net48 outputs via |...| token paths (that produces the "%CurrentProject%" failure
+         seen for Microsoft.VisualStudio.Copilot.Testing.UI in v18). Payload injection is
+         performed AFTER CreateVsixContainer by PatchVsixForInProcPackage. -->
     <ProjectReference Include="..\ContextRelay.VSExtension.Package\ContextRelay.VSExtension.Package.csproj">
       <Name>ContextRelay.VSExtension.Package</Name>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <!-- Explicitly suppress VSIX output groups from the net48 package project reference.
-           This prevents unresolved project-output tokens from leaking into local deployment. -->
       <IncludeOutputGroupsInVSIX></IncludeOutputGroupsInVSIX>
     </ProjectReference>
   </ItemGroup>
@@ -89,84 +98,134 @@
   </ItemGroup>
 
   <!--
-    Extensibility.Build.targets (OOP mode) sets SourceVsixManifest to $(IntermediateOutputPath)extension.vsixmanifest,
-    which points at a file that doesn't exist yet. We copy our source.extension.vsixmanifest into the intermediate
-    directory before DetokenizeVsixManifestFile runs so VsixUtil.exe can find it.
+    PatchVsixContainerAfterCreation: runs after the Extensibility build pipeline produces
+    the .vsix archive and rewrites it so a single VSIXInstaller / Marketplace install
+    registers both the OOP extension and the in-proc Tools > Options VSPackage. This:
+      1. Replaces the OOP-synthesized extension.vsixmanifest with the source manifest's
+         Identity / Installation / Dependencies / Prerequisites, then rewrites
+         ExtensionType to the hybrid VSSDK+VisualStudio.Extensibility form, preserves
+         <DotnetTargetVersions>net8.0</DotnetTargetVersions>, and adds the
+         Microsoft.VisualStudio.VsPackage asset.
+      2. Injects the in-proc package DLL, its generated pkgdef, and Community.VisualStudio.Toolkit.dll.
+      3. Registers the .pkgdef content type in [Content_Types].xml.
+    This eliminates the sidecar drop-in path entirely; per VS Insiders v18 evidence, the
+    per-user Extensions folder is in ImageManifestSearchPath but NOT in PkgDefSearchPath,
+    so sidecar registration is silently ignored. The only reliable registration path is
+    via a properly packaged VSIX.
   -->
-  <Target Name="CopyVsixManifestToIntermediate" BeforeTargets="DetokenizeVsixManifestFile" Inputs="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" Outputs="$(IntermediateOutputPath)extension.vsixmanifest">
-    <MakeDir Directories="$(IntermediateOutputPath)" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" DestinationFiles="$(IntermediateOutputPath)extension.vsixmanifest" />
+  <Target Name="PatchVsixContainerAfterCreation"
+          AfterTargets="CreateVsixContainer"
+          Condition="Exists('$(TargetVsixContainer)')">
+    <Error Condition="!Exists('$(InProcPackageDllPath)')"
+           Text="In-proc package DLL not found at $(InProcPackageDllPath). Build the package project first." />
+    <Error Condition="!Exists('$(InProcPackagePkgdefPath)')"
+           Text="In-proc package pkgdef not found at $(InProcPackagePkgdefPath). Ensure GeneratePkgDef ran during the package project build." />
+    <Error Condition="!Exists('$(InProcToolkitAssemblyPath)')"
+           Text="Community.VisualStudio.Toolkit.dll not found at $(InProcToolkitAssemblyPath); the in-proc options package will fail to load without it." />
+    <Error Condition="!Exists('$(SourceVsixManifestPath)')"
+           Text="Source manifest not found at $(SourceVsixManifestPath)." />
+    <PatchVsixForInProcPackage
+      VsixPath="$(TargetVsixContainer)"
+      SourceManifestPath="$(SourceVsixManifestPath)"
+      PackageDllPath="$(InProcPackageDllPath)"
+      PackagePkgdefPath="$(InProcPackagePkgdefPath)"
+      SupportingAssemblies="$(InProcToolkitAssemblyPath)" />
+    <Message Importance="High" Text="Patched VSIX $(TargetVsixContainer) with in-proc package payload and hybrid manifest." />
   </Target>
 
   <!--
-    Supplemental debug registration: copy the in-proc package (generated pkgdef + DLL + toolkit)
-    to the Experimental Instance Extensions folder as a separate VSSDK payload using a
-    standard VSIX-like publisher/name/version layout. This keeps F5/debug runs aligned with
-    the packaged VSIX without relying on extra direct hive writes.
-    Runs during Debug builds and whenever DeployExtension is true.
+    AssertVsixContents: post-patch build-time assertion that the produced .vsix actually
+    contains the files and manifest entries required for Tools > Options registration to
+    survive a clean install. Fails the build if any are missing so the regression
+    investigated under PR #57 cannot recur silently.
   -->
-  <Target Name="DeployInProcPackageToExtensions" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' Or '$(DeployExtension)' == 'true'">
-    <PropertyGroup>
-      <_VsExpSuffix Condition="'$(_VsExpSuffix)' == ''">Exp</_VsExpSuffix>
-      <_VsLocalAppData>$(LocalAppData)\Microsoft\VisualStudio</_VsLocalAppData>
-      <_PkgdefSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.pkgdef'))</_PkgdefSrc>
-      <_DllSrc>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)', 'ContextRelay.VSExtension.Package.dll'))</_DllSrc>
-      <_ToolkitDllSrc>$(InProcToolkitAssemblyPath)</_ToolkitDllSrc>
-    </PropertyGroup>
-    <ItemGroup>
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Enterprise\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Professional\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\VsRegEdit.exe')" />
-      <_VsRegEditPath Include="C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VsRegEdit.exe" Condition="Exists('C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\VsRegEdit.exe')" />
-    </ItemGroup>
-    <RemoveDuplicateExperimentalExtensions
-      VsLocalAppData="$(_VsLocalAppData)"
-      RootSuffix="$(_VsExpSuffix)"
-      ExtensionId="$(VsixExtensionId)" />
-    <DeployInProcPackage
-      PkgdefPath="$(_PkgdefSrc)"
-      DllPath="$(_DllSrc)"
-      VsLocalAppData="$(_VsLocalAppData)"
-      RootSuffix="$(_VsExpSuffix)"
-      SupportingAssemblies="$(_ToolkitDllSrc)"
-      ExtensionId="$(VsixExtensionId)"
-      PublisherName="KazushiKamegawa"
-      SidecarName="ContextRelay.Package"
-      SidecarVersion="$(Version)" />
-    <Warning Condition="'@(_VsRegEditPath)' == ''" Text="VsRegEdit.exe was not found; skipping direct Experimental Instance options registration." />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; @ string &quot;ContextRelay&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; PID string &quot;0.3.0&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;InstalledProducts\ContextRelayOptionsPackage&quot; ProductDetails string &quot;ContextRelay options integration.&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; @ string &quot;ContextRelayOptionsPackage&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; InprocServer32 string &quot;$WinDir$\SYSTEM32\MSCOREE.DLL&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; Class string &quot;ContextRelay.VSExtension.Package.Options.ContextRelayOptionsPackage&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; CodeBase string &quot;$(_DllSrc)&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;Packages\{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot; AllowsBackgroundLoad dword 1" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay&quot; @ string &quot;ContextRelay&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; @ string &quot;General&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; Page string &quot;{68a2d2d2-54f0-4d97-9ae7-861330f6231f}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; IsServerAware dword 0" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; IsInUnifiedSettings dword 0" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;ToolsOptionsPages\ContextRelay\General&quot; Keywords string &quot;contextrelay;settings;options&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;AutomationProperties\ContextRelay&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;AutomationProperties\ContextRelay\General&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;AutomationProperties\ContextRelay\General&quot; Name string &quot;ContextRelay.General&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; @ string &quot;0&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; Package string &quot;{b1609362-6f9d-4e65-a1d8-ec73608f326c}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; Category string &quot;{68a2d2d2-54f0-4d97-9ae7-861330f6231f}&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; ToolsOptionsPath string &quot;ContextRelay&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;UserSettings\ContextRelay_General&quot; VSSettingsMigration dword 0" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; name string &quot;Community.VisualStudio.Toolkit&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; publicKeyToken string &quot;79441d341a79572c&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; culture string &quot;neutral&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; version string &quot;17.0.551.0&quot;" />
-    <Exec Condition="'@(_VsRegEditPath)' != ''" Command="&quot;%(_VsRegEditPath.Identity)&quot; set local $(_VsExpSuffix) HKLM &quot;RuntimeConfiguration\dependentAssembly\codeBase\{AE1C8C17-591A-3FD4-A493-6EAE8313C33A}&quot; codeBase string &quot;$(_ToolkitDllSrc)&quot;" />
-    <Message Importance="High" Condition="'@(_VsRegEditPath)' != ''" Text="Registered ContextRelay options page in the $(_VsExpSuffix) Experimental Instance hives for: @(_VsRegEditPath)" />
-    <Message Importance="High" Text="Deployed the in-proc package sidecar using standard VSIX discovery layout under the Experimental Instance Extensions folder." />
+  <UsingTask TaskName="AssertVsixContents" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <VsixPath ParameterType="System.String" Required="true" />
+      <RequiredEntries ParameterType="System.String" Required="true" />
+      <RequiredManifestSubstrings ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.IO.Compression" />
+      <Using Namespace="System.Linq" />
+      <Code>
+        <![CDATA[
+        try
+        {
+            if (!File.Exists(VsixPath))
+            {
+                Log.LogError("VSIX not found at {0}", VsixPath);
+                return false;
+            }
+            string[] entries = RequiredEntries.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] substrings = RequiredManifestSubstrings.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+
+            using (ZipArchive zip = ZipFile.OpenRead(VsixPath))
+            {
+                foreach (string e in entries)
+                {
+                    string needle = e.Trim();
+                    if (string.IsNullOrEmpty(needle)) continue;
+                    bool found = zip.Entries.Any(en => string.Equals(en.FullName, needle, StringComparison.OrdinalIgnoreCase));
+                    if (!found)
+                    {
+                        Log.LogError("Produced VSIX is missing required entry: {0}", needle);
+                    }
+                }
+
+                ZipArchiveEntry manifestEntry = zip.Entries.FirstOrDefault(en => string.Equals(en.FullName, "extension.vsixmanifest", StringComparison.OrdinalIgnoreCase));
+                if (manifestEntry == null)
+                {
+                    Log.LogError("Produced VSIX is missing extension.vsixmanifest");
+                    return false;
+                }
+
+                string manifestText;
+                using (var stream = manifestEntry.Open())
+                using (var reader = new StreamReader(stream))
+                {
+                    manifestText = reader.ReadToEnd();
+                }
+
+                foreach (string s in substrings)
+                {
+                    string needle = s.Trim();
+                    if (string.IsNullOrEmpty(needle)) continue;
+                    if (manifestText.IndexOf(needle, StringComparison.Ordinal) < 0)
+                    {
+                        Log.LogError("extension.vsixmanifest in produced VSIX is missing required substring: {0}", needle);
+                    }
+                }
+
+                if (manifestText.Contains("%CurrentProject%"))
+                {
+                    Log.LogError("extension.vsixmanifest in produced VSIX contains unresolved %CurrentProject% token");
+                }
+                if (manifestText.Contains("Version=\"0.0.0.0\""))
+                {
+                    Log.LogError("extension.vsixmanifest in produced VSIX has Identity Version 0.0.0.0; source manifest version was not preserved");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogError("AssertVsixContents failed: {0}", ex.ToString());
+            return false;
+        }
+        return !Log.HasLoggedErrors;
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="AssertVsixContentsAfterPatch"
+          AfterTargets="PatchVsixContainerAfterCreation"
+          Condition="Exists('$(TargetVsixContainer)')">
+    <AssertVsixContents
+      VsixPath="$(TargetVsixContainer)"
+      RequiredEntries="extension.vsixmanifest;ContextRelay.VSExtension.Package.dll;ContextRelay.VSExtension.Package.pkgdef;Community.VisualStudio.Toolkit.dll"
+      RequiredManifestSubstrings="Microsoft.VisualStudio.VsPackage|Microsoft.VisualStudio.Community|Microsoft.VisualStudio.Pro|Microsoft.VisualStudio.Enterprise|VSSDK+VisualStudio.Extensibility" />
   </Target>
 </Project>
