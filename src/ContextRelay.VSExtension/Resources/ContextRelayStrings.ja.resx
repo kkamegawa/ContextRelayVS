@@ -20,6 +20,7 @@
   <data name="ClearSnippetsButtonText" xml:space="preserve"><value>スニペットをクリア</value></data>
   <data name="ClearCacheButtonText" xml:space="preserve"><value>キャッシュをクリア</value></data>
   <data name="DebugLogButtonText" xml:space="preserve"><value>デバッグ ログ</value></data>
+  <data name="DebugLogOpenedStatus" xml:space="preserve"><value>ContextRelay Debug 出力を開きました。</value></data>
   <data name="SearchButtonText" xml:space="preserve"><value>送信</value></data>
   <data name="SearchResultsHeaderText" xml:space="preserve"><value>検索結果</value></data>
   <data name="WindowTitleText" xml:space="preserve"><value>ContextRelay</value></data>

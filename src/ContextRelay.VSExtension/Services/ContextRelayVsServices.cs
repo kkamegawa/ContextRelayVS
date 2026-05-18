@@ -41,11 +41,19 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
                 continue;
             }
 
-            var root = InferWorkspaceRoot(document.Moniker.LocalPath);
+            var root = WorkspaceRootInference.InferWorkspaceRootFromPath(document.Moniker.LocalPath);
             if (!string.IsNullOrWhiteSpace(root))
             {
                 roots.Add(root!);
             }
+        }
+
+        var currentDirectoryRoot = WorkspaceRootInference.InferWorkspaceRootFromPath(
+            Environment.CurrentDirectory,
+            requireWorkspaceMarker: true);
+        if (!string.IsNullOrWhiteSpace(currentDirectoryRoot))
+        {
+            roots.Add(currentDirectoryRoot);
         }
 
         return roots
@@ -171,40 +179,4 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsService.NormalizeUiLanguage(uiLanguage));
     }
 
-    private static string? InferWorkspaceRoot(string filePath)
-    {
-        var directory = File.Exists(filePath)
-            ? Path.GetDirectoryName(filePath)
-            : filePath;
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            return null;
-        }
-
-        var current = new DirectoryInfo(directory);
-        while (current is not null)
-        {
-            try
-            {
-                if (current.EnumerateFiles("*.sln").Any() ||
-                    current.EnumerateFiles("*.slnx").Any() ||
-                    current.EnumerateDirectories(".git").Any())
-                {
-                    return current.FullName;
-                }
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return directory;
-            }
-            catch (IOException)
-            {
-                return directory;
-            }
-
-            current = current.Parent;
-        }
-
-        return directory;
-    }
 }

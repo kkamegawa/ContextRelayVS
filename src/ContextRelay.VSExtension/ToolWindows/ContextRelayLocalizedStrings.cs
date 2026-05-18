@@ -54,6 +54,7 @@ internal static class ContextRelayLocalizedStrings
     public static string ClearSnippetsButtonText => GetString("ClearSnippetsButtonText");
     public static string ClearCacheButtonText => GetString("ClearCacheButtonText");
     public static string DebugLogButtonText => GetString("DebugLogButtonText");
+    public static string DebugLogOpenedStatus => GetString("DebugLogOpenedStatus");
     public static string SearchButtonText => GetString("SearchButtonText");
     public static string SearchResultsHeaderText => GetString("SearchResultsHeaderText");
     public static string WindowTitleText => GetString("WindowTitleText");

@@ -48,7 +48,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ClearSnippetsCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearSnippetsAsync(ct)).ConfigureAwait(false));
         ClearCacheCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearCacheAsync(ct)).ConfigureAwait(false));
         AddFilesCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.AddFilesToQueryAsync(ct)).ConfigureAwait(false));
-        ShowDebugLogCommand = new AsyncCommand((_, _) => { host.ShowDebugLog(); return Task.CompletedTask; });
+        ShowDebugLogCommand = new AsyncCommand(async (_, ct) => await host.ShowDebugLogAsync(ct).ConfigureAwait(false));
         MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });

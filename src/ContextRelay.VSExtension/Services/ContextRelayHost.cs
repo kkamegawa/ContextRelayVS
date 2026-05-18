@@ -478,13 +478,9 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
-            if (workspaceRoots.Count == 0)
-            {
-                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerWorkspaceUnavailableStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
-            }
 
             var selectedFiles = await packageServices
-                .PickWorkspaceFilesAsync(workspaceRoots[0], cancellationToken)
+                .PickWorkspaceFilesAsync(workspaceRoots.Count > 0 ? workspaceRoots[0] : null, cancellationToken)
                 .ConfigureAwait(false);
             if (selectedFiles.Count == 0)
             {
@@ -570,7 +566,13 @@ internal sealed class ContextRelayHost : IDisposable
 
     public void ShowDebugLog()
     {
+        _ = ShowDebugLogAsync();
+    }
+
+    public async Task ShowDebugLogAsync(CancellationToken cancellationToken = default)
+    {
         logger.ShowDebugPane();
+        await RefreshStateAsync(ContextRelayLocalizedStrings.DebugLogOpenedStatus).ConfigureAwait(false);
     }
 
     public void OpenExternalUrl(string? url)
@@ -1567,12 +1569,29 @@ internal sealed class ContextRelayHost : IDisposable
                 ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(FileMentionResolver.MaxFileMentions));
         }
 
+        var normalizedSelections = selectedFiles
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         var normalizedWorkspaceRoots = workspaceRoots
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
             .Where(Directory.Exists)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        if (normalizedWorkspaceRoots.Length == 0 && normalizedSelections.Length > 0)
+        {
+            normalizedWorkspaceRoots = normalizedSelections
+                .Select(path => WorkspaceRootInference.InferWorkspaceRootFromPath(path))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(path!))
+                .Where(Directory.Exists)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
         if (normalizedWorkspaceRoots.Length == 0)
         {
             return new FileSelectionQueryUpdate(currentQuery, ContextRelayLocalizedStrings.FilePickerWorkspaceUnavailableStatus);
@@ -1581,13 +1600,6 @@ internal sealed class ContextRelayHost : IDisposable
         var existingMentionPaths = new HashSet<string>(
             existingCandidates.Select(candidate => NormalizeComparablePath(candidate.RawPath)),
             StringComparer.OrdinalIgnoreCase);
-
-        var normalizedSelections = selectedFiles
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(Path.GetFullPath)
-            .Where(File.Exists)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
 
         var mentionTokens = new List<string>();
         var skippedCount = 0;

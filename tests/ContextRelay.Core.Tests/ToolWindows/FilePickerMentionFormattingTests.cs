@@ -72,6 +72,39 @@ public sealed class FilePickerMentionFormattingTests
         }
     }
 
+    [Fact]
+    public void MergeSelectedFilesIntoQuery_WhenWorkspaceRootsAreUnavailable_InfersWorkspaceRootFromSelection()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true);
+        var mergeMethod = hostType!.GetMethod("MergeSelectedFilesIntoQuery", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(mergeMethod);
+
+        var workspaceRoot = CreateTemporaryWorkspace();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, ".git"));
+            var absolutePath = Path.Combine(workspaceRoot, "src", "sample.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
+            File.WriteAllText(absolutePath, "class Sample {}");
+
+            var result = mergeMethod!.Invoke(obj: null, parameters: new object[]
+            {
+                string.Empty,
+                new[] { absolutePath },
+                Array.Empty<string>()
+            });
+
+            Assert.NotNull(result);
+            var queryText = GetStringProperty(result!, "QueryText");
+            Assert.Contains("#src/sample.cs", queryText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(workspaceRoot);
+        }
+    }
+
     private static string GetStringProperty(object target, string propertyName)
     {
         var property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
