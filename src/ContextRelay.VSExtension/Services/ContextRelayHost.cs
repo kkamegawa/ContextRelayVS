@@ -16,6 +16,7 @@ using ContextRelay.Core.Auth;
 using ContextRelay.Core.Auth.Msal;
 using ContextRelay.Core.Cache;
 using ContextRelay.Core.Chat;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Handoff;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
@@ -229,9 +230,21 @@ internal sealed class ContextRelayHost : IDisposable
 
             var authSettings = settings.ToAuthSettings();
             shouldResolveSignedInUser = true;
+            var filePrompt = route.Target switch
+            {
+                RouteTarget.Chat => await ResolveFilePromptAsync(trimmed, route.Query, trimmed, cancellationToken).ConfigureAwait(false),
+                RouteTarget.Ask => await ResolveFilePromptAsync(route.Query, route.Query, trimmed, cancellationToken).ConfigureAwait(false),
+                RouteTarget.WorkIq => await ResolveFilePromptAsync(route.Query, route.Query, trimmed, cancellationToken).ConfigureAwait(false),
+                _ => new FilePromptContext(route.Query, Array.Empty<ResolvedFileMention>())
+            };
+            if (filePrompt is null)
+            {
+                return state;
+            }
+
             if (route.Target == RouteTarget.WorkIq)
             {
-                return await HandleWorkIqCommandAsync(trimmed, route.Query, authSettings, cancellationToken).ConfigureAwait(false);
+                return await HandleWorkIqCommandAsync(trimmed, filePrompt.Prompt, authSettings, settings, filePrompt.Files, cancellationToken).ConfigureAwait(false);
             }
 
             var featureOptions = settings.ToFeatureOptions();
@@ -253,7 +266,7 @@ internal sealed class ContextRelayHost : IDisposable
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatPreviewDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
 
-                return await HandleChatCommandAsync(trimmed, route.Query, token.AccessToken, cancellationToken).ConfigureAwait(false);
+                return await HandleChatCommandAsync(trimmed, filePrompt.Prompt, token.AccessToken, filePrompt.Files, cancellationToken).ConfigureAwait(false);
             }
 
             if (route.Target == RouteTarget.Ask)
@@ -264,25 +277,25 @@ internal sealed class ContextRelayHost : IDisposable
                 }
 
                 var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (snippets.Count == 0)
+                if (snippets.Count == 0 && filePrompt.Files.Count == 0)
                 {
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresPinnedContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
 
-                var contextPayload = ChatContextPayloadBuilder.Build(snippets);
+                var contextPayload = ChatContextPayloadBuilder.Build(snippets, localFiles: filePrompt.Files);
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
                 var reply = await copilotChatAdapter
-                    .SendMessageAsync(token.AccessToken, conversationId, route.Query, contextPayload.SendOptions, cancellationToken)
+                    .SendMessageAsync(token.AccessToken, conversationId, filePrompt.Prompt, contextPayload.SendOptions, cancellationToken)
                     .ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(reply))
                 {
                     throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
                 }
 
-                await AppendChatHistoryAsync(route.Query, reply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+                await AppendChatHistoryAsync(filePrompt.Prompt, reply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 return await RefreshStateCoreAsync(
-                    ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count),
+                    ContextRelayLocalizedStrings.GetAskReplyShownStatus(contextPayload.Labels.Count),
                     trimmed,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -452,6 +465,39 @@ internal sealed class ContextRelayHost : IDisposable
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Search cache cleared.");
             return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SearchCacheClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<ContextRelayHostState> AddFilesToQueryAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+            if (workspaceRoots.Count == 0)
+            {
+                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerWorkspaceUnavailableStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            }
+
+            var selectedFiles = await packageServices
+                .PickWorkspaceFilesAsync(workspaceRoots[0], cancellationToken)
+                .ConfigureAwait(false);
+            if (selectedFiles.Count == 0)
+            {
+                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerNoFilesSelectedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            }
+
+            var mergeResult = MergeSelectedFilesIntoQuery(state.QueryText, selectedFiles, workspaceRoots);
+            return await RefreshStateCoreAsync(mergeResult.StatusMessage, mergeResult.QueryText, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError("Adding local files to the query failed.", ex);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerAddFilesFailedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -742,10 +788,11 @@ internal sealed class ContextRelayHost : IDisposable
         string originalInput,
         string message,
         string accessToken,
+        IReadOnlyList<ResolvedFileMention> localFiles,
         CancellationToken cancellationToken)
     {
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        var contextPayload = ChatContextPayloadBuilder.Build(snippets, lastSearchSummary);
+        var contextPayload = ChatContextPayloadBuilder.Build(snippets, lastSearchSummary, localFiles);
         var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
         var reply = await copilotChatAdapter
             .SendMessageAsync(accessToken, conversationId, message, contextPayload.SendOptions, cancellationToken)
@@ -769,8 +816,15 @@ internal sealed class ContextRelayHost : IDisposable
         string originalInput,
         string query,
         ContextRelayAuthSettings authSettings,
+        ContextRelaySettingsSnapshot settings,
+        IReadOnlyList<ResolvedFileMention> localFiles,
         CancellationToken cancellationToken)
     {
+        if (localFiles.Count > 0 && !settings.AllowLocalFileContextForWorkIq)
+        {
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.WorkIqLocalFileContextDisabledStatus, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
         ContextRelayAccessToken token;
         try
         {
@@ -782,8 +836,11 @@ internal sealed class ContextRelayHost : IDisposable
             return await RefreshStateCoreAsync(ex.Message, originalInput, cancellationToken).ConfigureAwait(false);
         }
 
+        var workIqQuery = localFiles.Count == 0
+            ? query
+            : await FileContextPromptBuilder.BuildWorkIqPromptAsync(query, localFiles, cancellationToken).ConfigureAwait(false);
         var reply = await workIqAdapter
-            .SendMessageAsync(token.AccessToken, query, workIqContextId, cancellationToken: cancellationToken)
+            .SendMessageAsync(token.AccessToken, workIqQuery, workIqContextId, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(reply.Text))
         {
@@ -795,9 +852,42 @@ internal sealed class ContextRelayHost : IDisposable
             workIqContextId = reply.ContextId;
         }
 
-        await AppendChatHistoryAsync(query, reply.Text.Trim(), "workiq", Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        var contextLabels = localFiles.Select(file => $"Local file: {file.RelativePath}").ToArray();
+        await AppendChatHistoryAsync(query, reply.Text.Trim(), "workiq", contextLabels, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handled /workiq with Work IQ.");
         return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.WorkIqReplyShownStatus, originalInput, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<FilePromptContext?> ResolveFilePromptAsync(
+        string rawPrompt,
+        string fallbackPrompt,
+        string originalInput,
+        CancellationToken cancellationToken)
+    {
+        if (FileMentionResolver.ExtractCandidates(rawPrompt).Count == 0)
+        {
+            return new FilePromptContext(fallbackPrompt, Array.Empty<ResolvedFileMention>());
+        }
+
+        var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        var resolution = FileMentionResolver.Resolve(rawPrompt, workspaceRoots);
+        if (resolution.Errors.Count > 0)
+        {
+            return await RefreshFilePromptErrorAsync(resolution.Errors[0], originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (string.IsNullOrWhiteSpace(resolution.CleanedPrompt))
+        {
+            return await RefreshFilePromptErrorAsync(ContextRelayLocalizedStrings.FileMentionPromptEmptyStatus, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        return new FilePromptContext(resolution.CleanedPrompt, resolution.Files);
+    }
+
+    private async Task<FilePromptContext?> RefreshFilePromptErrorAsync(string message, string originalInput, CancellationToken cancellationToken)
+    {
+        await RefreshStateCoreAsync(message, originalInput, cancellationToken).ConfigureAwait(false);
+        return null;
     }
 
     private async Task<string> EnsureCopilotConversationAsync(string accessToken, CancellationToken cancellationToken)
@@ -1463,6 +1553,142 @@ internal sealed class ContextRelayHost : IDisposable
         return Path.Combine(workspaceRoot, ".vs", "ContextRelay", "cache.json");
     }
 
+    private static FileSelectionQueryUpdate MergeSelectedFilesIntoQuery(
+        string currentQuery,
+        IReadOnlyList<string> selectedFiles,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var existingCandidates = FileMentionResolver.ExtractCandidates(currentQuery);
+        var remainingCapacity = FileMentionResolver.MaxFileMentions - existingCandidates.Count;
+        if (remainingCapacity <= 0)
+        {
+            return new FileSelectionQueryUpdate(
+                currentQuery,
+                ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(FileMentionResolver.MaxFileMentions));
+        }
+
+        var normalizedWorkspaceRoots = workspaceRoots
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedWorkspaceRoots.Length == 0)
+        {
+            return new FileSelectionQueryUpdate(currentQuery, ContextRelayLocalizedStrings.FilePickerWorkspaceUnavailableStatus);
+        }
+
+        var existingMentionPaths = new HashSet<string>(
+            existingCandidates.Select(candidate => NormalizeComparablePath(candidate.RawPath)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var normalizedSelections = selectedFiles
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var mentionTokens = new List<string>();
+        var skippedCount = 0;
+        foreach (var selectedPath in normalizedSelections)
+        {
+            if (mentionTokens.Count >= remainingCapacity)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            var workspaceRoot = normalizedWorkspaceRoots
+                .Where(root => IsPathWithinRoot(selectedPath, root))
+                .OrderByDescending(root => root.Length)
+                .FirstOrDefault();
+            if (workspaceRoot is null)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            var relativePath = GetRelativeWorkspacePath(workspaceRoot, selectedPath);
+            var comparablePath = NormalizeComparablePath(relativePath);
+            if (!existingMentionPaths.Add(comparablePath))
+            {
+                skippedCount++;
+                continue;
+            }
+
+            mentionTokens.Add(BuildMentionToken(relativePath));
+        }
+
+        if (mentionTokens.Count == 0)
+        {
+            if (normalizedSelections.Length > 0 && existingCandidates.Count >= FileMentionResolver.MaxFileMentions)
+            {
+                return new FileSelectionQueryUpdate(
+                    currentQuery,
+                    ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(FileMentionResolver.MaxFileMentions));
+            }
+
+            return new FileSelectionQueryUpdate(currentQuery, ContextRelayLocalizedStrings.FilePickerNoWorkspaceFilesSelectedStatus);
+        }
+
+        var updatedQuery = AppendMentionTokens(currentQuery, mentionTokens);
+        var status = skippedCount > 0
+            ? ContextRelayLocalizedStrings.GetFilePickerFilesAddedPartialStatus(mentionTokens.Count, skippedCount)
+            : ContextRelayLocalizedStrings.GetFilePickerFilesAddedStatus(mentionTokens.Count);
+        return new FileSelectionQueryUpdate(updatedQuery, status);
+    }
+
+    private static bool IsPathWithinRoot(string path, string root)
+    {
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedPath = Path.GetFullPath(path);
+        if (string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
+        return normalizedPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRelativeWorkspacePath(string workspaceRoot, string absolutePath)
+    {
+        var normalizedRoot = workspaceRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
+        var relative = absolutePath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
+            ? absolutePath.Substring(rootWithSeparator.Length)
+            : Path.GetFileName(absolutePath);
+        return relative.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+    }
+
+    private static string BuildMentionToken(string relativePath)
+    {
+        var normalizedPath = relativePath.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+        var requiresQuotes = normalizedPath.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '#' }) >= 0;
+        return requiresQuotes
+            ? $"#\"{normalizedPath}\""
+            : $"#{normalizedPath}";
+    }
+
+    private static string AppendMentionTokens(string currentQuery, IReadOnlyList<string> mentionTokens)
+    {
+        var separator = string.IsNullOrWhiteSpace(currentQuery) || char.IsWhiteSpace(currentQuery[currentQuery.Length - 1])
+            ? string.Empty
+            : " ";
+        return string.IsNullOrWhiteSpace(currentQuery)
+            ? string.Join(" ", mentionTokens)
+            : currentQuery + separator + string.Join(" ", mentionTokens);
+    }
+
+    private static string NormalizeComparablePath(string path)
+    {
+        return (path ?? string.Empty)
+            .Trim()
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+    }
+
     private void OnSharedStoreChanged(object? sender, SharedStoreChangedEventArgs e)
     {
         if (e.FileKind != SharedStoreFileKind.ChatHistory &&
@@ -1513,6 +1739,32 @@ internal sealed class ContextRelayHost : IDisposable
         public ContextItem Item { get; }
 
         public bool FellBackToExcerpt { get; }
+    }
+
+    private sealed class FilePromptContext
+    {
+        public FilePromptContext(string prompt, IReadOnlyList<ResolvedFileMention> files)
+        {
+            Prompt = prompt;
+            Files = files;
+        }
+
+        public string Prompt { get; }
+
+        public IReadOnlyList<ResolvedFileMention> Files { get; }
+    }
+
+    private sealed class FileSelectionQueryUpdate
+    {
+        public FileSelectionQueryUpdate(string queryText, string statusMessage)
+        {
+            QueryText = queryText;
+            StatusMessage = statusMessage;
+        }
+
+        public string QueryText { get; }
+
+        public string StatusMessage { get; }
     }
 
     private enum DriveContentMode

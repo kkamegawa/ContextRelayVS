@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ContextRelay.Core.Adapters;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.SharedStore;
 
 namespace ContextRelay.Core.Chat;
@@ -9,7 +10,10 @@ public static class ChatContextPayloadBuilder
 {
     public const int MaxChatContextChars = 60000;
 
-    public static ChatContextPayload Build(IReadOnlyList<SharedSnippetItem> snippets, string? searchSummary = null)
+    public static ChatContextPayload Build(
+        IReadOnlyList<SharedSnippetItem> snippets,
+        string? searchSummary = null,
+        IReadOnlyList<ResolvedFileMention>? localFiles = null)
     {
         if (snippets is null)
         {
@@ -18,6 +22,7 @@ public static class ChatContextPayloadBuilder
 
         var additionalContext = new List<CopilotContextMessage>();
         var fileResources = new List<CopilotContextualFileResource>();
+        var fileResourceUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var labels = new List<string>();
         var remainingBudget = MaxChatContextChars;
 
@@ -25,8 +30,7 @@ public static class ChatContextPayloadBuilder
         {
             if (TryGetFileContextUri(snippet, out var fileContextUri))
             {
-                fileResources.Add(new CopilotContextualFileResource { Uri = fileContextUri });
-                labels.Add(GetSnippetLabel(snippet));
+                AddFileResource(fileResources, fileResourceUris, labels, fileContextUri, GetSnippetLabel(snippet));
                 continue;
             }
 
@@ -50,6 +54,16 @@ public static class ChatContextPayloadBuilder
             "Latest ContextRelay search summary",
             searchSummary ?? string.Empty,
             ref remainingBudget);
+
+        foreach (var localFile in localFiles ?? Array.Empty<ResolvedFileMention>())
+        {
+            AddFileResource(
+                fileResources,
+                fileResourceUris,
+                labels,
+                localFile.Uri,
+                $"Local file: {localFile.RelativePath}");
+        }
 
         var sendOptions = new CopilotChatSendOptions
         {
@@ -91,6 +105,23 @@ public static class ChatContextPayloadBuilder
 
         normalizedUri = sourceUrl;
         return true;
+    }
+
+    private static void AddFileResource(
+        ICollection<CopilotContextualFileResource> fileResources,
+        ISet<string> fileResourceUris,
+        ICollection<string> labels,
+        string uri,
+        string label)
+    {
+        var normalizedUri = uri.Trim();
+        if (normalizedUri.Length == 0 || !fileResourceUris.Add(normalizedUri))
+        {
+            return;
+        }
+
+        fileResources.Add(new CopilotContextualFileResource { Uri = normalizedUri });
+        labels.Add(label);
     }
 
     private static void AddTextContext(

@@ -48,6 +48,8 @@ internal static class ContextRelayLocalizedStrings
     public static string CopyPromptButtonText => GetString("CopyPromptButtonText");
     public static string OpenHandoffButtonText => GetString("OpenHandoffButtonText");
     public static string OpenCopilotButtonText => GetString("OpenCopilotButtonText");
+    public static string AddFilesButtonText => GetString("AddFilesButtonText");
+    public static string AddFilesToolTip => GetString("AddFilesToolTip");
     public static string ClearChatButtonText => GetString("ClearChatButtonText");
     public static string ClearSnippetsButtonText => GetString("ClearSnippetsButtonText");
     public static string ClearCacheButtonText => GetString("ClearCacheButtonText");
@@ -72,6 +74,12 @@ internal static class ContextRelayLocalizedStrings
     public static string AskDisabledStatus => GetString("AskDisabledStatus");
     public static string ChatPreviewDisabledStatus => GetString("ChatPreviewDisabledStatus");
     public static string AskRequiresPinnedContextStatus => GetString("AskRequiresPinnedContextStatus");
+    public static string FileMentionPromptEmptyStatus => GetString("FileMentionPromptEmptyStatus");
+    public static string FilePickerWorkspaceUnavailableStatus => GetString("FilePickerWorkspaceUnavailableStatus");
+    public static string FilePickerNoFilesSelectedStatus => GetString("FilePickerNoFilesSelectedStatus");
+    public static string FilePickerNoWorkspaceFilesSelectedStatus => GetString("FilePickerNoWorkspaceFilesSelectedStatus");
+    public static string FilePickerAddFilesFailedStatus => GetString("FilePickerAddFilesFailedStatus");
+    public static string WorkIqLocalFileContextDisabledStatus => GetString("WorkIqLocalFileContextDisabledStatus");
     public static string ChatAndSnippetsClearedStatus => GetString("ChatAndSnippetsClearedStatus");
     public static string ResultPinnedStatus => GetString("ResultPinnedStatus");
     public static string ResultPinnedWithExcerptFallbackStatus => GetString("ResultPinnedWithExcerptFallbackStatus");
@@ -109,6 +117,8 @@ internal static class ContextRelayLocalizedStrings
     public static string SourceLabelAll => GetString("SourceLabel_all");
     public static string SourceLabelDefault => GetString("SourceLabel_default");
     public static string TypeQueryStatus => GenericHelpText;
+    public static string AddFilesDialogTitle => GetString("AddFilesDialogTitle");
+    public static string AddFilesDialogFilter => GetString("AddFilesDialogFilter");
 
     public static bool IsReadyStatus(string? statusMessage)
     {
@@ -138,6 +148,14 @@ internal static class ContextRelayLocalizedStrings
     public static string GetAskReplyShownStatus(int snippetCount) => Format("AskReplyShownStatus_Format", snippetCount);
 
     public static string GetChatReplyShownWithContextStatus(int contextCount) => Format("ChatReplyShownWithContextStatus_Format", contextCount);
+
+    public static string GetFilePickerFilesAddedStatus(int fileCount) => Format("FilePickerFilesAddedStatus_Format", fileCount);
+
+    public static string GetFilePickerFilesAddedPartialStatus(int fileCount, int skippedCount) =>
+        Format("FilePickerFilesAddedPartialStatus_Format", fileCount, skippedCount);
+
+    public static string GetFilePickerMentionLimitReachedStatus(int maxMentions) =>
+        Format("FilePickerMentionLimitReachedStatus_Format", maxMentions);
 
     public static string GetAskPreviewDocumentTitle(string query, string extension) =>
         string.IsNullOrWhiteSpace(query)

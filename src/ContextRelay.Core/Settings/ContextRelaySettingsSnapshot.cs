@@ -38,6 +38,11 @@ public sealed class ContextRelaySettingsSnapshot
     public bool EnableWorkIqDebugLogging { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether local file content can be sent to Work IQ.
+    /// </summary>
+    public bool AllowLocalFileContextForWorkIq { get; set; }
+
+    /// <summary>
     /// Gets or sets the Microsoft Entra application client ID.
     /// </summary>
     public string ClientId { get; set; } = string.Empty;

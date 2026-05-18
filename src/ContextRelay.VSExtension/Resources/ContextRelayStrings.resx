@@ -16,6 +16,8 @@
   <data name="CopyPromptButtonText" xml:space="preserve"><value>Copy prompt</value></data>
   <data name="OpenHandoffButtonText" xml:space="preserve"><value>Open handoff</value></data>
   <data name="OpenCopilotButtonText" xml:space="preserve"><value>Open Copilot</value></data>
+  <data name="AddFilesButtonText" xml:space="preserve"><value>+</value></data>
+  <data name="AddFilesToolTip" xml:space="preserve"><value>Add local files to the prompt as #file mentions.</value></data>
   <data name="ClearChatButtonText" xml:space="preserve"><value>Clear chat</value></data>
   <data name="ClearSnippetsButtonText" xml:space="preserve"><value>Clear snippets</value></data>
   <data name="ClearCacheButtonText" xml:space="preserve"><value>Clear cache</value></data>
@@ -34,12 +36,18 @@
   <data name="AppendToHandoffMenuText" xml:space="preserve"><value>Append to handoff</value></data>
   <data name="OpenInBrowserMenuText" xml:space="preserve"><value>Open in browser</value></data>
   <data name="ReadyStatus" xml:space="preserve"><value>ContextRelay is ready.</value></data>
-  <data name="GenericHelpText" xml:space="preserve"><value>Type a message to chat with Microsoft 365 Copilot. Use slash commands such as /all to search Microsoft 365 content.</value></data>
+  <data name="GenericHelpText" xml:space="preserve"><value>Type a message to chat with Microsoft 365 Copilot. Mention local files with #path for chat context, or use slash commands such as /all to search Microsoft 365 content.</value></data>
   <data name="SignedOutText" xml:space="preserve"><value>Not signed in. Configure Client ID under Tools &gt; Options &gt; ContextRelay.</value></data>
   <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>The requested source is disabled in ContextRelay options.</value></data>
   <data name="AskDisabledStatus" xml:space="preserve"><value>/ask is disabled. Enable chat preview in ContextRelay options.</value></data>
   <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot chat is disabled. Enable chat preview in ContextRelay options.</value></data>
-  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>Pin one or more snippets before using /ask. The pinned content is sent to Microsoft 365 Copilot as context.</value></data>
+  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>Pin one or more snippets or mention a local file with #path before using /ask. Explicit context is sent to Microsoft 365 Copilot.</value></data>
+  <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value>Prompt is empty after removing # file mentions.</value></data>
+  <data name="FilePickerWorkspaceUnavailableStatus" xml:space="preserve"><value>Open a solution or workspace file before adding local files.</value></data>
+  <data name="FilePickerNoFilesSelectedStatus" xml:space="preserve"><value>No files were selected.</value></data>
+  <data name="FilePickerNoWorkspaceFilesSelectedStatus" xml:space="preserve"><value>None of the selected files are eligible workspace files for # mentions.</value></data>
+  <data name="FilePickerAddFilesFailedStatus" xml:space="preserve"><value>Failed to add selected files. Check the output log for details.</value></data>
+  <data name="WorkIqLocalFileContextDisabledStatus" xml:space="preserve"><value>Local file context for Work IQ is disabled. Enable "Allow local file context for Work IQ" in ContextRelay options to send bounded file text with /workiq #file prompts.</value></data>
   <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>Chat and snippets cleared.</value></data>
   <data name="ResultPinnedStatus" xml:space="preserve"><value>Result pinned to snippets.</value></data>
   <data name="ResultPinnedWithExcerptFallbackStatus" xml:space="preserve"><value>Result pinned to snippets. Full content could not be fetched, so the saved snippet uses the search excerpt.</value></data>
@@ -74,6 +82,11 @@
   <data name="AskPreviewOpenedStatus_Format" xml:space="preserve"><value>Opened the Microsoft 365 Copilot response in a new editor tab ({0}). Used {1} pinned snippet(s) as context and saved the reply to chat.</value></data>
   <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} pinned snippet(s) as context.</value></data>
   <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} explicit ContextRelay context item(s).</value></data>
+  <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>Added {0} file mention(s) to the query.</value></data>
+  <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>Added {0} file mention(s); skipped {1} file(s) due to duplicates, workspace bounds, or mention limit.</value></data>
+  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>You can reference up to {0} files per message.</value></data>
+  <data name="AddFilesDialogTitle" xml:space="preserve"><value>Select files to add as context</value></data>
+  <data name="AddFilesDialogFilter" xml:space="preserve"><value>All files (*.*)|*.*</value></data>
   <data name="HelpFor_mail" xml:space="preserve"><value>Example: /mail from:alice subject:budget&#10;Example: /mail incident review</value></data>
   <data name="HelpFor_teams" xml:space="preserve"><value>Example: /teams sprint review&#10;Example: /teams from:bob mentions:me</value></data>
   <data name="HelpFor_sharepoint" xml:space="preserve"><value>Example: /sharepoint VPN setup guide&#10;Example: /sharepoint architecture</value></data>
@@ -82,8 +95,8 @@
   <data name="HelpFor_task" xml:space="preserve"><value>Example: /task release checklist&#10;Example: /task metadata comments onboarding</value></data>
   <data name="HelpFor_connectors" xml:space="preserve"><value>Example: /connectors incident tracker&#10;Example: /connectors external knowledge base</value></data>
   <data name="HelpFor_all" xml:space="preserve"><value>Example: /all architecture decisions&#10;Plain text without a slash command starts or continues Microsoft 365 Copilot chat.</value></data>
-  <data name="HelpFor_ask" xml:space="preserve"><value>Example: /ask Translate this to Japanese and format as markdown&#10;Example: /ask Summarize the pinned docs as a bullet list&#10;Pinned snippets are used as context and the response is shown in the panel.</value></data>
-  <data name="HelpFor_workiq" xml:space="preserve"><value>Example: /workiq Summarize my recent emails from Alice&#10;Example: /workiq What meetings do I have today?&#10;Sends a natural language query to the Work IQ Gateway (A2A protocol). Requires a Microsoft 365 Copilot license.</value></data>
+  <data name="HelpFor_ask" xml:space="preserve"><value>Example: /ask #README.md Summarize this file as a bullet list&#10;Example: /ask Translate the pinned docs to Japanese and format as markdown&#10;Pinned snippets or # file mentions are used as context and the response is shown in the panel.</value></data>
+  <data name="HelpFor_workiq" xml:space="preserve"><value>Example: /workiq Summarize my recent emails from Alice&#10;Example: /workiq #docs/plan.md Find related workplace context&#10;Sends a natural language query to the Work IQ Gateway (A2A protocol). # file mentions send bounded local file text only when explicitly enabled.</value></data>
   <data name="HelpFor_clear" xml:space="preserve"><value>Example: /clear&#10;Clears the current chat transcript and discards all pinned snippets.</value></data>
   <data name="CommandDescription_mail" xml:space="preserve"><value>Search Exchange mail.</value></data>
   <data name="CommandDescription_teams" xml:space="preserve"><value>Search Teams messages.</value></data>
@@ -93,8 +106,8 @@
   <data name="CommandDescription_task" xml:space="preserve"><value>Search Planner and To Do tasks.</value></data>
   <data name="CommandDescription_connectors" xml:space="preserve"><value>Search connector content.</value></data>
   <data name="CommandDescription_all" xml:space="preserve"><value>Search all enabled Microsoft 365 sources.</value></data>
-  <data name="CommandDescription_ask" xml:space="preserve"><value>Chat with Microsoft 365 Copilot using pinned context.</value></data>
-  <data name="CommandDescription_workiq" xml:space="preserve"><value>Query Work IQ for Microsoft 365 work intelligence.</value></data>
+  <data name="CommandDescription_ask" xml:space="preserve"><value>Chat with Microsoft 365 Copilot using pinned or # file context.</value></data>
+  <data name="CommandDescription_workiq" xml:space="preserve"><value>Query Work IQ for Microsoft 365 work intelligence, optionally with # file context.</value></data>
   <data name="CommandDescription_clear" xml:space="preserve"><value>Clear the current chat transcript and pinned snippets.</value></data>
   <data name="LanguageDisplay_shellscript" xml:space="preserve"><value>Shell script</value></data>
   <data name="LanguageDisplay_plaintext" xml:space="preserve"><value>Plain text</value></data>

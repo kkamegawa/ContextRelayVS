@@ -1,9 +1,13 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
+using Microsoft.Win32;
 
 namespace ContextRelay.VSExtension.Services;
 
@@ -25,10 +29,80 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         return settings;
     }
 
-    public Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> GetWorkspaceRootsAsync(CancellationToken cancellationToken = default)
     {
-        // Stub: workspace query API shape varies across SDK versions
-        return Task.FromResult<string?>(null);
+        var roots = new List<string>();
+        var documents = await extensibility.Documents().GetOpenDocumentsAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var document in documents)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!document.Moniker.IsFile)
+            {
+                continue;
+            }
+
+            var root = InferWorkspaceRoot(document.Moniker.LocalPath);
+            if (!string.IsNullOrWhiteSpace(root))
+            {
+                roots.Add(root!);
+            }
+        }
+
+        return roots
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<string>> PickWorkspaceFilesAsync(string? initialDirectory, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+#pragma warning disable CA1416 // net8.0-windows target — OpenFileDialog is Windows-only
+        var completion = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellationRegistration = cancellationToken.Register(
+            () => completion.TrySetCanceled(cancellationToken));
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = ContextRelayLocalizedStrings.AddFilesDialogTitle,
+                    Multiselect = true,
+                    CheckFileExists = true,
+                    CheckPathExists = true,
+                    Filter = ContextRelayLocalizedStrings.AddFilesDialogFilter
+                };
+
+                if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
+                {
+                    dialog.InitialDirectory = initialDirectory;
+                }
+
+                var result = dialog.ShowDialog();
+                completion.TrySetResult(result == true
+                    ? dialog.FileNames
+                    : Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(ex);
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+
+        return await completion.Task.ConfigureAwait(false);
+#pragma warning restore CA1416
+    }
+
+    public async Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)
+    {
+        var roots = await GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        return roots.Count > 0 ? roots[0] : null;
     }
 
     public async Task OpenDocumentAsync(string filePath, CancellationToken cancellationToken = default)
@@ -95,5 +169,42 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     {
         await settingsService.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
         ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsService.NormalizeUiLanguage(uiLanguage));
+    }
+
+    private static string? InferWorkspaceRoot(string filePath)
+    {
+        var directory = File.Exists(filePath)
+            ? Path.GetDirectoryName(filePath)
+            : filePath;
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return null;
+        }
+
+        var current = new DirectoryInfo(directory);
+        while (current is not null)
+        {
+            try
+            {
+                if (current.EnumerateFiles("*.sln").Any() ||
+                    current.EnumerateFiles("*.slnx").Any() ||
+                    current.EnumerateDirectories(".git").Any())
+                {
+                    return current.FullName;
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return directory;
+            }
+            catch (IOException)
+            {
+                return directory;
+            }
+
+            current = current.Parent;
+        }
+
+        return directory;
     }
 }

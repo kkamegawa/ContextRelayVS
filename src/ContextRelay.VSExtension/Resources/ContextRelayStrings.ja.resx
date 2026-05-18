@@ -34,12 +34,14 @@
   <data name="AppendToHandoffMenuText" xml:space="preserve"><value>HANDOFF に追記</value></data>
   <data name="OpenInBrowserMenuText" xml:space="preserve"><value>ブラウザーで開く</value></data>
   <data name="ReadyStatus" xml:space="preserve"><value>ContextRelay の準備ができました。</value></data>
-  <data name="GenericHelpText" xml:space="preserve"><value>通常の文章で Microsoft 365 Copilot とチャットします。検索するには /all などのスラッシュ コマンドを使用します。</value></data>
+  <data name="GenericHelpText" xml:space="preserve"><value>通常の文章で Microsoft 365 Copilot とチャットします。#path でローカル ファイルをコンテキストとして指定できます。検索するには /all などのスラッシュ コマンドを使用します。</value></data>
   <data name="SignedOutText" xml:space="preserve"><value>未サインインです。 [ツール] &gt; [オプション] &gt; [ContextRelay] で Client ID を設定してください。</value></data>
   <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>指定したソースは ContextRelay のオプションで無効です。</value></data>
   <data name="AskDisabledStatus" xml:space="preserve"><value>/ask は無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
   <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot チャットは無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
-  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>/ask を使うには先に 1 件以上のスニペットをピン留めしてください。ピン留めした内容が Microsoft 365 Copilot にコンテキストとして送信されます。</value></data>
+  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>/ask を使うには先に 1 件以上のスニペットをピン留めするか、#path でローカル ファイルを指定してください。明示したコンテキストが Microsoft 365 Copilot に送信されます。</value></data>
+  <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value># ファイル メンションを削除するとプロンプトが空になります。</value></data>
+  <data name="WorkIqLocalFileContextDisabledStatus" xml:space="preserve"><value>Work IQ のローカル ファイル コンテキストは無効です。/workiq #file でファイル本文を送信するには ContextRelay オプションで "Allow local file context for Work IQ" を有効にしてください。</value></data>
   <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>チャット履歴とスニペットをクリアしました。</value></data>
   <data name="ResultPinnedStatus" xml:space="preserve"><value>結果をスニペットにピン留めしました。</value></data>
   <data name="ResultPinnedWithExcerptFallbackStatus" xml:space="preserve"><value>結果をスニペットにピン留めしました。全文の取得には失敗したため、検索結果の抜粋を保存しました。</value></data>
@@ -82,8 +84,8 @@
   <data name="HelpFor_task" xml:space="preserve"><value>例: /task release checklist&#10;例: /task metadata comments onboarding</value></data>
   <data name="HelpFor_connectors" xml:space="preserve"><value>例: /connectors incident tracker&#10;例: /connectors external knowledge base</value></data>
   <data name="HelpFor_all" xml:space="preserve"><value>例: /all architecture decisions&#10;スラッシュ コマンドなしの文章は Microsoft 365 Copilot チャットとして送信されます。</value></data>
-  <data name="HelpFor_ask" xml:space="preserve"><value>例: /ask 日本語に翻訳して markdown にして&#10;例: /ask ピン留めした情報を箇条書きで要約して&#10;ピン留めスニペットをコンテキストとして使用し、応答はパネルに表示されます。</value></data>
-  <data name="HelpFor_workiq" xml:space="preserve"><value>例: /workiq Alice からの最近のメールを要約して&#10;例: /workiq 今日の会議を教えて&#10;Work IQ Gateway (A2A プロトコル) に自然言語クエリを送信します。Microsoft 365 Copilot ライセンスが必要です。</value></data>
+  <data name="HelpFor_ask" xml:space="preserve"><value>例: /ask #README.md このファイルを箇条書きで要約して&#10;例: /ask ピン留めした情報を日本語に翻訳して markdown にして&#10;ピン留めスニペットまたは # ファイル メンションをコンテキストとして使用し、応答はパネルに表示されます。</value></data>
+  <data name="HelpFor_workiq" xml:space="preserve"><value>例: /workiq Alice からの最近のメールを要約して&#10;例: /workiq #docs/plan.md 関連する職場コンテキストを探して&#10;Work IQ Gateway (A2A プロトコル) に自然言語クエリを送信します。# ファイル メンションは明示的に有効化した場合のみ、制限されたローカル ファイル本文を送信します。</value></data>
   <data name="HelpFor_clear" xml:space="preserve"><value>例: /clear&#10;現在のチャット履歴とピン留めスニペットを破棄します。</value></data>
   <data name="CommandDescription_mail" xml:space="preserve"><value>Exchange メールを検索します。</value></data>
   <data name="CommandDescription_teams" xml:space="preserve"><value>Teams メッセージを検索します。</value></data>

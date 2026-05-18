@@ -1,5 +1,6 @@
 using System;
 using ContextRelay.Core.Chat;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.SharedStore;
 using Xunit;
 
@@ -101,5 +102,35 @@ public sealed class ChatContextPayloadBuilderTests
         Assert.Equal("Latest ContextRelay search summary", payload.SendOptions.AdditionalContext[0].Description);
         Assert.Contains("Found two architecture docs.", payload.SendOptions.AdditionalContext[0].Text);
         Assert.Contains("Latest ContextRelay search summary", payload.Labels);
+    }
+
+    [Fact]
+    public void Build_MergesSharePointAndLocalFileResources()
+    {
+        var payload = ChatContextPayloadBuilder.Build(
+            new[]
+            {
+                new SharedSnippetItem
+                {
+                    Name = "Design doc",
+                    Source = "sharepoint",
+                    SourceUrl = "https://contoso.sharepoint.com/sites/eng/design.docx",
+                    Snippet = "Design"
+                }
+            },
+            localFiles: new[]
+            {
+                new ResolvedFileMention
+                {
+                    AbsolutePath = @"C:\repo\README.md",
+                    WorkspaceRoot = @"C:\repo",
+                    RelativePath = "README.md",
+                    Uri = "file:///C:/repo/README.md"
+                }
+            });
+
+        Assert.Equal(2, payload.SendOptions.ContextualResources?.Files.Count);
+        Assert.Contains("Design doc", payload.Labels);
+        Assert.Contains("Local file: README.md", payload.Labels);
     }
 }
