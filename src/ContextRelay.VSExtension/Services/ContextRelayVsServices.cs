@@ -15,6 +15,8 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
 {
     private readonly VisualStudioExtensibility extensibility;
     private readonly ContextRelaySettingsService settingsService;
+    private readonly object selectedWorkspaceRootsGate = new();
+    private string[] selectedWorkspaceRoots = Array.Empty<string>();
 
     public ContextRelayVsServices(VisualStudioExtensibility extensibility, ContextRelaySettingsService settingsService)
     {
@@ -54,6 +56,11 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         if (!string.IsNullOrWhiteSpace(currentDirectoryRoot))
         {
             roots.Add(currentDirectoryRoot);
+        }
+
+        lock (selectedWorkspaceRootsGate)
+        {
+            roots.AddRange(selectedWorkspaceRoots);
         }
 
         return roots
@@ -103,7 +110,9 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         thread.IsBackground = true;
         thread.Start();
 
-        return await completion.Task.ConfigureAwait(false);
+        var selectedFiles = await completion.Task.ConfigureAwait(false);
+        RememberWorkspaceRootsFromSelectedFiles(selectedFiles);
+        return selectedFiles;
 #pragma warning restore CA1416
     }
 
@@ -177,6 +186,42 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     {
         await settingsService.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
         ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsService.NormalizeUiLanguage(uiLanguage));
+    }
+
+    private void RememberWorkspaceRootsFromSelectedFiles(IReadOnlyList<string> selectedFiles)
+    {
+        if (selectedFiles.Count == 0)
+        {
+            return;
+        }
+
+        var inferredRoots = selectedFiles
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path))
+            .Where(File.Exists)
+            .Select(path =>
+            {
+                var inferred = WorkspaceRootInference.InferWorkspaceRootFromPath(path);
+                return string.IsNullOrWhiteSpace(inferred)
+                    ? Path.GetDirectoryName(path)
+                    : inferred;
+            })
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Select(path => Path.GetFullPath(path!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (inferredRoots.Length == 0)
+        {
+            return;
+        }
+
+        lock (selectedWorkspaceRootsGate)
+        {
+            selectedWorkspaceRoots = selectedWorkspaceRoots
+                .Concat(inferredRoots)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
     }
 
 }
