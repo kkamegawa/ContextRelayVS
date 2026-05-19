@@ -29,6 +29,7 @@
     <InProcPackagePkgdefPath>$([System.IO.Path]::Combine('$(InProcPackageObjDir)', 'ContextRelay.VSExtension.Package.pkgdef'))</InProcPackagePkgdefPath>
     <InProcToolkitAssemblyPath>$([System.IO.Path]::Combine('$(InProcPackageBinDir)', 'Community.VisualStudio.Toolkit.dll'))</InProcToolkitAssemblyPath>
     <SourceVsixManifestPath>$(MSBuildProjectDirectory)\source.extension.vsixmanifest</SourceVsixManifestPath>
+    <ImageAssetsPath>Images</ImageAssetsPath>
   </PropertyGroup>
 
   <Import Project="..\..\build\ContextRelay.Build.props" />
@@ -60,6 +61,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Images\**\*">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
     <Content Include="icon.png">
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>

@@ -21,9 +21,8 @@ internal sealed class ShowDebugLogCommand : Command
     {
     };
 
-    public override Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
+    public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
     {
-        host.ShowDebugLog();
-        return Task.CompletedTask;
+        await host.ShowDebugLogAsync(cancellationToken).ConfigureAwait(false);
     }
 }

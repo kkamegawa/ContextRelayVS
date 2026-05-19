@@ -20,6 +20,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 - **Copilot reply actions** — Copilot answers remain visible in the tool window with explicit Copy, Append to active editor, and Replace selection/document actions.
 - **`/ask` context chat** — requires pinned snippets, caps the forwarded context, sends it to Microsoft 365 Copilot, and saves the reply to shared chat history without automatically editing or opening a document.
 - **`/workiq` natural language work intelligence** — sends A2A v1.0 queries to the Work IQ Gateway with a dedicated token audience, keeps a separate Work IQ conversation context, and resets that context on `/clear`.
+- **Local `#file` context** — mention workspace files such as `#README.md` or `#"docs/design notes.md"` in plain chat, `/ask`, or `/workiq` prompts. Copilot chat receives explicit file context; Work IQ receives bounded file text only when the Work IQ local-file opt-in is enabled.
 - **Localized WPF tool window UI** — English/Japanese labels, status/help text, result-card context actions, and debug-log access.
 - **JSON-backed settings persistence** — ContextRelay reads and writes its shared settings from `%AppData%\ContextRelay\settings.json`.
 - **MSAL.NET + WAM authentication** with DPAPI-backed token cache.
@@ -41,6 +42,16 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 | `/ask <instruction>` | Send pinned snippets to Microsoft 365 Copilot and show the answer in the panel |
 | `/workiq <query>` | Send a natural language query to Work IQ (A2A protocol) |
 | `/clear` | Clear chat transcript, pinned snippets, and Work IQ conversation context |
+
+Local file mentions are supported in plain chat, `/ask`, and `/workiq`:
+
+```text
+Summarize #README.md
+/ask #"docs/design notes.md" summarize the implementation risks
+/workiq #docs/plan.md find related workplace context
+```
+
+File mentions are resolved only inside the opened Visual Studio workspace, limited to five files per prompt, and restricted to Copilot-supported text/code file types. Work IQ local file context is disabled by default; enable **Allow local file context for Work IQ** in Tools > Options > ContextRelay before sending local file text to Work IQ.
 
 ## Authentication and delegated permissions
 
@@ -69,6 +80,7 @@ ContextRelay applies the same security-first posture used in the VS Code extensi
 - Unsafe or malformed URLs are dropped instead of being forwarded to host navigation.
 - Adapter text normalization strips script/style payloads from HTML-derived snippet content.
 - Plain chat and `/ask` keep source attachment explicit to reduce accidental over-sharing of context.
+- `/workiq #file` prompts require an explicit option before local file text is sent to the Work IQ service.
 
 ## Build and package
 

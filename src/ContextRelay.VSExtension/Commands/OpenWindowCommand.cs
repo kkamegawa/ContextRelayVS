@@ -15,6 +15,7 @@ internal sealed class OpenWindowCommand : Command
     public override CommandConfiguration CommandConfiguration => new("%ContextRelay.Command.OpenWindow.DisplayName%")
     {
         Placements = [CommandPlacement.KnownPlacements.ViewOtherWindowsMenu],
+        Icon = new CommandIconConfiguration(ImageMoniker.Custom("ContextRelayMenu"), IconSettings.None)
     };
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)

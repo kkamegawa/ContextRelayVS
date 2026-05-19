@@ -47,7 +47,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ClearChatCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearChatAsync(ct)).ConfigureAwait(false));
         ClearSnippetsCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearSnippetsAsync(ct)).ConfigureAwait(false));
         ClearCacheCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearCacheAsync(ct)).ConfigureAwait(false));
-        ShowDebugLogCommand = new AsyncCommand((_, _) => { host.ShowDebugLog(); return Task.CompletedTask; });
+        AddFilesCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.AddFilesToQueryAsync(ct)).ConfigureAwait(false));
+        ShowDebugLogCommand = new AsyncCommand(async (_, ct) => await host.ShowDebugLogAsync(ct).ConfigureAwait(false));
         MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
@@ -75,6 +76,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public string ChatHistoryHeaderText { get; private set; } = string.Empty;
     [DataMember] public string SearchToolTipText { get; private set; } = string.Empty;
     [DataMember] public string CommandPopupHeaderText { get; private set; } = string.Empty;
+    [DataMember] public string AddFilesButtonText { get; private set; } = string.Empty;
+    [DataMember] public string AddFilesToolTipText { get; private set; } = string.Empty;
 
     [DataMember]
     public string WindowTitleText
@@ -98,6 +101,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand ClearChatCommand { get; }
     [DataMember] public AsyncCommand ClearSnippetsCommand { get; }
     [DataMember] public AsyncCommand ClearCacheCommand { get; }
+    [DataMember] public AsyncCommand AddFilesCommand { get; }
     [DataMember] public AsyncCommand ShowDebugLogCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionDownCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
@@ -478,6 +482,10 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(SearchToolTipText));
         CommandPopupHeaderText = ContextRelayLocalizedStrings.CommandPopupHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
+        AddFilesButtonText = ContextRelayLocalizedStrings.AddFilesButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(AddFilesButtonText));
+        AddFilesToolTipText = ContextRelayLocalizedStrings.AddFilesToolTip;
+        RaiseNotifyPropertyChangedEvent(nameof(AddFilesToolTipText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
     }
 

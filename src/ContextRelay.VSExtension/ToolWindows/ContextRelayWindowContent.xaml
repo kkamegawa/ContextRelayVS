@@ -253,6 +253,7 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
@@ -286,12 +287,20 @@
                 </StackPanel>
             </Border>
 
+            <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="1" Grid.Column="0"
+                    Margin="0,0,8,0"
+                    Padding="12,8"
+                    Content="{Binding AddFilesButtonText}"
+                    ToolTip="{Binding AddFilesToolTipText}"
+                    Command="{Binding AddFilesCommand}"
+                    IsEnabled="{Binding IsNotBusy}" />
+
             <TextBox x:Name="QueryTextBox"
-                     Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="1" Grid.Column="0"
+                     Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="1" Grid.Column="1"
                       Margin="0,0,8,0"
                       Padding="10,8"
                       Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
-                     ToolTip="{Binding SearchToolTipText}">
+                      ToolTip="{Binding SearchToolTipText}">
                 <TextBox.InputBindings>
                     <KeyBinding Key="Enter" Command="{Binding ConfirmQueryInputCommand}" />
                     <KeyBinding Key="Down" Command="{Binding MoveSelectionDownCommand}" />
@@ -301,7 +310,7 @@
                 </TextBox.InputBindings>
 
             </TextBox>
-            <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="1" Grid.Column="1" Padding="16,8" Content="{Binding SearchButtonText}" Command="{Binding SearchCommand}" IsEnabled="{Binding IsNotBusy}" />
+            <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="1" Grid.Column="2" Padding="16,8" Content="{Binding SearchButtonText}" Command="{Binding SearchCommand}" IsEnabled="{Binding IsNotBusy}" />
         </Grid>
     </Grid>
 </DataTemplate>

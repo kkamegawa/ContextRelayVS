@@ -58,8 +58,8 @@ public static class SlashCommandRouter
             ["task"] = "Example: /task release checklist\nExample: /task metadata comments onboarding",
             ["connectors"] = "Example: /connectors incident tracker\nExample: /connectors external knowledge base",
             ["all"] = "Example: /all architecture decisions\nPlain text without a slash command starts or continues Microsoft 365 Copilot chat.",
-            ["ask"] = "Example: /ask 日本語に翻訳してmarkdownにして\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets are used as context and the Microsoft 365 Copilot response is shown in the panel.",
-            ["workiq"] = "Example: /workiq Summarize my recent emails from Alice\nExample: /workiq What meetings do I have today?\nSends a natural language query to the Work IQ Gateway (A2A protocol). Requires Microsoft 365 Copilot license.",
+            ["ask"] = "Example: /ask #README.md Summarize this file as a bullet list\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets or # file mentions are used as context and the Microsoft 365 Copilot response is shown in the panel.",
+            ["workiq"] = "Example: /workiq Summarize my recent emails from Alice\nExample: /workiq #docs/plan.md Find related workplace context\nSends a natural language query to the Work IQ Gateway (A2A protocol). # file mentions send bounded local file text only when explicitly enabled.",
             ["clear"] = "Example: /clear\nClears the current chat transcript and discards all pinned snippets."
         };
 

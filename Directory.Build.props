@@ -1,0 +1,11 @@
+﻿<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ContextRelay.VSExtension'">
+    <!-- Set these before Microsoft.Common.props consumes them so VS/dotnet use a
+         short intermediate path and avoid MAX_PATH failures for generated resources. -->
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)o\vsx\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <!-- Prevent stale generated files in legacy intermediate folders from being
+         picked up by default item globs and causing duplicate attribute errors. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)\o\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

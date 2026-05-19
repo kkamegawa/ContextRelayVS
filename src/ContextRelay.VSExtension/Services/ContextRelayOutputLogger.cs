@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Adapters;
@@ -88,9 +89,9 @@ internal sealed class ContextRelayOutputLogger : IGraphLogger, IWorkIqLogger
 
     public void ShowDebugPane()
     {
-        // OutputChannel in this SDK version does not expose a Show method;
-        // writing to the channel will activate it automatically.
+        // Write a marker entry and attempt channel activation when the SDK exposes it.
         WriteDebug("Debug log activated.");
+        ObserveFailures(EnsureDebugPaneVisibleAsync());
     }
 
     public void SetDebugLoggingEnabled(bool graphEnabled, bool workIqEnabled)
@@ -128,6 +129,54 @@ internal sealed class ContextRelayOutputLogger : IGraphLogger, IWorkIqLogger
     private static async Task WriteLineAsync(OutputChannel channel, string message)
     {
         await channel.WriteLineAsync(message).ConfigureAwait(false);
+    }
+
+    private async Task EnsureDebugPaneVisibleAsync()
+    {
+        await InitializeAsync().ConfigureAwait(false);
+        var channel = debugChannel;
+        if (channel is null)
+        {
+            return;
+        }
+
+        await TryActivateOutputChannelAsync(channel).ConfigureAwait(false);
+    }
+
+    private static async Task TryActivateOutputChannelAsync(OutputChannel channel)
+    {
+        // SDK surface varies across versions. Use reflection to call the first available
+        // activation method instead of relying on a single API name.
+        foreach (var methodName in new[] { "ShowAsync", "ActivateAsync", "OpenAsync", "Show", "Activate", "Open" })
+        {
+            var method = channel.GetType().GetMethod(methodName, BindingFlags.Public | BindingFlags.Instance);
+            if (method is null)
+            {
+                continue;
+            }
+
+            var parameters = method.GetParameters();
+            object? invocationResult = null;
+            if (parameters.Length == 0)
+            {
+                invocationResult = method.Invoke(channel, null);
+            }
+            else if (parameters.Length == 1 && parameters[0].ParameterType == typeof(CancellationToken))
+            {
+                invocationResult = method.Invoke(channel, new object[] { CancellationToken.None });
+            }
+            else
+            {
+                continue;
+            }
+
+            if (invocationResult is Task activationTask)
+            {
+                await activationTask.ConfigureAwait(false);
+            }
+
+            return;
+        }
     }
 
     private static void ObserveFailures(Task task)

@@ -83,6 +83,15 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     public bool EnableWorkIqDebugLogging { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether Work IQ queries may include local file content.
+    /// </summary>
+    [Category("Privacy")]
+    [DisplayName("Allow local file context for Work IQ")]
+    [Description("Allows /workiq #file prompts to send bounded local file text to Work IQ. Keep disabled if local source files must not leave this machine.")]
+    [DefaultValue(false)]
+    public bool AllowLocalFileContextForWorkIq { get; set; }
+
+    /// <summary>
     /// Gets or sets the Microsoft Entra application client identifier.
     /// </summary>
     [Category("Authentication")]
@@ -281,6 +290,7 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
         UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage);
         EnableGraphDebugLogging = settings.EnableGraphDebugLogging;
         EnableWorkIqDebugLogging = settings.EnableWorkIqDebugLogging;
+        AllowLocalFileContextForWorkIq = settings.AllowLocalFileContextForWorkIq;
         ClientId = settings.ClientId;
         TenantId = settings.TenantId;
         CloudEnvironment = settings.CloudEnvironment;
@@ -314,6 +324,7 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
             UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(UiLanguage),
             EnableGraphDebugLogging = EnableGraphDebugLogging,
             EnableWorkIqDebugLogging = EnableWorkIqDebugLogging,
+            AllowLocalFileContextForWorkIq = AllowLocalFileContextForWorkIq,
             ClientId = ClientId ?? string.Empty,
             TenantId = TenantId ?? string.Empty,
             CloudEnvironment = CloudEnvironment,
