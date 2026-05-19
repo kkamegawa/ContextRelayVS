@@ -54,7 +54,7 @@ param(
     [string]$SidecarName = "ContextRelay.Package",
 
     [Parameter(Mandatory = $false)]
-    [string]$SidecarVersion = "0.3.0.0"
+    [string]$SidecarVersion = "0.2.0.0"
 )
 
 Set-StrictMode -Version Latest
