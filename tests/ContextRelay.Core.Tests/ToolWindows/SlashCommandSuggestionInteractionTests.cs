@@ -63,8 +63,6 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("ItemContainerStyle=\"{StaticResource SuggestionListBoxItemStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("FocusManager.IsFocusScope=\"True\"", xaml, StringComparison.Ordinal);
         Assert.Contains("FocusManager.FocusedElement=\"{Binding ElementName=QueryTextBox}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("EventName=\"Loaded\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("MethodName=\"Focus\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"QueryTextBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding AddFilesCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"{Binding AddFilesButtonText}\"", xaml, StringComparison.Ordinal);
@@ -72,7 +70,10 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("ToolWindowTextBrushKey", xaml, StringComparison.Ordinal);
         Assert.Contains("Focusable\" Value=\"False\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsTabStop\" Value=\"False\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("mc:Ignorable=\"i\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("EventTrigger EventName=\"Loaded\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("CallMethodAction", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("xmlns:i=\"http://schemas.microsoft.com/xaml/behaviors\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("mc:Ignorable=\"i\"", xaml, StringComparison.Ordinal);
     }
 
     [Theory]
