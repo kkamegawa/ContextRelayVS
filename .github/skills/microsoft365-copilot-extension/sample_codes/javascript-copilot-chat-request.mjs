@@ -8,8 +8,17 @@ function resolveCopilotTimeZone() {
     }
 }
 
+function getFetch() {
+    if (typeof fetch !== "function") {
+        throw new Error("This sample requires a runtime with global fetch, such as Node.js 18+, or a fetch polyfill.");
+    }
+
+    return fetch;
+}
+
 async function createConversation(accessToken) {
-    const response = await fetch("https://graph.microsoft.com/beta/copilot/conversations", {
+    const fetchImpl = getFetch();
+    const response = await fetchImpl("https://graph.microsoft.com/beta/copilot/conversations", {
         method: "POST",
         headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -32,6 +41,7 @@ async function createConversation(accessToken) {
 
 export async function sendCopilotChatMessage(accessToken, prompt, conversationId) {
     const activeConversationId = conversationId || await createConversation(accessToken);
+    const fetchImpl = getFetch();
 
     const payload = {
         message: { text: prompt },
@@ -53,7 +63,7 @@ export async function sendCopilotChatMessage(accessToken, prompt, conversationId
         }
     };
 
-    const response = await fetch(
+    const response = await fetchImpl(
         `https://graph.microsoft.com/beta/copilot/conversations/${activeConversationId}/chat`,
         {
             method: "POST",

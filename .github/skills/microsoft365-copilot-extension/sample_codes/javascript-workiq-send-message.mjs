@@ -16,8 +16,17 @@ function resolveLocation() {
     }
 }
 
+function getFetch() {
+    if (typeof fetch !== "function") {
+        throw new Error("This sample requires a runtime with global fetch, such as Node.js 18+, or a fetch polyfill.");
+    }
+
+    return fetch;
+}
+
 export async function sendWorkIqMessage(accessToken, text, contextId) {
     const location = resolveLocation();
+    const fetchImpl = getFetch();
     const payload = {
         jsonrpc: "2.0",
         id: randomUUID(),
@@ -38,7 +47,7 @@ export async function sendWorkIqMessage(accessToken, text, contextId) {
         }
     };
 
-    const response = await fetch("https://workiq.svc.cloud.microsoft/a2a/", {
+    const response = await fetchImpl("https://workiq.svc.cloud.microsoft/a2a/", {
         method: "POST",
         headers: {
             Authorization: `Bearer ${accessToken}`,

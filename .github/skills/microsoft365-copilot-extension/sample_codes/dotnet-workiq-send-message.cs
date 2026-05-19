@@ -42,8 +42,7 @@ internal static class WorkIqSample
                             ["timeZone"] = location.TimeZone,
                             ["timeZoneOffset"] = location.TimeZoneOffsetMinutes
                         }
-                    },
-                    ["contextId"] = contextId
+                    }
                 }
             }
         };
