@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+// Requires Node.js 18+ or another runtime/polyfill that provides global fetch.
+
 function resolveLocation() {
     try {
         const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;

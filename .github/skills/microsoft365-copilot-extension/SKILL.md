@@ -31,7 +31,7 @@ Start from the repo-specific evidence before searching the wider web:
 - **`src\ContextRelay.Core\Chat\ChatContextPayloadBuilder.cs`** — bounded `additionalContext` and `contextualResources.files` routing
 - **`src\ContextRelay.Core\Adapters\WorkIqAdapter.cs`** — A2A v1.0 envelope, `A2A-Version: 1.0`, retries, and location metadata
 - **`docs\tenant_admin_quickstart.md`** and **`docs\work_iq.md`** — tenant setup, permission scope, and protocol notes
-- **Recent timezone regression** — Graph Copilot Chat rejected Windows IDs such as `Tokyo Standard Time` with an `IANA format` error. The current adapter file shows the request field but does not yet normalize to IANA, so callers and samples should send IANA when available and otherwise fall back to `Etc/UTC`
+- **Recent timezone regression** — Graph Copilot Chat rejected Windows IDs such as `Tokyo Standard Time` with an `IANA format` error. The current adapter now avoids passing Windows IDs through unchanged by sending the local value only when it is already IANA-like and otherwise falling back to `Etc/UTC`
 
 ## Key Concepts
 
