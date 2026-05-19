@@ -230,7 +230,10 @@
                     setupManifestText = reader.ReadToEnd();
                 }
 
-                if (setupManifestText.IndexOf("\"version\":\"0.0.0.0\"", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (System.Text.RegularExpressions.Regex.IsMatch(
+                        setupManifestText,
+                        "\"version\"\\s*:\\s*\"0\\.0\\.0\\.0\"",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                 {
                     Log.LogError("manifest.json in produced VSIX still has version 0.0.0.0");
                 }
