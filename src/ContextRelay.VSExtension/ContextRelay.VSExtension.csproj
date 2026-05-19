@@ -12,6 +12,10 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/kkamegawa/ContextRelayVS</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Dependency submission restores projects on Linux runners as well as on Windows.
+         Enable Windows targeting there so restore can evaluate this Windows-only project
+         without requiring the workflow to special-case or skip it. -->
+    <EnableWindowsTargeting Condition="'$(OS)' != 'Windows_NT'">true</EnableWindowsTargeting>
     <!-- Always launch the debugging target with an explicit activity log path so
          registration failures are diagnosable even when Visual Studio does not
          emit its default ActivityLog.xml automatically. -->
