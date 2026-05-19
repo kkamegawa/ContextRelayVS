@@ -43,6 +43,7 @@
   <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>/ask を使うには先に 1 件以上のスニペットをピン留めするか、#path でローカル ファイルを指定してください。明示したコンテキストが Microsoft 365 Copilot に送信されます。</value></data>
   <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value># ファイル メンションを削除するとプロンプトが空になります。</value></data>
   <data name="WorkIqLocalFileContextDisabledStatus" xml:space="preserve"><value>Work IQ のローカル ファイル コンテキストは無効です。/workiq #file でファイル本文を送信するには ContextRelay オプションで "Allow local file context for Work IQ" を有効にしてください。</value></data>
+  <data name="FileMentionWorkspaceUnavailableStatus" xml:space="preserve"><value>#file メンションを使う前にソリューションまたはワークスペース ファイルを開いてください。</value></data>
   <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>チャット履歴とスニペットをクリアしました。</value></data>
   <data name="ResultPinnedStatus" xml:space="preserve"><value>結果をスニペットにピン留めしました。</value></data>
   <data name="ResultPinnedWithExcerptFallbackStatus" xml:space="preserve"><value>結果をスニペットにピン留めしました。全文の取得には失敗したため、検索結果の抜粋を保存しました。</value></data>
@@ -77,6 +78,12 @@
   <data name="AskPreviewOpenedStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答を新しいエディター タブで開きました ({0})。{1} 件のピン留めスニペットをコンテキストとして使用し、共有チャット履歴にも保存しました。</value></data>
   <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットをコンテキストとして使用しました。</value></data>
   <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件の明示的な ContextRelay コンテキストを使用しました。</value></data>
+  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>1 回のメッセージで参照できるファイルは最大 {0} 個です。</value></data>
+  <data name="LocalFileContextLabel_Format" xml:space="preserve"><value>ローカル ファイル: {0}</value></data>
+  <data name="FileMentionNotFoundStatus_Format" xml:space="preserve"><value>#{0} のファイルが見つかりません。</value></data>
+  <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>#{0} のファイルは開いているワークスペースの外にあります。</value></data>
+  <data name="FileMentionAmbiguousStatus_Format" xml:space="preserve"><value>ファイル パス "#{0}" は複数のワークスペース ルートにまたがってあいまいです。固有のパスを指定してください。</value></data>
+  <data name="FileMentionUnsupportedFileTypeStatus_Format" xml:space="preserve"><value>#{0} は未対応のファイル形式です。Copilot がサポートする拡張子のみ使用できます。</value></data>
   <data name="HelpFor_mail" xml:space="preserve"><value>例: /mail from:alice subject:budget&#10;例: /mail incident review</value></data>
   <data name="HelpFor_teams" xml:space="preserve"><value>例: /teams sprint review&#10;例: /teams from:bob mentions:me</value></data>
   <data name="HelpFor_sharepoint" xml:space="preserve"><value>例: /sharepoint VPN setup guide&#10;例: /sharepoint architecture</value></data>

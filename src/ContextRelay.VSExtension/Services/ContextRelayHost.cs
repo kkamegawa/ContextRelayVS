@@ -282,7 +282,10 @@ internal sealed class ContextRelayHost : IDisposable
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresPinnedContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
 
-                var contextPayload = ChatContextPayloadBuilder.Build(snippets, localFiles: filePrompt.Files);
+                var contextPayload = ChatContextPayloadBuilder.Build(
+                    snippets,
+                    localFiles: filePrompt.Files,
+                    localFileLabelFactory: file => ContextRelayLocalizedStrings.GetLocalFileContextLabel(file.RelativePath));
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
                 var reply = await copilotChatAdapter
                     .SendMessageAsync(token.AccessToken, conversationId, filePrompt.Prompt, contextPayload.SendOptions, cancellationToken)
@@ -295,7 +298,7 @@ internal sealed class ContextRelayHost : IDisposable
                 await AppendChatHistoryAsync(filePrompt.Prompt, reply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 return await RefreshStateCoreAsync(
-                    ContextRelayLocalizedStrings.GetAskReplyShownStatus(contextPayload.Labels.Count),
+                    ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count),
                     trimmed,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -794,7 +797,11 @@ internal sealed class ContextRelayHost : IDisposable
         CancellationToken cancellationToken)
     {
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        var contextPayload = ChatContextPayloadBuilder.Build(snippets, lastSearchSummary, localFiles);
+        var contextPayload = ChatContextPayloadBuilder.Build(
+            snippets,
+            lastSearchSummary,
+            localFiles,
+            file => ContextRelayLocalizedStrings.GetLocalFileContextLabel(file.RelativePath));
         var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
         var reply = await copilotChatAdapter
             .SendMessageAsync(accessToken, conversationId, message, contextPayload.SendOptions, cancellationToken)
@@ -854,7 +861,7 @@ internal sealed class ContextRelayHost : IDisposable
             workIqContextId = reply.ContextId;
         }
 
-        var contextLabels = localFiles.Select(file => $"Local file: {file.RelativePath}").ToArray();
+        var contextLabels = localFiles.Select(file => ContextRelayLocalizedStrings.GetLocalFileContextLabel(file.RelativePath)).ToArray();
         await AppendChatHistoryAsync(query, reply.Text.Trim(), "workiq", contextLabels, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handled /workiq with Work IQ.");
         return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.WorkIqReplyShownStatus, originalInput, cancellationToken).ConfigureAwait(false);
@@ -875,7 +882,7 @@ internal sealed class ContextRelayHost : IDisposable
         var resolution = FileMentionResolver.Resolve(rawPrompt, workspaceRoots);
         if (resolution.Errors.Count > 0)
         {
-            return await RefreshFilePromptErrorAsync(resolution.Errors[0], originalInput, cancellationToken).ConfigureAwait(false);
+            return await RefreshFilePromptErrorAsync(GetFileMentionResolutionErrorMessage(resolution.Errors[0]), originalInput, cancellationToken).ConfigureAwait(false);
         }
 
         if (string.IsNullOrWhiteSpace(resolution.CleanedPrompt))
@@ -890,6 +897,20 @@ internal sealed class ContextRelayHost : IDisposable
     {
         await RefreshStateCoreAsync(message, originalInput, cancellationToken).ConfigureAwait(false);
         return null;
+    }
+
+    private static string GetFileMentionResolutionErrorMessage(FileMentionResolutionError error)
+    {
+        return error.Code switch
+        {
+            FileMentionErrorCode.WorkspaceUnavailable => ContextRelayLocalizedStrings.FileMentionWorkspaceUnavailableStatus,
+            FileMentionErrorCode.MentionLimitReached => ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(FileMentionResolver.MaxFileMentions),
+            FileMentionErrorCode.NotFound => ContextRelayLocalizedStrings.GetFileMentionNotFoundStatus(error.Detail ?? string.Empty),
+            FileMentionErrorCode.OutsideWorkspace => ContextRelayLocalizedStrings.GetFileMentionOutsideWorkspaceStatus(error.Detail ?? string.Empty),
+            FileMentionErrorCode.AmbiguousPath => ContextRelayLocalizedStrings.GetFileMentionAmbiguousStatus(error.Detail ?? string.Empty),
+            FileMentionErrorCode.UnsupportedFileType => ContextRelayLocalizedStrings.GetFileMentionUnsupportedFileTypeStatus(error.Detail ?? string.Empty),
+            _ => ContextRelayLocalizedStrings.FileMentionWorkspaceUnavailableStatus
+        };
     }
 
     private async Task<string> EnsureCopilotConversationAsync(string accessToken, CancellationToken cancellationToken)
@@ -1606,6 +1627,12 @@ internal sealed class ContextRelayHost : IDisposable
         foreach (var selectedPath in normalizedSelections)
         {
             if (mentionTokens.Count >= remainingCapacity)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            if (!CopilotSupportedFilePolicy.IsSupported(selectedPath))
             {
                 skippedCount++;
                 continue;

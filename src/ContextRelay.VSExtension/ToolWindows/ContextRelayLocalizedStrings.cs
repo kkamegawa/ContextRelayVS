@@ -81,6 +81,7 @@ internal static class ContextRelayLocalizedStrings
     public static string FilePickerNoWorkspaceFilesSelectedStatus => GetString("FilePickerNoWorkspaceFilesSelectedStatus");
     public static string FilePickerAddFilesFailedStatus => GetString("FilePickerAddFilesFailedStatus");
     public static string WorkIqLocalFileContextDisabledStatus => GetString("WorkIqLocalFileContextDisabledStatus");
+    public static string FileMentionWorkspaceUnavailableStatus => GetString("FileMentionWorkspaceUnavailableStatus");
     public static string ChatAndSnippetsClearedStatus => GetString("ChatAndSnippetsClearedStatus");
     public static string ResultPinnedStatus => GetString("ResultPinnedStatus");
     public static string ResultPinnedWithExcerptFallbackStatus => GetString("ResultPinnedWithExcerptFallbackStatus");
@@ -157,6 +158,21 @@ internal static class ContextRelayLocalizedStrings
 
     public static string GetFilePickerMentionLimitReachedStatus(int maxMentions) =>
         Format("FilePickerMentionLimitReachedStatus_Format", maxMentions);
+
+    public static string GetLocalFileContextLabel(string relativePath) =>
+        Format("LocalFileContextLabel_Format", relativePath);
+
+    public static string GetFileMentionNotFoundStatus(string rawPath) =>
+        Format("FileMentionNotFoundStatus_Format", rawPath);
+
+    public static string GetFileMentionOutsideWorkspaceStatus(string rawPath) =>
+        Format("FileMentionOutsideWorkspaceStatus_Format", rawPath);
+
+    public static string GetFileMentionAmbiguousStatus(string rawPath) =>
+        Format("FileMentionAmbiguousStatus_Format", rawPath);
+
+    public static string GetFileMentionUnsupportedFileTypeStatus(string rawPath) =>
+        Format("FileMentionUnsupportedFileTypeStatus_Format", rawPath);
 
     public static string GetAskPreviewDocumentTitle(string query, string extension) =>
         string.IsNullOrWhiteSpace(query)

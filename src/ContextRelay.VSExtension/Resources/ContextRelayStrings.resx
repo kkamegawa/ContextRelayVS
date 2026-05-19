@@ -49,6 +49,7 @@
   <data name="FilePickerNoWorkspaceFilesSelectedStatus" xml:space="preserve"><value>None of the selected files are eligible workspace files for # mentions.</value></data>
   <data name="FilePickerAddFilesFailedStatus" xml:space="preserve"><value>Failed to add selected files. Check the output log for details.</value></data>
   <data name="WorkIqLocalFileContextDisabledStatus" xml:space="preserve"><value>Local file context for Work IQ is disabled. Enable "Allow local file context for Work IQ" in ContextRelay options to send bounded file text with /workiq #file prompts.</value></data>
+  <data name="FileMentionWorkspaceUnavailableStatus" xml:space="preserve"><value>Open a solution or workspace file before using #file mentions.</value></data>
   <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>Chat and snippets cleared.</value></data>
   <data name="ResultPinnedStatus" xml:space="preserve"><value>Result pinned to snippets.</value></data>
   <data name="ResultPinnedWithExcerptFallbackStatus" xml:space="preserve"><value>Result pinned to snippets. Full content could not be fetched, so the saved snippet uses the search excerpt.</value></data>
@@ -86,6 +87,11 @@
   <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>Added {0} file mention(s) to the query.</value></data>
   <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>Added {0} file mention(s); skipped {1} file(s) due to duplicates, workspace bounds, or mention limit.</value></data>
   <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>You can reference up to {0} files per message.</value></data>
+  <data name="LocalFileContextLabel_Format" xml:space="preserve"><value>Local file: {0}</value></data>
+  <data name="FileMentionNotFoundStatus_Format" xml:space="preserve"><value>File not found for #{0}.</value></data>
+  <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>File #{0} is outside the opened workspace.</value></data>
+  <data name="FileMentionAmbiguousStatus_Format" xml:space="preserve"><value>File path "#{0}" is ambiguous across workspace roots. Use a unique path.</value></data>
+  <data name="FileMentionUnsupportedFileTypeStatus_Format" xml:space="preserve"><value>Unsupported file type for #{0}. Only Copilot-supported file extensions are allowed.</value></data>
   <data name="AddFilesDialogTitle" xml:space="preserve"><value>Select files to add as context</value></data>
   <data name="AddFilesDialogFilter" xml:space="preserve"><value>All files (*.*)|*.*</value></data>
   <data name="HelpFor_mail" xml:space="preserve"><value>Example: /mail from:alice subject:budget&#10;Example: /mail incident review</value></data>

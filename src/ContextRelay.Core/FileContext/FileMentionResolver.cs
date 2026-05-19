@@ -82,7 +82,7 @@ public static class FileMentionResolver
             return new FileMentionResolutionResult
             {
                 CleanedPrompt = cleanedPrompt,
-                Errors = new[] { "# file mentions require an opened solution or folder." }
+                Errors = new[] { CreateError(FileMentionErrorCode.WorkspaceUnavailable) }
             };
         }
 
@@ -91,19 +91,19 @@ public static class FileMentionResolver
             return new FileMentionResolutionResult
             {
                 CleanedPrompt = cleanedPrompt,
-                Errors = new[] { $"You can reference up to {MaxFileMentions} files per message." }
+                Errors = new[] { CreateError(FileMentionErrorCode.MentionLimitReached, MaxFileMentions.ToString(System.Globalization.CultureInfo.InvariantCulture)) }
             };
         }
 
         var files = new List<ResolvedFileMention>();
-        var errors = new List<string>();
+        var errors = new List<FileMentionResolutionError>();
         var seenUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
             var resolved = ResolveSingleMention(candidate.RawPath, normalizedRoots, out var error);
             if (resolved is null)
             {
-                errors.Add(error ?? $"File not found for #{candidate.RawPath}.");
+                errors.Add(error ?? CreateError(FileMentionErrorCode.NotFound, candidate.RawPath));
                 continue;
             }
 
@@ -124,9 +124,10 @@ public static class FileMentionResolver
     private static ResolvedFileMention? ResolveSingleMention(
         string rawPath,
         IReadOnlyList<string> workspaceRoots,
-        out string? error)
+        out FileMentionResolutionError? error)
     {
         var matches = new List<ResolvedFileMention>();
+        FileMentionResolutionError? candidateError = null;
         var isRooted = Path.IsPathRooted(rawPath);
         if (isRooted)
         {
@@ -148,25 +149,29 @@ public static class FileMentionResolver
                 {
                     matches.Add(candidate);
                 }
+                else if (candidateError is null)
+                {
+                    candidateError = CreateError(FileMentionErrorCode.OutsideWorkspace, rawPath);
+                }
             }
         }
 
         if (matches.Count == 0)
         {
-            error = $"File not found for #{rawPath}.";
+            error = candidateError ?? CreateError(FileMentionErrorCode.NotFound, rawPath);
             return null;
         }
 
         if (!isRooted && matches.Count > 1)
         {
-            error = $"File path \"#{rawPath}\" is ambiguous across workspace roots. Use a unique path.";
+            error = CreateError(FileMentionErrorCode.AmbiguousPath, rawPath);
             return null;
         }
 
         var selected = matches[0];
         if (!CopilotSupportedFilePolicy.IsSupported(selected.AbsolutePath))
         {
-            error = $"Unsupported file type for #{rawPath}. Only Copilot-supported file extensions are allowed.";
+            error = CreateError(FileMentionErrorCode.UnsupportedFileType, rawPath);
             return null;
         }
 
@@ -179,11 +184,11 @@ public static class FileMentionResolver
         IReadOnlyList<string> workspaceRoots,
         string? preferredRoot,
         string rawPath,
-        out string? error)
+        out FileMentionResolutionError? error)
     {
         if (!File.Exists(candidatePath))
         {
-            error = $"File not found for #{rawPath}.";
+            error = CreateError(FileMentionErrorCode.NotFound, rawPath);
             return null;
         }
 
@@ -193,7 +198,7 @@ public static class FileMentionResolver
             : preferredRoot;
         if (root is null)
         {
-            error = $"File #{rawPath} is outside the opened workspace.";
+            error = CreateError(FileMentionErrorCode.OutsideWorkspace, rawPath);
             return null;
         }
 
@@ -204,6 +209,15 @@ public static class FileMentionResolver
             WorkspaceRoot = root,
             RelativePath = GetRelativePath(root, canonicalPath),
             Uri = new Uri(canonicalPath).AbsoluteUri
+        };
+    }
+
+    private static FileMentionResolutionError CreateError(FileMentionErrorCode code, string? detail = null)
+    {
+        return new FileMentionResolutionError
+        {
+            Code = code,
+            Detail = detail
         };
     }
 

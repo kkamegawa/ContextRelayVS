@@ -73,6 +73,39 @@ public sealed class FilePickerMentionFormattingTests
     }
 
     [Fact]
+    public void MergeSelectedFilesIntoQuery_WhenSelectionIsUnsupported_DoesNotAppend()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true);
+        var mergeMethod = hostType!.GetMethod("MergeSelectedFilesIntoQuery", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(mergeMethod);
+
+        var workspaceRoot = CreateTemporaryWorkspace();
+        try
+        {
+            var absolutePath = Path.Combine(workspaceRoot, "capture.pcap");
+            File.WriteAllText(absolutePath, "binary");
+
+            var result = mergeMethod!.Invoke(obj: null, parameters: new object[]
+            {
+                string.Empty,
+                new[] { absolutePath },
+                new[] { workspaceRoot }
+            });
+
+            Assert.NotNull(result);
+            var queryText = GetStringProperty(result!, "QueryText");
+            var statusMessage = GetStringProperty(result!, "StatusMessage");
+            Assert.Equal(string.Empty, queryText);
+            Assert.Contains("workspace files", statusMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(workspaceRoot);
+        }
+    }
+
+    [Fact]
     public void MergeSelectedFilesIntoQuery_WhenWorkspaceRootsAreUnavailable_InfersWorkspaceRootFromSelection()
     {
         var assembly = LoadBuiltExtensionAssembly();

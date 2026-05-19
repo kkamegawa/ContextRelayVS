@@ -4,6 +4,46 @@ using System.Collections.Generic;
 namespace ContextRelay.Core.FileContext;
 
 /// <summary>
+/// Identifies why a file mention resolution attempt failed.
+/// </summary>
+public enum FileMentionErrorCode
+{
+    /// <summary>Workspace roots could not be determined.</summary>
+    WorkspaceUnavailable,
+
+    /// <summary>The prompt referenced too many files.</summary>
+    MentionLimitReached,
+
+    /// <summary>The referenced file could not be found.</summary>
+    NotFound,
+
+    /// <summary>The referenced file resolves outside the current workspace.</summary>
+    OutsideWorkspace,
+
+    /// <summary>The referenced path is ambiguous across workspace roots.</summary>
+    AmbiguousPath,
+
+    /// <summary>The referenced file type is not supported for Copilot context.</summary>
+    UnsupportedFileType
+}
+
+/// <summary>
+/// Represents a structured failure from file mention resolution.
+/// </summary>
+public sealed class FileMentionResolutionError
+{
+    /// <summary>
+    /// Gets or sets the failure code.
+    /// </summary>
+    public FileMentionErrorCode Code { get; set; }
+
+    /// <summary>
+    /// Gets or sets optional detail for the failure.
+    /// </summary>
+    public string? Detail { get; set; }
+}
+
+/// <summary>
 /// Represents a raw <c>#file</c> mention token found in a user prompt.
 /// </summary>
 public sealed class FileMentionCandidate
@@ -66,7 +106,7 @@ public sealed class FileMentionResolutionResult
     public IReadOnlyList<ResolvedFileMention> Files { get; set; } = Array.Empty<ResolvedFileMention>();
 
     /// <summary>
-    /// Gets or sets user-facing resolution errors.
+    /// Gets or sets structured resolution errors.
     /// </summary>
-    public IReadOnlyList<string> Errors { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<FileMentionResolutionError> Errors { get; set; } = Array.Empty<FileMentionResolutionError>();
 }

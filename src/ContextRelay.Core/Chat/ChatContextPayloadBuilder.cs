@@ -13,7 +13,8 @@ public static class ChatContextPayloadBuilder
     public static ChatContextPayload Build(
         IReadOnlyList<SharedSnippetItem> snippets,
         string? searchSummary = null,
-        IReadOnlyList<ResolvedFileMention>? localFiles = null)
+        IReadOnlyList<ResolvedFileMention>? localFiles = null,
+        Func<ResolvedFileMention, string>? localFileLabelFactory = null)
     {
         if (snippets is null)
         {
@@ -57,12 +58,13 @@ public static class ChatContextPayloadBuilder
 
         foreach (var localFile in localFiles ?? Array.Empty<ResolvedFileMention>())
         {
+            var label = localFileLabelFactory?.Invoke(localFile) ?? $"Local file: {localFile.RelativePath}";
             AddFileResource(
                 fileResources,
                 fileResourceUris,
                 labels,
                 localFile.Uri,
-                $"Local file: {localFile.RelativePath}");
+                label);
         }
 
         var sendOptions = new CopilotChatSendOptions

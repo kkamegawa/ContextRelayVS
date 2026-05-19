@@ -54,7 +54,8 @@ public sealed class FileMentionResolverTests : IDisposable
             var result = FileMentionResolver.Resolve($"Inspect #{relativeEscape}", new[] { root });
 
             Assert.Empty(result.Files);
-            Assert.Contains("outside", result.Errors[0], StringComparison.OrdinalIgnoreCase);
+            Assert.Single(result.Errors);
+            Assert.Equal(FileMentionErrorCode.OutsideWorkspace, result.Errors[0].Code);
         }
         finally
         {
@@ -70,7 +71,8 @@ public sealed class FileMentionResolverTests : IDisposable
         var result = FileMentionResolver.Resolve("Inspect #capture.pcap", new[] { root });
 
         Assert.Empty(result.Files);
-        Assert.Contains("Unsupported file type", result.Errors[0]);
+        Assert.Single(result.Errors);
+        Assert.Equal(FileMentionErrorCode.UnsupportedFileType, result.Errors[0].Code);
     }
 
     [Fact]
@@ -94,7 +96,8 @@ public sealed class FileMentionResolverTests : IDisposable
         var result = FileMentionResolver.Resolve("Summarize #README.md", Array.Empty<string>());
 
         Assert.Empty(result.Files);
-        Assert.Contains("opened solution or folder", result.Errors[0]);
+        Assert.Single(result.Errors);
+        Assert.Equal(FileMentionErrorCode.WorkspaceUnavailable, result.Errors[0].Code);
     }
 
     [Fact]
@@ -108,7 +111,8 @@ public sealed class FileMentionResolverTests : IDisposable
         var result = FileMentionResolver.Resolve("Read #file0.md #file1.md #file2.md #file3.md #file4.md #file5.md", new[] { root });
 
         Assert.Empty(result.Files);
-        Assert.Contains("up to", result.Errors[0]);
+        Assert.Single(result.Errors);
+        Assert.Equal(FileMentionErrorCode.MentionLimitReached, result.Errors[0].Code);
     }
 
     [Fact]
