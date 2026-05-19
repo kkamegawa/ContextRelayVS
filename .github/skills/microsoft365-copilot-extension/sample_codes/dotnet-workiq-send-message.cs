@@ -48,6 +48,12 @@ internal static class WorkIqSample
             }
         };
 
+        var message = (Dictionary<string, object?>)((Dictionary<string, object?>)payload["params"]!)["message"]!;
+        if (!string.IsNullOrWhiteSpace(contextId))
+        {
+            message["contextId"] = contextId;
+        }
+
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             "https://workiq.svc.cloud.microsoft/a2a/");

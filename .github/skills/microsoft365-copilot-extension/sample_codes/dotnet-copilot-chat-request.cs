@@ -78,8 +78,13 @@ internal static class CopilotChatSample
         response.EnsureSuccessStatusCode();
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-        return document.RootElement.GetProperty("id").GetString()
-            ?? throw new InvalidOperationException("Copilot conversation response did not contain an id.");
+        if (!document.RootElement.TryGetProperty("id", out var idProperty) ||
+            string.IsNullOrWhiteSpace(idProperty.GetString()))
+        {
+            throw new InvalidOperationException("Copilot conversation response did not contain an id.");
+        }
+
+        return idProperty.GetString()!;
     }
 
     private static string ResolveCopilotTimeZone()

@@ -27,11 +27,11 @@ Start from the repo-specific evidence before searching the wider web:
 
 - **Issue #25 / PR #26** — plain Microsoft 365 Copilot chat mode, explicit context flow, and server-owned conversation state
 - **Issue #64** — `#` file-context relay design for Copilot and Work IQ
-- **`src\ContextRelay.Core\Adapters\CopilotChatAdapter.cs`** — Graph Copilot Chat request shape and `locationHint.timeZone`
+- **`src\ContextRelay.Core\Adapters\CopilotChatAdapter.cs`** — Graph Copilot Chat request shape and the current `locationHint.timeZone` behavior
 - **`src\ContextRelay.Core\Chat\ChatContextPayloadBuilder.cs`** — bounded `additionalContext` and `contextualResources.files` routing
 - **`src\ContextRelay.Core\Adapters\WorkIqAdapter.cs`** — A2A v1.0 envelope, `A2A-Version: 1.0`, retries, and location metadata
 - **`docs\tenant_admin_quickstart.md`** and **`docs\work_iq.md`** — tenant setup, permission scope, and protocol notes
-- **Recent timezone regression** — Graph Copilot Chat rejected Windows IDs such as `Tokyo Standard Time` with an `IANA format` error; the safe behavior is to send IANA when available, otherwise `Etc/UTC`
+- **Recent timezone regression** — Graph Copilot Chat rejected Windows IDs such as `Tokyo Standard Time` with an `IANA format` error. The current adapter file shows the request field but does not yet normalize to IANA, so callers and samples should send IANA when available and otherwise fall back to `Etc/UTC`
 
 ## Key Concepts
 
