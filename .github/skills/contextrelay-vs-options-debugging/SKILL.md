@@ -118,6 +118,97 @@ Select-String -Path $logPath -Pattern 'No InprocServer32 registered for package|
    - Confirm your chosen install path is actually supported by current VS behavior.
    - Avoid mixing unsupported "manual copy" paths with installer-managed paths.
 
+## Known Installer Failure: invalid `[installdir]\Common7\IDE\VSExtensions\...` path
+
+### Symptom signature
+
+- VSIX installation fails before payload deployment with `System.InvalidOperationException`.
+- VSIXInstaller log contains a message similar to:
+  - `manifest.json ... path '[installdir]\Common7\IDE\VSExtensions\<hash>' is invalid`
+- Failure appears during `PackageInstaller.ValidatePackage(...)` and installation rolls back.
+
+### Why this happens
+
+This usually indicates a **packaging-level manifest/path mismatch** for a hybrid extension (VisualStudio.Extensibility + VSSDK payload), not a runtime code issue.  
+In observed cases, the installer operated with `PerMachine: False` while the generated installer manifest path used a machine-rooted token form that was rejected during validation.
+
+### What to check first
+
+1. Confirm this is an installer validation failure (not ActivityLog runtime activation failure).
+2. Inspect final produced VSIX metadata and any generated install manifest traces.
+3. Map the invalid path entry back to your manifest patch/repack logic (for example custom post-`CreateVsixContainer` tasks).
+4. Reconcile install scope and manifest path/token generation rules for the targeted VS channel/version.
+
+### Remediation direction
+
+- Keep one authoritative packaging strategy and ensure generated install paths are valid for the selected install scope.
+- If you patch `extension.vsixmanifest` and inject `Microsoft.VisualStudio.VsPackage` assets, verify that the resulting installer metadata does not emit invalid `[installdir]...\VSExtensions\...` entries.
+- Re-test installation on all supported SKUs/channels (for example Enterprise + Insiders), not just one instance.
+
+## Known Installer Failure: cross-manifest `Version` mismatch
+
+### Symptom signature
+
+- VSIXInstaller fails with an error similar to:
+  - `Version value mismatch. VsixManifest value: 'X'; Catalog manifest value: 'Y'; Package manifest value: 'X'`
+  - `InvalidOperationException: ... property 'Version' is not consistent across manifests`
+
+### Why this happens
+
+Hybrid repack flows often patch `extension.vsixmanifest` and `manifest.json` but forget `catalog.json`.  
+Setup Engine validates all of them together, so stale `catalog.json` values (for example `0.0.0.0`) cause install rollback.
+
+### What to verify
+
+Ensure all three are aligned:
+1. `extension.vsixmanifest` `<Identity ... Version="...">`
+2. `manifest.json` root `"version"`
+3. `catalog.json` package/info version values
+
+### Quick audit pattern
+
+```powershell
+$vsix = Get-ChildItem '.\src' -Filter *.vsix -Recurse |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead($vsix.FullName)
+try {
+    foreach ($name in 'extension.vsixmanifest','manifest.json','catalog.json') {
+        $entry = $zip.Entries | Where-Object { $_.FullName -ieq $name } | Select-Object -First 1
+        if (-not $entry) {
+            Write-Host "Missing: $name"
+            continue
+        }
+
+        $reader = New-Object System.IO.StreamReader($entry.Open())
+        try {
+            $text = $reader.ReadToEnd()
+            Write-Host "---- $name ----"
+            if ($name -eq 'extension.vsixmanifest') {
+                ($text | Select-String 'Identity .* Version=\"([^\"]+)\"').Matches.Value
+            } else {
+                $text | Select-String '"version"\s*:\s*"[^"]+"' -AllMatches | ForEach-Object { $_.Matches.Value }
+            }
+        }
+        finally {
+            $reader.Dispose()
+        }
+    }
+}
+finally {
+    $zip.Dispose()
+}
+```
+
+### Remediation direction
+
+- If you patch one manifest, patch all three (`extension.vsixmanifest`, `manifest.json`, `catalog.json`) in the same post-pack step.
+- Add build assertions that fail when:
+  - any installer-facing manifest still contains `0.0.0.0`,
+  - or these files disagree on extension version.
+
 ## Guardrails
 
 - Do not assume behavior from an older Visual Studio version applies to current preview/insiders builds.

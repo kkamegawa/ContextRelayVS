@@ -275,6 +275,7 @@
       <Using Namespace="System.IO" />
       <Using Namespace="System.IO.Compression" />
       <Using Namespace="System.Linq" />
+      <Using Namespace="System.Text" />
       <Using Namespace="System.Xml" />
       <Code>
         <![CDATA[
@@ -396,10 +397,74 @@
                     outAssets.AppendChild(vsPackage);
                 }
 
-                // Save patched manifest
+                // Save patched extension.vsixmanifest
                 using (var writer = new StreamWriter(manifestPath, false, new System.Text.UTF8Encoding(true)))
                 {
                     outDoc.Save(writer);
+                }
+
+                // Patch setup-engine manifest.json as well. VSIXInstaller validates this file
+                // before deployment, and stale values can fail installation even when
+                // extension.vsixmanifest has already been corrected.
+                string setupManifestPath = Path.Combine(workDir, "manifest.json");
+                if (File.Exists(setupManifestPath))
+                {
+                    string setupManifestText = File.ReadAllText(setupManifestPath, Encoding.UTF8);
+                    XmlElement sourceMetadata = sourceRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Metadata" && n.NamespaceURI == Ns) as XmlElement;
+                    XmlElement sourceIdentity = sourceMetadata == null
+                        ? null
+                        : sourceMetadata.ChildNodes
+                            .OfType<XmlNode>()
+                            .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Identity" && n.NamespaceURI == Ns) as XmlElement;
+                    string sourceVersion = sourceIdentity == null ? string.Empty : sourceIdentity.GetAttribute("Version");
+
+                    if (!string.IsNullOrEmpty(sourceVersion))
+                    {
+                        setupManifestText = System.Text.RegularExpressions.Regex.Replace(
+                            setupManifestText,
+                            "\"version\"\\s*:\\s*\"[^\"]*\"",
+                            "\"version\":\"" + sourceVersion + "\"");
+                    }
+
+                    // Installer validation for user-scoped VSIX install expects the Extensions
+                    // path family, not VSExtensions.
+                    setupManifestText = setupManifestText.Replace(
+                        "\\\\Common7\\\\IDE\\\\VSExtensions\\\\",
+                        "\\\\Common7\\\\IDE\\\\Extensions\\\\");
+
+                    File.WriteAllText(setupManifestPath, setupManifestText, new UTF8Encoding(true));
+                    Log.LogMessage(MessageImportance.High, "Patched setup manifest.json inside VSIX.");
+                }
+
+                // Keep catalog.json consistent with extension.vsixmanifest / manifest.json.
+                // Setup Engine enforces cross-manifest consistency and rejects mismatched versions.
+                string catalogPath = Path.Combine(workDir, "catalog.json");
+                if (File.Exists(catalogPath))
+                {
+                    string catalogText = File.ReadAllText(catalogPath, Encoding.UTF8);
+                    XmlElement sourceMetadata = sourceRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Metadata" && n.NamespaceURI == Ns) as XmlElement;
+                    XmlElement sourceIdentity = sourceMetadata == null
+                        ? null
+                        : sourceMetadata.ChildNodes
+                            .OfType<XmlNode>()
+                            .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Identity" && n.NamespaceURI == Ns) as XmlElement;
+                    string sourceVersion = sourceIdentity == null ? string.Empty : sourceIdentity.GetAttribute("Version");
+
+                    if (!string.IsNullOrEmpty(sourceVersion))
+                    {
+                        catalogText = catalogText.Replace("0.0.0.0", sourceVersion);
+                    }
+
+                    catalogText = catalogText.Replace(
+                        "\\\\Common7\\\\IDE\\\\VSExtensions\\\\",
+                        "\\\\Common7\\\\IDE\\\\Extensions\\\\");
+
+                    File.WriteAllText(catalogPath, catalogText, new UTF8Encoding(true));
+                    Log.LogMessage(MessageImportance.High, "Patched catalog.json inside VSIX.");
                 }
 
                 // Copy in-proc package payload into the VSIX root
