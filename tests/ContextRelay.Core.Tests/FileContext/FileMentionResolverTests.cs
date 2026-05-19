@@ -64,6 +64,16 @@ public sealed class FileMentionResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_ReturnsNotFoundForMissingWorkspaceRelativePath()
+    {
+        var result = FileMentionResolver.Resolve("Inspect #docs/missing.md", new[] { root });
+
+        Assert.Empty(result.Files);
+        Assert.Single(result.Errors);
+        Assert.Equal(FileMentionErrorCode.NotFound, result.Errors[0].Code);
+    }
+
+    [Fact]
     public void Resolve_RejectsUnsupportedExtensions()
     {
         WriteFile("capture.pcap", "binary");
@@ -136,6 +146,39 @@ public sealed class FileMentionResolverTests : IDisposable
         Assert.Contains("[File: notes.md]", prompt);
         Assert.Contains("[truncated", prompt);
         Assert.True(prompt.Length <= "Summarize\n\nContextRelay local file context:\n".Length + "[File: notes.md]\n".Length + FileContextPromptBuilder.MaxWorkIqFileChars);
+    }
+
+    [Fact]
+    public async Task BuildWorkIqPromptAsync_KeepsCombinedSectionOverheadWithinBudget()
+    {
+        var firstPath = WriteFile("first.md", new string('a', FileContextPromptBuilder.MaxWorkIqFileChars));
+        var secondPath = WriteFile("second.md", new string('b', FileContextPromptBuilder.MaxWorkIqFileChars));
+        var resolved = new[]
+        {
+            new ResolvedFileMention
+            {
+                AbsolutePath = firstPath,
+                WorkspaceRoot = root,
+                RelativePath = "first.md",
+                Uri = new Uri(firstPath).AbsoluteUri
+            },
+            new ResolvedFileMention
+            {
+                AbsolutePath = secondPath,
+                WorkspaceRoot = root,
+                RelativePath = "second.md",
+                Uri = new Uri(secondPath).AbsoluteUri
+            }
+        };
+
+        var prompt = await FileContextPromptBuilder.BuildWorkIqPromptAsync("Summarize", resolved, TestContext.Current.CancellationToken);
+        var marker = "ContextRelay local file context:\n";
+        var markerIndex = prompt.IndexOf(marker, StringComparison.Ordinal);
+
+        Assert.NotEqual(-1, markerIndex);
+
+        var sectionBlock = prompt.Substring(markerIndex + marker.Length);
+        Assert.True(sectionBlock.Length <= FileContextPromptBuilder.MaxWorkIqFileContextChars);
     }
 
     public void Dispose()

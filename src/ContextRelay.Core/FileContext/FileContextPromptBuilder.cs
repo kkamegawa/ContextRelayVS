@@ -45,22 +45,25 @@ public static class FileContextPromptBuilder
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (remainingBudget <= 0)
+            var separatorLength = sections.Count == 0 ? 0 : 2;
+            var sectionBudget = remainingBudget - separatorLength;
+            if (sectionBudget <= 0)
             {
                 break;
             }
 
             var content = NormalizeExtractedText(await ReadAllTextAsync(file.AbsolutePath, cancellationToken).ConfigureAwait(false));
-            var bounded = TruncateForBudget(
+            var section = BuildFileSection(
+                file.RelativePath,
                 string.IsNullOrWhiteSpace(content) ? "(empty file)" : content,
-                Math.Min(MaxWorkIqFileChars, remainingBudget));
-            if (string.IsNullOrWhiteSpace(bounded))
+                sectionBudget);
+            if (string.IsNullOrWhiteSpace(section))
             {
                 continue;
             }
 
-            sections.Add($"[File: {file.RelativePath}]\n{bounded}");
-            remainingBudget -= bounded.Length;
+            sections.Add(section);
+            remainingBudget -= section.Length + separatorLength;
         }
 
         if (sections.Count == 0)
@@ -137,5 +140,23 @@ public static class FileContextPromptBuilder
 
             omittedChars = adjustedOmittedChars;
         }
+    }
+
+    private static string BuildFileSection(string relativePath, string content, int sectionBudget)
+    {
+        var header = $"[File: {relativePath}]\n";
+        if (sectionBudget <= header.Length)
+        {
+            return string.Empty;
+        }
+
+        var contentBudget = Math.Min(MaxWorkIqFileChars, sectionBudget - header.Length);
+        var bounded = TruncateForBudget(content, contentBudget);
+        if (string.IsNullOrWhiteSpace(bounded))
+        {
+            return string.Empty;
+        }
+
+        return header + bounded;
     }
 }

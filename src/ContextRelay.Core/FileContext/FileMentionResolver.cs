@@ -144,14 +144,14 @@ public static class FileMentionResolver
             foreach (var root in workspaceRoots)
             {
                 var candidatePath = Path.GetFullPath(Path.Combine(root, rawPath));
-                var candidate = ResolveCandidatePath(candidatePath, workspaceRoots, root, rawPath, out _);
+                var candidate = ResolveCandidatePath(candidatePath, workspaceRoots, root, rawPath, out var rootError);
                 if (candidate is not null)
                 {
                     matches.Add(candidate);
                 }
-                else if (candidateError is null)
+                else if (rootError is not null)
                 {
-                    candidateError = CreateError(FileMentionErrorCode.OutsideWorkspace, rawPath);
+                    candidateError = PickPreferredResolutionError(candidateError, rootError);
                 }
             }
         }
@@ -177,6 +177,25 @@ public static class FileMentionResolver
 
         error = null;
         return selected;
+    }
+
+    private static FileMentionResolutionError PickPreferredResolutionError(
+        FileMentionResolutionError? existingError,
+        FileMentionResolutionError incomingError)
+    {
+        if (existingError is null)
+        {
+            return incomingError;
+        }
+
+        // Preserve NotFound unless we later detect a concrete path traversal to an existing file outside trusted roots.
+        if (existingError.Code == FileMentionErrorCode.NotFound &&
+            incomingError.Code == FileMentionErrorCode.OutsideWorkspace)
+        {
+            return incomingError;
+        }
+
+        return existingError;
     }
 
     private static ResolvedFileMention? ResolveCandidatePath(
