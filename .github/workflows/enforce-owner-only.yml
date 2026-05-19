@@ -1,0 +1,118 @@
+name: Owner-only Gate
+
+on:
+  pull_request_target:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  owner-only-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate commit authors
+        id: evaluate
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const ownerLogin = context.repo.owner.toLowerCase();
+            const pullNumber = context.payload.pull_request.number;
+            const commits = await github.paginate(
+              github.rest.pulls.listCommits,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+                per_page: 100
+              }
+            );
+
+            const allowedBotLogins = new Set([
+              "github-copilot[bot]",
+              "copilot"
+            ]);
+
+            function isAllowedLogin(login) {
+              if (!login) {
+                return false;
+              }
+
+              const normalized = login.toLowerCase();
+              return normalized === ownerLogin || allowedBotLogins.has(normalized);
+            }
+
+            function isAllowedCopilotEmail(email) {
+              if (!email) {
+                return false;
+              }
+
+              const normalized = email.toLowerCase();
+              return normalized.endsWith("+copilot@users.noreply.github.com");
+            }
+
+            const blocked = [];
+
+            for (const commit of commits) {
+              const authorLogin = commit.author?.login ?? "";
+              const committerLogin = commit.committer?.login ?? "";
+              const authorEmail = commit.commit?.author?.email ?? "";
+              const committerEmail = commit.commit?.committer?.email ?? "";
+
+              const allowed =
+                isAllowedLogin(authorLogin) ||
+                isAllowedLogin(committerLogin) ||
+                isAllowedCopilotEmail(authorEmail) ||
+                isAllowedCopilotEmail(committerEmail);
+
+              if (!allowed) {
+                blocked.push({
+                  sha: commit.sha,
+                  authorLogin,
+                  committerLogin,
+                  authorEmail,
+                  committerEmail
+                });
+              }
+            }
+
+            if (blocked.length === 0) {
+              core.setOutput("state", "success");
+              core.setOutput("description", "All commits are from owner or Copilot.");
+              core.setOutput("summary", "Owner/Copilot commit policy passed.");
+              return;
+            }
+
+            const offender = blocked[0];
+            const details =
+              `Blocked commit ${offender.sha.slice(0, 7)} ` +
+              `(author=${offender.authorLogin || offender.authorEmail || "unknown"}, ` +
+              `committer=${offender.committerLogin || offender.committerEmail || "unknown"})`;
+
+            core.setOutput("state", "failure");
+            core.setOutput("description", details.slice(0, 140));
+            core.setOutput("summary", details);
+
+      - name: Publish required status context
+        uses: actions/github-script@v8
+        env:
+          STATUS_STATE: ${{ steps.evaluate.outputs.state }}
+          STATUS_DESCRIPTION: ${{ steps.evaluate.outputs.description }}
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: process.env.STATUS_STATE,
+              context: "Enforce owner-only changes",
+              description: process.env.STATUS_DESCRIPTION,
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
+
+            if (process.env.STATUS_STATE !== "success") {
+              core.setFailed(process.env.STATUS_DESCRIPTION);
+            }

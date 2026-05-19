@@ -10,6 +10,8 @@ namespace ContextRelay.Core.Adapters;
 
 public sealed class CopilotChatAdapter : ICopilotChatAdapter
 {
+    private const string DefaultIanaTimeZone = "Etc/UTC";
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -97,12 +99,18 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
     {
         try
         {
-            return TimeZoneInfo.Local.Id;
+            var localTimeZoneId = TimeZoneInfo.Local.Id;
+            // Graph requires IANA zone names (for example "Asia/Tokyo").
+            if (!string.IsNullOrWhiteSpace(localTimeZoneId) && localTimeZoneId.IndexOf('/') >= 0)
+            {
+                return localTimeZoneId;
+            }
         }
         catch
         {
-            return "UTC";
         }
+
+        return DefaultIanaTimeZone;
     }
 
     private sealed class CreateConversationResponse

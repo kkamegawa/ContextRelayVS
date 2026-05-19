@@ -13,6 +13,7 @@ obj/
 *.vsp
 *.VC.db
 *.VC.VC.opendb
+o/*
 
 ## VSIX build output
 *.vsix
