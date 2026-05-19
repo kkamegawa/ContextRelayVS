@@ -280,6 +280,7 @@
       <Code>
         <![CDATA[
         const string Ns = "http://schemas.microsoft.com/developer/vsx-schema/2011";
+        const string NsDesign = "http://schemas.microsoft.com/developer/vsx-schema-design/2011";
 
         try
         {
@@ -382,19 +383,42 @@
                     outRoot.AppendChild(outAssets);
                 }
 
-                string pkgdefFileName = Path.GetFileName(PackagePkgdefPath);
-                bool hasVsPackage = outAssets.ChildNodes
-                    .OfType<XmlNode>()
-                    .Any(n => n.NodeType == XmlNodeType.Element
-                        && n.LocalName == "Asset"
-                        && n.NamespaceURI == Ns
-                        && ((XmlElement)n).GetAttribute("Type") == "Microsoft.VisualStudio.VsPackage");
-                if (!hasVsPackage)
+                void EnsureAsset(string assetType, string assetPath)
                 {
-                    XmlElement vsPackage = outDoc.CreateElement("Asset", Ns);
-                    vsPackage.SetAttribute("Type", "Microsoft.VisualStudio.VsPackage");
-                    vsPackage.SetAttribute("Path", pkgdefFileName);
-                    outAssets.AppendChild(vsPackage);
+                    XmlElement existing = outAssets.ChildNodes
+                        .OfType<XmlNode>()
+                        .Where(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Asset" && n.NamespaceURI == Ns)
+                        .Cast<XmlElement>()
+                        .FirstOrDefault(n =>
+                            string.Equals(n.GetAttribute("Type"), assetType, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(n.GetAttribute("Path"), assetPath, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        return;
+                    }
+
+                    XmlElement asset = outDoc.CreateElement("Asset", Ns);
+                    asset.SetAttribute("Type", assetType);
+                    asset.SetAttribute("Path", assetPath);
+                    asset.SetAttribute("Source", NsDesign, "File");
+                    outAssets.AppendChild(asset);
+                }
+
+                string pkgdefFileName = Path.GetFileName(PackagePkgdefPath);
+                EnsureAsset("Microsoft.VisualStudio.VsPackage", pkgdefFileName);
+                EnsureAsset("Microsoft.VisualStudio.Assembly", Path.GetFileName(PackageDllPath));
+                if (!string.IsNullOrWhiteSpace(SupportingAssemblies))
+                {
+                    foreach (string supportingAssembly in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string assemblyPath = supportingAssembly.Trim();
+                        if (string.IsNullOrEmpty(assemblyPath))
+                        {
+                            continue;
+                        }
+
+                        EnsureAsset("Microsoft.VisualStudio.Assembly", Path.GetFileName(assemblyPath));
+                    }
                 }
 
                 // Save patched extension.vsixmanifest
