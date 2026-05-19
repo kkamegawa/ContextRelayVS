@@ -215,6 +215,57 @@
                 {
                     Log.LogError("extension.vsixmanifest in produced VSIX has Identity Version 0.0.0.0; source manifest version was not preserved");
                 }
+
+                ZipArchiveEntry setupManifestEntry = zip.Entries.FirstOrDefault(en => string.Equals(en.FullName, "manifest.json", StringComparison.OrdinalIgnoreCase));
+                if (setupManifestEntry == null)
+                {
+                    Log.LogError("Produced VSIX is missing manifest.json");
+                    return false;
+                }
+
+                string setupManifestText;
+                using (var stream = setupManifestEntry.Open())
+                using (var reader = new StreamReader(stream))
+                {
+                    setupManifestText = reader.ReadToEnd();
+                }
+
+                if (System.Text.RegularExpressions.Regex.IsMatch(
+                        setupManifestText,
+                        "\"version\"\\s*:\\s*\"0\\.0\\.0\\.0\"",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    Log.LogError("manifest.json in produced VSIX still has version 0.0.0.0");
+                }
+
+                if (setupManifestText.IndexOf("\\\\Common7\\\\IDE\\\\VSExtensions\\\\", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Log.LogError("manifest.json in produced VSIX still routes extensionDir to VSExtensions; expected Extensions for installer validation.");
+                }
+
+                ZipArchiveEntry catalogEntry = zip.Entries.FirstOrDefault(en => string.Equals(en.FullName, "catalog.json", StringComparison.OrdinalIgnoreCase));
+                if (catalogEntry == null)
+                {
+                    Log.LogError("Produced VSIX is missing catalog.json");
+                    return false;
+                }
+
+                string catalogText;
+                using (var stream = catalogEntry.Open())
+                using (var reader = new StreamReader(stream))
+                {
+                    catalogText = reader.ReadToEnd();
+                }
+
+                if (catalogText.IndexOf("0.0.0.0", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Log.LogError("catalog.json in produced VSIX still contains version 0.0.0.0");
+                }
+
+                if (catalogText.IndexOf("\\\\Common7\\\\IDE\\\\VSExtensions\\\\", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Log.LogError("catalog.json in produced VSIX still routes extensionDir to VSExtensions; expected Extensions for installer validation.");
+                }
             }
         }
         catch (Exception ex)
