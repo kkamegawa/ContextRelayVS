@@ -111,7 +111,7 @@ foreach ($expDir in $expDirs) {
     $manifestContent = @"
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
   <Metadata>
-    <Identity Id="ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package" Version="$SidecarVersion" Language="en-US" Publisher="$PublisherName" />
+    <Identity Id="ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11.Package" Version="$SidecarVersion" Language="en-US" Publisher="$PublisherName" />
     <DisplayName>ContextRelay for Visual Studio (Package)</DisplayName>
     <Description xml:space="preserve">In-proc VSSDK package for ContextRelay Tools &gt; Options registration.</Description>
   </Metadata>
