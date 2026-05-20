@@ -26,7 +26,7 @@
          VSIXInstaller / Marketplace installs register Tools > Options for VS via
          the Extension Manager pipeline. We do not perform sidecar deployment. -->
     <InProcPackageTargetFramework>net48</InProcPackageTargetFramework>
-    <VsixExtensionId>ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11</VsixExtensionId>
+    <VsixExtensionId>ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11</VsixExtensionId>
     <InProcPackageBinDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageBinDir>
     <InProcPackageObjDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageObjDir>
     <InProcPackageDllPath>$([System.IO.Path]::Combine('$(InProcPackageBinDir)', 'ContextRelay.VSExtension.Package.dll'))</InProcPackageDllPath>
@@ -73,9 +73,6 @@
     </Content>
     <Content Include="LICENSE.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="source.extension.vsixmanifest">
-      <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
   </ItemGroup>
 
@@ -214,6 +211,11 @@
                 if (manifestText.Contains("Version=\"0.0.0.0\""))
                 {
                     Log.LogError("extension.vsixmanifest in produced VSIX has Identity Version 0.0.0.0; source manifest version was not preserved");
+                }
+
+                if (zip.Entries.Any(en => string.Equals(System.IO.Path.GetFileName(en.FullName), "source.extension.vsixmanifest", StringComparison.OrdinalIgnoreCase)))
+                {
+                    Log.LogError("Produced VSIX must not include source.extension.vsixmanifest; only extension.vsixmanifest should be packaged.");
                 }
 
                 ZipArchiveEntry setupManifestEntry = zip.Entries.FirstOrDefault(en => string.Equals(en.FullName, "manifest.json", StringComparison.OrdinalIgnoreCase));

@@ -40,6 +40,55 @@ jobs:
       - name: Restore
         run: dotnet restore ContextRelayVS.sln
 
+      - name: Patch VSIX version from tag
+        id: patch_version
+        shell: pwsh
+        run: |
+          # Convert git tag (vX.Y.Z or vX.Y.Z.W) to the 4-part VSIX version format.
+          # vX.Y.Z   -> X.Y.Z.0  (SemVer 3-part tag gets a zero patch digit)
+          # vX.Y.Z.W -> X.Y.Z.W  (4-part tag is used as-is for hotfix re-publishes)
+          $rawTag = "${{ github.ref_name }}"
+          $semver = $rawTag.TrimStart('v')
+          if ($semver -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            throw "Tag '$rawTag' does not match the required version format. Expected vX.Y.Z or vX.Y.Z.W (numeric parts only)."
+          }
+          $parts  = $semver.Split('.')
+          if ($parts.Count -eq 3) { $vsixVersion = "$semver.0" }
+          elseif ($parts.Count -eq 4) { $vsixVersion = $semver }
+          else { throw "Unsupported tag format '$rawTag'. Expected vX.Y.Z or vX.Y.Z.W." }
+
+          # Patch the Identity Version attribute in both vsixmanifest source files so
+          # the version embedded in the produced VSIX always matches the git tag.
+          $manifests = @(
+            '.\src\ContextRelay.VSExtension\source.extension.vsixmanifest',
+            '.\src\ContextRelay.VSExtension.Package\source.extension.vsixmanifest'
+          )
+          foreach ($manifestPath in $manifests) {
+            # Preserve BOM if present by reading raw bytes, but use XML API for the patch.
+            $bom = $false
+            $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $manifestPath))
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              $bom = $true
+            }
+            $xml = [xml](Get-Content $manifestPath -Raw -Encoding UTF8)
+            $ns  = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+            $ns.AddNamespace('v', 'http://schemas.microsoft.com/developer/vsx-schema/2011')
+            $identity = $xml.SelectSingleNode('//v:PackageManifest/v:Metadata/v:Identity', $ns)
+            if ($null -eq $identity) {
+              throw "Could not locate the Identity element in '$manifestPath'. The vsixmanifest may be malformed."
+            }
+            $identity.SetAttribute('Version', $vsixVersion)
+            $settings = New-Object System.Xml.XmlWriterSettings
+            $settings.Encoding = if ($bom) { New-Object System.Text.UTF8Encoding $true } `
+                                  else      { New-Object System.Text.UTF8Encoding $false }
+            $settings.Indent = $true
+            $writer = [System.Xml.XmlWriter]::Create((Resolve-Path $manifestPath), $settings)
+            $xml.Save($writer)
+            $writer.Close()
+            Write-Host "Patched $manifestPath -> Version=$vsixVersion"
+          }
+          "vsix_version=$vsixVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Audit packages
         shell: pwsh
         run: .\build\Invoke-PackageAudit.ps1 -SolutionPath .\ContextRelayVS.sln

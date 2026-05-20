@@ -18,7 +18,7 @@ internal sealed class ContextRelayExtension : Extension
         // to activate the net8 main extension in-process reintroduces the System.Runtime
         // load failure seen in the ActivityLog.
         Metadata = new(
-            id: "ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
+            id: "ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
             version: ExtensionAssemblyVersion,
             publisherName: "KazushiKamegawa",
             displayName: "ContextRelay for Visual Studio",
