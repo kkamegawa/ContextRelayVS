@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
-using Microsoft.Win32;
+using Microsoft.VisualStudio.Extensibility.Shell.FileDialog;
 
 namespace ContextRelay.VSExtension.Services;
 
@@ -72,48 +72,39 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-#pragma warning disable CA1416 // net8.0-windows target — OpenFileDialog is Windows-only
-        var completion = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var cancellationRegistration = cancellationToken.Register(
-            () => completion.TrySetCanceled(cancellationToken));
-
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                var dialog = new OpenFileDialog
-                {
-                    Title = ContextRelayLocalizedStrings.AddFilesDialogTitle,
-                    Multiselect = true,
-                    CheckFileExists = true,
-                    CheckPathExists = true,
-                    Filter = ContextRelayLocalizedStrings.AddFilesDialogFilter
-                };
-
-                if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
-                {
-                    dialog.InitialDirectory = initialDirectory;
-                }
-
-                var result = dialog.ShowDialog();
-                completion.TrySetResult(result == true
-                    ? dialog.FileNames
-                    : Array.Empty<string>());
-            }
-            catch (Exception ex)
-            {
-                completion.TrySetException(ex);
-            }
-        });
-
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
-
-        var selectedFiles = await completion.Task.ConfigureAwait(false);
+        var selectedFiles = await extensibility.Shell()
+            .ShowOpenMultipleFilesDialogAsync(CreateFileDialogOptions(initialDirectory), cancellationToken)
+            .ConfigureAwait(false) ?? Array.Empty<string>();
         RememberWorkspaceRootsFromSelectedFiles(selectedFiles);
         return selectedFiles;
-#pragma warning restore CA1416
+    }
+
+    private static FileDialogOptions CreateFileDialogOptions(string? initialDirectory)
+    {
+        var initialDirectoryValue = !string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory)
+            ? initialDirectory
+            : string.Empty;
+
+        return new FileDialogOptions
+        {
+            Title = ContextRelayLocalizedStrings.AddFilesDialogTitle,
+            InitialDirectory = initialDirectoryValue,
+            Filters = CreateAllFilesDialogFilter()
+        };
+    }
+
+    private static DialogFilters CreateAllFilesDialogFilter()
+    {
+        var filterText = ContextRelayLocalizedStrings.AddFilesDialogFilter;
+        var separatorIndex = filterText.IndexOf('|', StringComparison.Ordinal);
+        var displayValue = separatorIndex > 0
+            ? filterText[..separatorIndex]
+            : filterText;
+        var filters = separatorIndex >= 0 && separatorIndex + 1 < filterText.Length
+            ? filterText[(separatorIndex + 1)..].Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : new[] { "*.*" };
+
+        return new DialogFilters(new DialogFilter(displayValue, filters));
     }
 
     public async Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)

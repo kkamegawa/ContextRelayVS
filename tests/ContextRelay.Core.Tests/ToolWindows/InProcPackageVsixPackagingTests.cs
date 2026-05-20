@@ -68,6 +68,14 @@ public sealed class InProcPackageVsixPackagingTests
         var vsPackageAsset = assets.SingleOrDefault(a => a.Attribute("Type")?.Value == "Microsoft.VisualStudio.VsPackage");
         Assert.True(vsPackageAsset is not null, "VsPackage asset is missing from the patched extension.vsixmanifest.");
         Assert.Equal("ContextRelay.VSExtension.Package.pkgdef", vsPackageAsset!.Attribute("Path")?.Value);
+        Assert.Contains(
+            assets,
+            a => a.Attribute("Type")?.Value == "Microsoft.VisualStudio.Assembly"
+                 && a.Attribute("Path")?.Value == "ContextRelay.VSExtension.Package.dll");
+        Assert.Contains(
+            assets,
+            a => a.Attribute("Type")?.Value == "Microsoft.VisualStudio.Assembly"
+                 && a.Attribute("Path")?.Value == "Community.VisualStudio.Toolkit.dll");
 
         var manifestXml = manifest.ToString();
         Assert.DoesNotContain("%CurrentProject%", manifestXml, StringComparison.Ordinal);

@@ -6,8 +6,6 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <OutputType>Exe</OutputType>
-    <UseAppHost>true</UseAppHost>
     <RootNamespace>ContextRelay.Core.Tests</RootNamespace>
   </PropertyGroup>
 

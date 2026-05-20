@@ -209,6 +209,114 @@ finally {
   - any installer-facing manifest still contains `0.0.0.0`,
   - or these files disagree on extension version.
 
+## Known CI Failure: xUnit v3 test process startup failure
+
+### Symptom signature
+
+- CI `dotnet test` step exits with exit code 1 before any test is reported as passed/failed/skipped.
+- Log shows:
+  ```
+  [xUnit.net] ContextRelay.Core.Tests: Catastrophic failure:
+  System.InvalidOperationException: Test process did not return valid JSON (non-object).
+  ```
+- Output block shows a one-line JSON metadata line (arch/framework info) then aborts.
+- `No test is available in ... ContextRelay.Core.Tests.dll` is reported immediately after.
+
+### Why this happens
+
+Setting `<OutputType>Exe</OutputType>` and `<UseAppHost>true</UseAppHost>` in the test project forces it into an **executable host shape**.  
+The `xunit.runner.visualstudio` VSTest adapter (version 3.x) launches the test binary as a subprocess and expects to receive a multi-object JSON stream back.  
+When the binary runs as a standalone executable, it emits only initial metadata JSON and then exits; the adapter rejects this non-streaming output with the above error.
+
+### What to check first
+
+1. Open `tests/ContextRelay.Core.Tests/ContextRelay.Core.Tests.csproj`.
+2. Confirm neither `<OutputType>Exe</OutputType>` nor `<UseAppHost>true</UseAppHost>` is set.
+
+### Remediation
+
+Remove both properties from the test project `<PropertyGroup>`:
+
+```diff
+ <PropertyGroup>
+   <TargetFramework>net8.0</TargetFramework>
+   <LangVersion>latest</LangVersion>
+   <Nullable>enable</Nullable>
+   <IsPackable>false</IsPackable>
+   <IsTestProject>true</IsTestProject>
+-  <OutputType>Exe</OutputType>
+-  <UseAppHost>true</UseAppHost>
+   <RootNamespace>ContextRelay.Core.Tests</RootNamespace>
+ </PropertyGroup>
+```
+
+The `xunit.runner.visualstudio` package version in use (`3.1.5`) remains compatible once the executable host forcing is removed.  
+Do **not** replace it with the non-existent `xunit.runner.visualstudio.v3` package — that package ID does not exist on NuGet.
+
+---
+
+## Known Publish Failure: publisher name mismatch
+
+### Symptom signature
+
+- Marketplace publish step (for example `VsixPublisher.exe publish`) fails with an error similar to:
+  - `The publisher '<name>' is not the publisher of identity '<registered-publisher>'`
+  - or `The publisher field value does not match the authenticated publisher account`
+- Or the VSIX installs locally but shows the wrong publisher/author in VS Extension Manager.
+
+### Why this happens
+
+The Marketplace publisher name in all three installer manifests must exactly match the **registered publisher account** on Visual Studio Marketplace:
+
+| File | Field |
+|------|-------|
+| `source.extension.vsixmanifest` | `<Identity ... Publisher="...">`  |
+| `extension.vsixmanifest` (output) | same after detokenization |
+| `manifest.json` | `"publisher"` |
+| `catalog.json` | publisher-related fields |
+
+For this repository the correct publisher name is **`KazushiKamegawa`** (single word, mixed case).
+
+### What to check
+
+1. Confirm `source.extension.vsixmanifest` contains `Publisher="KazushiKamegawa"`.
+2. After any repack/patch step, open the produced VSIX and verify the same value is preserved in all three manifest files.
+3. If you use a build task that patches `manifest.json` or `catalog.json`, ensure the publisher token is not hardcoded to a different value or left as a placeholder.
+
+### Quick audit pattern
+
+```powershell
+$vsix = Get-ChildItem '.\src' -Filter *.vsix -Recurse |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead($vsix.FullName)
+try {
+    foreach ($name in 'extension.vsixmanifest','manifest.json','catalog.json') {
+        $entry = $zip.Entries | Where-Object { $_.FullName -ieq $name } | Select-Object -First 1
+        if (-not $entry) { Write-Host "Missing: $name"; continue }
+        $reader = New-Object System.IO.StreamReader($entry.Open())
+        try {
+            $text = $reader.ReadToEnd()
+            Write-Host "---- $name ----"
+            $text | Select-String -Pattern 'Publisher|publisher' -AllMatches |
+                ForEach-Object { $_.Matches.Value }
+        } finally { $reader.Dispose() }
+    }
+} finally { $zip.Dispose() }
+```
+
+Expected output: all three files reference `KazushiKamegawa`.
+
+### Remediation direction
+
+- Keep `Publisher="KazushiKamegawa"` in `source.extension.vsixmanifest` — this is the single source of truth.
+- Ensure any post-pack manifest patch task propagates this value to `manifest.json` and `catalog.json`.
+- Do not introduce a separate build-time variable that overrides the publisher value unless every downstream manifest patch reads from the same variable.
+
+---
+
 ## Guardrails
 
 - Do not assume behavior from an older Visual Studio version applies to current preview/insiders builds.
@@ -217,6 +325,9 @@ finally {
 - Do not merge changes without validating both:
   1. Options node visibility
   2. property page load behavior
+- Do not set `OutputType=Exe` or `UseAppHost=true` in the test project; this causes xUnit v3 catastrophic startup failure in CI.
+- Do not change the publisher name away from `KazushiKamegawa`; all manifest files must agree on this value for Marketplace publish to succeed.
+- Prefer VSSDK / VisualStudio.Extensibility APIs over direct Win32 API usage whenever both are available (for example, prefer VS shell-owned file dialog APIs over `Microsoft.Win32.OpenFileDialog`), because VS-owned APIs preserve proper IDE ownership, modality, and compatibility.
 
 ## How to Adapt This Skill to a Specific Extension
 
