@@ -49,6 +49,9 @@ jobs:
           # vX.Y.Z.W -> X.Y.Z.W  (4-part tag is used as-is for hotfix re-publishes)
           $rawTag = "${{ github.ref_name }}"
           $semver = $rawTag.TrimStart('v')
+          if ($semver -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            throw "Tag '$rawTag' does not match the required version format. Expected vX.Y.Z or vX.Y.Z.W (numeric parts only)."
+          }
           $parts  = $semver.Split('.')
           if ($parts.Count -eq 3) { $vsixVersion = "$semver.0" }
           elseif ($parts.Count -eq 4) { $vsixVersion = $semver }
@@ -71,6 +74,9 @@ jobs:
             $ns  = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
             $ns.AddNamespace('v', 'http://schemas.microsoft.com/developer/vsx-schema/2011')
             $identity = $xml.SelectSingleNode('//v:PackageManifest/v:Metadata/v:Identity', $ns)
+            if ($null -eq $identity) {
+              throw "Could not locate the Identity element in '$manifestPath'. The vsixmanifest may be malformed."
+            }
             $identity.SetAttribute('Version', $vsixVersion)
             $settings = New-Object System.Xml.XmlWriterSettings
             $settings.Encoding = if ($bom) { New-Object System.Text.UTF8Encoding $true } `

@@ -213,7 +213,7 @@
                     Log.LogError("extension.vsixmanifest in produced VSIX has Identity Version 0.0.0.0; source manifest version was not preserved");
                 }
 
-                if (zip.Entries.Any(en => string.Equals(en.FullName, "source.extension.vsixmanifest", StringComparison.OrdinalIgnoreCase)))
+                if (zip.Entries.Any(en => string.Equals(System.IO.Path.GetFileName(en.FullName), "source.extension.vsixmanifest", StringComparison.OrdinalIgnoreCase)))
                 {
                     Log.LogError("Produced VSIX must not include source.extension.vsixmanifest; only extension.vsixmanifest should be packaged.");
                 }
