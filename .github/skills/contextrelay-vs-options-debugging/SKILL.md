@@ -327,6 +327,7 @@ Expected output: all three files reference `KazushiKamegawa`.
   2. property page load behavior
 - Do not set `OutputType=Exe` or `UseAppHost=true` in the test project; this causes xUnit v3 catastrophic startup failure in CI.
 - Do not change the publisher name away from `KazushiKamegawa`; all manifest files must agree on this value for Marketplace publish to succeed.
+- Prefer VSSDK / VisualStudio.Extensibility APIs over direct Win32 API usage whenever both are available (for example, prefer VS shell-owned file dialog APIs over `Microsoft.Win32.OpenFileDialog`), because VS-owned APIs preserve proper IDE ownership, modality, and compatibility.
 
 ## How to Adapt This Skill to a Specific Extension
 
