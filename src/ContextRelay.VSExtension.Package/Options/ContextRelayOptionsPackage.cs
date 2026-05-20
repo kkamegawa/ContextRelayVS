@@ -11,7 +11,7 @@ namespace ContextRelay.VSExtension.Package.Options;
 /// Registers the ContextRelay Tools > Options page inside the Visual Studio process.
 /// </summary>
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-[InstalledProductRegistration("ContextRelay", "ContextRelay options integration.", "0.2.0")]
+[InstalledProductRegistration("ContextRelay", "ContextRelay options integration.", "0.2.1")]
 [ProvideOptionPage(typeof(OptionsProvider.GeneralOptions), "ContextRelay", "General", 0, 0, true, new[] { "contextrelay", "settings", "options" }, IsInUnifiedSettings = false)]
 [ProvideProfile(typeof(OptionsProvider.GeneralOptions), "ContextRelay", "General", 0, 0, true)]
 [Guid(ContextRelayPackageGuids.OptionsPackageString)]
