@@ -121,6 +121,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             }
 
             queryText = value;
+            host.UpdateDraftQueryText(queryText);
             RaiseNotifyPropertyChangedEvent(nameof(QueryText));
             if (!isApplyingState)
             {
@@ -332,6 +333,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private void ApplyState(ContextRelayHostState state)
     {
+        var queryChanged = !string.Equals(queryText, state.QueryText, StringComparison.Ordinal);
         isApplyingState = true;
         try
         {
@@ -345,15 +347,23 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
             ChatHistory = state.ChatHistory.Select(item => new ChatHistoryItemViewModel(item, this)).ToArray();
-            CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
-            VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
-            SelectedCommandSuggestion = null;
-            commandSuggestionWindowStart = 0;
-            IsCommandPopupOpen = false;
+            if (queryChanged)
+            {
+                CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+                VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+                SelectedCommandSuggestion = null;
+                commandSuggestionWindowStart = 0;
+                IsCommandPopupOpen = false;
+            }
         }
         finally
         {
             isApplyingState = false;
+        }
+
+        if (!queryChanged && IsCommandPopupOpen)
+        {
+            UpdateTransientHelpText();
         }
     }
 
