@@ -63,7 +63,10 @@ public static class FileMentionResolver
     /// </summary>
     /// <param name="input">The raw prompt text.</param>
     /// <param name="workspaceRoots">Trusted workspace root directories.</param>
-    /// <returns>The cleaned prompt, resolved files, and errors.</returns>
+    /// <returns>
+    /// The cleaned prompt, resolved files, and errors. Mention tokens are normalized to plain path text so
+    /// the resulting prompt still carries a concrete file reference signal.
+    /// </returns>
     public static FileMentionResolutionResult Resolve(string input, IReadOnlyList<string> workspaceRoots)
     {
         var candidates = ExtractCandidates(input ?? string.Empty);
@@ -301,6 +304,8 @@ public static class FileMentionResolver
                 result.Append(input.Substring(cursor, candidate.RemoveStart - cursor));
             }
 
+            // Keep the path text in-place (without '#') so downstream prompts retain explicit local-file intent.
+            result.Append(candidate.RawPath);
             cursor = candidate.RemoveEnd;
         }
 

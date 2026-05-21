@@ -765,10 +765,16 @@ internal sealed class ContextRelayHost : IDisposable
         var mergedSnippets = new List<SharedSnippetItem>(snippets.Count + localFiles.Count);
         mergedSnippets.AddRange(snippets);
         logger.LogDiagnostic($"Injecting local file context into snippets: pinnedSnippetCount={snippets.Count}, localFileCount={localFiles.Count}");
+        mergedSnippets.Add(new SharedSnippetItem
+        {
+            Name = "Local file grounding",
+            Source = "local-file",
+            Snippet = BuildLocalFileGroundingSnippet(localFiles)
+        });
         foreach (var localFile in localFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var rawContent = await File.ReadAllTextAsync(localFile.AbsolutePath, cancellationToken).ConfigureAwait(false);
+            var rawContent = await ReadBoundedLocalFileContentAsync(localFile.AbsolutePath, cancellationToken).ConfigureAwait(false);
             var normalizedContent = FileContextPromptBuilder.NormalizeExtractedText(rawContent);
             var boundedContent = FileContextPromptBuilder.TruncateForBudget(
                 string.IsNullOrWhiteSpace(normalizedContent) ? "(empty file)" : normalizedContent,
@@ -776,18 +782,54 @@ internal sealed class ContextRelayHost : IDisposable
             var snippetContent = $"[File: {localFile.RelativePath}]\n{boundedContent}";
             logger.LogDiagnostic(
                 $"Local file context injected: path={localFile.RelativePath}, rawChars={rawContent.Length}, normalizedChars={normalizedContent.Length}, " +
-                $"boundedChars={boundedContent.Length}, preview={BuildLogPreview(boundedContent)}");
+                $"boundedChars={boundedContent.Length}");
 
             mergedSnippets.Add(new SharedSnippetItem
             {
                 Name = ContextRelayLocalizedStrings.GetLocalFileContextLabel(localFile.RelativePath),
                 Source = "local-file",
+                SourceUrl = localFile.Uri,
                 Snippet = snippetContent
             });
         }
 
         logger.LogDiagnostic($"Snippet merge completed: mergedSnippetCount={mergedSnippets.Count}");
         return mergedSnippets;
+    }
+
+    private static async Task<string> ReadBoundedLocalFileContentAsync(string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var buffer = new char[FileContextPromptBuilder.MaxWorkIqFileChars * 4];
+        var read = await reader.ReadBlockAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+        var text = new string(buffer, 0, read);
+        if (!reader.EndOfStream)
+        {
+            text += "\n[additional file content omitted]";
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return text;
+    }
+
+    private static string BuildLocalFileGroundingSnippet(IReadOnlyList<ResolvedFileMention> localFiles)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("ContextRelay local workspace file grounding:");
+        builder.AppendLine("- Prioritize the local files listed below for this request.");
+        builder.AppendLine("- Do not infer or cite SharePoint/OneDrive files unless the user explicitly asks for cloud sources.");
+        builder.AppendLine("- Treat local file paths as authoritative references for this turn.");
+        builder.AppendLine();
+        builder.AppendLine("Local files:");
+        foreach (var localFile in localFiles)
+        {
+            builder.Append("- ");
+            builder.AppendLine(localFile.RelativePath);
+        }
+
+        return builder.ToString().TrimEnd();
     }
 
     private void LogChatPayloadDiagnostics(string route, string prompt, ChatContextPayload payload)
@@ -801,31 +843,13 @@ internal sealed class ContextRelayHost : IDisposable
         {
             var context = additionalContext[index];
             logger.LogDiagnostic(
-                $"[{route}] additionalContext[{index}] description={context.Description ?? "(none)"} textChars={context.Text.Length} preview={BuildLogPreview(context.Text)}");
+                $"[{route}] additionalContext[{index}] description={context.Description ?? "(none)"} textChars={context.Text.Length}");
         }
 
         for (var index = 0; index < contextualFiles.Count; index++)
         {
             logger.LogDiagnostic($"[{route}] contextualResources.files[{index}] uri={contextualFiles[index].Uri}");
         }
-    }
-
-    private static string BuildLogPreview(string value, int maxLength = 140)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return "(empty)";
-        }
-
-        var normalized = value
-            .Replace("\r\n", "\\n", StringComparison.Ordinal)
-            .Replace("\n", "\\n", StringComparison.Ordinal);
-        if (normalized.Length <= maxLength)
-        {
-            return normalized;
-        }
-
-        return normalized.Substring(0, maxLength) + "...";
     }
 
     private async Task AppendChatHistoryAsync(string userPrompt, string assistantReply, CancellationToken cancellationToken)

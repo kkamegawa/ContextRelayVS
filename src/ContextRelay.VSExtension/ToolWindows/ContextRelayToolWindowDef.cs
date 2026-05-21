@@ -64,10 +64,15 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
             await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
             hostInstance.StartDeferredSignedInUserResolution();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Tool window initialization can be canceled by shell lifecycle operations.
             // Ignore and let the existing content remain available.
+        }
+        catch (OperationCanceledException ex)
+        {
+            // Unexpected cancellations should be surfaced for diagnostics instead of being silently ignored.
+            await hostInstance.ReportToolWindowInitializationFailureAsync(ex, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

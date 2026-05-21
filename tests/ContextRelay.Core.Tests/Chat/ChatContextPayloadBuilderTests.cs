@@ -130,5 +130,6 @@ public sealed class ChatContextPayloadBuilderTests
         Assert.Single(payload.SendOptions.AdditionalContext);
         Assert.Contains("Design doc", payload.Labels);
         Assert.Contains("Local file: README.md", payload.SendOptions.AdditionalContext[0].Description);
+        Assert.Contains("Source: local-file (file:///C:/repo/README.md)", payload.SendOptions.AdditionalContext[0].Text);
     }
 }
