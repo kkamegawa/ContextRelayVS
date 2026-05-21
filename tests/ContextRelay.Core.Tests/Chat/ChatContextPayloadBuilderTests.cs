@@ -1,6 +1,5 @@
 using System;
 using ContextRelay.Core.Chat;
-using ContextRelay.Core.FileContext;
 using ContextRelay.Core.SharedStore;
 using Xunit;
 
@@ -105,7 +104,7 @@ public sealed class ChatContextPayloadBuilderTests
     }
 
     [Fact]
-    public void Build_MergesSharePointAndLocalFileResources()
+    public void Build_DoesNotTreatLocalFileLikeRemoteFileResource()
     {
         var payload = ChatContextPayloadBuilder.Build(
             new[]
@@ -116,21 +115,20 @@ public sealed class ChatContextPayloadBuilderTests
                     Source = "sharepoint",
                     SourceUrl = "https://contoso.sharepoint.com/sites/eng/design.docx",
                     Snippet = "Design"
-                }
-            },
-            localFiles: new[]
-            {
-                new ResolvedFileMention
+                },
+                new SharedSnippetItem
                 {
-                    AbsolutePath = @"C:\repo\README.md",
-                    WorkspaceRoot = @"C:\repo",
-                    RelativePath = "README.md",
-                    Uri = "file:///C:/repo/README.md"
+                    Name = "Local file: README.md",
+                    Source = "local-file",
+                    SourceUrl = "file:///C:/repo/README.md",
+                    Snippet = "[File: README.md]\nLocal readme content"
                 }
             });
 
-        Assert.Equal(2, payload.SendOptions.ContextualResources?.Files.Count);
+        Assert.NotNull(payload.SendOptions.ContextualResources);
+        Assert.Single(payload.SendOptions.ContextualResources!.Files);
+        Assert.Single(payload.SendOptions.AdditionalContext);
         Assert.Contains("Design doc", payload.Labels);
-        Assert.Contains("Local file: README.md", payload.Labels);
+        Assert.Contains("Local file: README.md", payload.SendOptions.AdditionalContext[0].Description);
     }
 }

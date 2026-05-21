@@ -83,6 +83,7 @@
   <data name="HandoffUpdated_Format" xml:space="preserve"><value>Handoff docs updated ({0} files).</value></data>
   <data name="AskPreviewOpenedStatus_Format" xml:space="preserve"><value>Opened the Microsoft 365 Copilot response in a new editor tab ({0}). Used {1} pinned snippet(s) as context and saved the reply to chat.</value></data>
   <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} pinned snippet(s) as context.</value></data>
+  <data name="AskReplyShownWithContextBreakdownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} pinned snippet(s) and {1} local file context item(s).</value></data>
   <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} explicit ContextRelay context item(s).</value></data>
   <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>Added {0} file mention(s) to the query.</value></data>
   <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>Added {0} file mention(s); skipped {1} file(s) due to duplicates, workspace bounds, or mention limit.</value></data>

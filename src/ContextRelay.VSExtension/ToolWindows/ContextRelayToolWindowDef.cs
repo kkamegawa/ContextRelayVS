@@ -33,7 +33,9 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
         var viewModel = new ContextRelayWindowViewModel(hostInstance);
         var content = new ContextRelayWindowContent(viewModel);
 
-        ObserveInitialization(InitializeToolWindowAsync(hostInstance, viewModel, cancellationToken));
+        // Keep deferred initialization independent from transient shell cancellation so
+        // frame construction does not fail when the open-window command token is canceled.
+        ObserveInitialization(InitializeToolWindowAsync(hostInstance, viewModel, CancellationToken.None));
         return Task.FromResult<IRemoteUserControl>(content);
     }
 
@@ -62,8 +64,10 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
             await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
             hostInstance.StartDeferredSignedInUserResolution();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            // Tool window initialization can be canceled by shell lifecycle operations.
+            // Ignore and let the existing content remain available.
         }
         catch (Exception ex)
         {
