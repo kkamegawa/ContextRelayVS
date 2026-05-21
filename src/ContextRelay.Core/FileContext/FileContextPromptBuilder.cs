@@ -110,7 +110,13 @@ public static class FileContextPromptBuilder
         return text;
     }
 
-    private static string TruncateForBudget(string value, int budget)
+    /// <summary>
+    /// Truncates content to the specified character budget and appends a truncation marker when needed.
+    /// </summary>
+    /// <param name="value">The source text.</param>
+    /// <param name="budget">The maximum number of characters allowed.</param>
+    /// <returns>The bounded text.</returns>
+    public static string TruncateForBudget(string value, int budget)
     {
         if (budget <= 0)
         {

@@ -149,6 +149,9 @@ internal static class ContextRelayLocalizedStrings
 
     public static string GetAskReplyShownStatus(int snippetCount) => Format("AskReplyShownStatus_Format", snippetCount);
 
+    public static string GetAskReplyShownWithContextBreakdownStatus(int snippetCount, int localFileCount) =>
+        Format("AskReplyShownWithContextBreakdownStatus_Format", snippetCount, localFileCount);
+
     public static string GetChatReplyShownWithContextStatus(int contextCount) => Format("ChatReplyShownWithContextStatus_Format", contextCount);
 
     public static string GetFilePickerFilesAddedStatus(int fileCount) => Format("FilePickerFilesAddedStatus_Format", fileCount);

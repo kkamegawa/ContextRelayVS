@@ -20,6 +20,6 @@ internal sealed class OpenWindowCommand : Command
 
     public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
     {
-        await Extensibility.Shell().ShowToolWindowAsync<ContextRelayToolWindowDef>(activate: true, cancellationToken).ConfigureAwait(false);
+        await Extensibility.Shell().ShowToolWindowAsync<ContextRelayToolWindowDef>(activate: true, CancellationToken.None).ConfigureAwait(false);
     }
 }

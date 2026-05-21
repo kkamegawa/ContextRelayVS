@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using ContextRelay.Core.Adapters;
-using ContextRelay.Core.FileContext;
 using ContextRelay.Core.SharedStore;
 
 namespace ContextRelay.Core.Chat;
@@ -12,9 +11,7 @@ public static class ChatContextPayloadBuilder
 
     public static ChatContextPayload Build(
         IReadOnlyList<SharedSnippetItem> snippets,
-        string? searchSummary = null,
-        IReadOnlyList<ResolvedFileMention>? localFiles = null,
-        Func<ResolvedFileMention, string>? localFileLabelFactory = null)
+        string? searchSummary = null)
     {
         if (snippets is null)
         {
@@ -55,17 +52,6 @@ public static class ChatContextPayloadBuilder
             "Latest ContextRelay search summary",
             searchSummary ?? string.Empty,
             ref remainingBudget);
-
-        foreach (var localFile in localFiles ?? Array.Empty<ResolvedFileMention>())
-        {
-            var label = localFileLabelFactory?.Invoke(localFile) ?? $"Local file: {localFile.RelativePath}";
-            AddFileResource(
-                fileResources,
-                fileResourceUris,
-                labels,
-                localFile.Uri,
-                label);
-        }
 
         var sendOptions = new CopilotChatSendOptions
         {

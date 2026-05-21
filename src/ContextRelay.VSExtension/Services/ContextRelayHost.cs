@@ -218,6 +218,9 @@ internal sealed class ContextRelayHost : IDisposable
             var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
+            logger.LogDiagnostic(
+                $"SubmitQuery target={route.Target} command={(string.IsNullOrWhiteSpace(route.SlashCommandName) ? "(chat)" : route.SlashCommandName)} " +
+                $"inputLength={trimmed.Length} queryLength={route.Query.Length}");
             await EnsureCacheReadyAsync(settings, cancellationToken).ConfigureAwait(false);
             var enabledSources = GetEnabledSources(route, settings);
             if (enabledSources.Count == 0 &&
@@ -282,10 +285,10 @@ internal sealed class ContextRelayHost : IDisposable
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresPinnedContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
 
-                var contextPayload = ChatContextPayloadBuilder.Build(
-                    snippets,
-                    localFiles: filePrompt.Files,
-                    localFileLabelFactory: file => ContextRelayLocalizedStrings.GetLocalFileContextLabel(file.RelativePath));
+                logger.LogDiagnostic($"/ask context sources: pinnedSnippets={snippets.Count}, localFiles={filePrompt.Files.Count}");
+                var snippetsWithLocalFileContext = await BuildSnippetsWithLocalFileContextAsync(snippets, filePrompt.Files, cancellationToken).ConfigureAwait(false);
+                var contextPayload = ChatContextPayloadBuilder.Build(snippetsWithLocalFileContext);
+                LogChatPayloadDiagnostics("ask", filePrompt.Prompt, contextPayload);
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
                 var reply = await copilotChatAdapter
                     .SendMessageAsync(token.AccessToken, conversationId, filePrompt.Prompt, contextPayload.SendOptions, cancellationToken)
@@ -298,7 +301,9 @@ internal sealed class ContextRelayHost : IDisposable
                 await AppendChatHistoryAsync(filePrompt.Prompt, reply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 return await RefreshStateCoreAsync(
-                    ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count),
+                    filePrompt.Files.Count == 0
+                        ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count)
+                        : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(snippets.Count, filePrompt.Files.Count),
                     trimmed,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -747,6 +752,106 @@ internal sealed class ContextRelayHost : IDisposable
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task<IReadOnlyList<SharedSnippetItem>> BuildSnippetsWithLocalFileContextAsync(
+        IReadOnlyList<SharedSnippetItem> snippets,
+        IReadOnlyList<ResolvedFileMention> localFiles,
+        CancellationToken cancellationToken)
+    {
+        if (localFiles.Count == 0)
+        {
+            return snippets;
+        }
+
+        var mergedSnippets = new List<SharedSnippetItem>(snippets.Count + localFiles.Count);
+        mergedSnippets.AddRange(snippets);
+        logger.LogDiagnostic($"Injecting local file context into snippets: pinnedSnippetCount={snippets.Count}, localFileCount={localFiles.Count}");
+        mergedSnippets.Add(new SharedSnippetItem
+        {
+            Name = "Local file grounding",
+            Source = "local-file",
+            Snippet = BuildLocalFileGroundingSnippet(localFiles)
+        });
+        foreach (var localFile in localFiles)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var rawContent = await ReadBoundedLocalFileContentAsync(localFile.AbsolutePath, cancellationToken).ConfigureAwait(false);
+            var normalizedContent = FileContextPromptBuilder.NormalizeExtractedText(rawContent);
+            var boundedContent = FileContextPromptBuilder.TruncateForBudget(
+                string.IsNullOrWhiteSpace(normalizedContent) ? "(empty file)" : normalizedContent,
+                FileContextPromptBuilder.MaxWorkIqFileChars);
+            var snippetContent = $"[File: {localFile.RelativePath}]\n{boundedContent}";
+            logger.LogDiagnostic(
+                $"Local file context injected: path={localFile.RelativePath}, rawChars={rawContent.Length}, normalizedChars={normalizedContent.Length}, " +
+                $"boundedChars={boundedContent.Length}");
+
+            mergedSnippets.Add(new SharedSnippetItem
+            {
+                Name = ContextRelayLocalizedStrings.GetLocalFileContextLabel(localFile.RelativePath),
+                Source = "local-file",
+                SourceUrl = localFile.Uri,
+                Snippet = snippetContent
+            });
+        }
+
+        logger.LogDiagnostic($"Snippet merge completed: mergedSnippetCount={mergedSnippets.Count}");
+        return mergedSnippets;
+    }
+
+    private static async Task<string> ReadBoundedLocalFileContentAsync(string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var buffer = new char[FileContextPromptBuilder.MaxWorkIqFileChars * 4];
+        var read = await reader.ReadBlockAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+        var text = new string(buffer, 0, read);
+        if (!reader.EndOfStream)
+        {
+            text += "\n[additional file content omitted]";
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return text;
+    }
+
+    private static string BuildLocalFileGroundingSnippet(IReadOnlyList<ResolvedFileMention> localFiles)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("ContextRelay local workspace file grounding:");
+        builder.AppendLine("- Prioritize the local files listed below for this request.");
+        builder.AppendLine("- Do not infer or cite SharePoint/OneDrive files unless the user explicitly asks for cloud sources.");
+        builder.AppendLine("- Treat local file paths as authoritative references for this turn.");
+        builder.AppendLine();
+        builder.AppendLine("Local files:");
+        foreach (var localFile in localFiles)
+        {
+            builder.Append("- ");
+            builder.AppendLine(localFile.RelativePath);
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private void LogChatPayloadDiagnostics(string route, string prompt, ChatContextPayload payload)
+    {
+        var additionalContext = payload.SendOptions.AdditionalContext;
+        var contextualFiles = payload.SendOptions.ContextualResources?.Files ?? Array.Empty<CopilotContextualFileResource>();
+        logger.LogDiagnostic(
+            $"[{route}] Outbound payload summary: promptLength={prompt.Length}, labels={payload.Labels.Count}, " +
+            $"additionalContextCount={additionalContext.Count}, contextualFileCount={contextualFiles.Count}");
+        for (var index = 0; index < additionalContext.Count; index++)
+        {
+            var context = additionalContext[index];
+            logger.LogDiagnostic(
+                $"[{route}] additionalContext[{index}] description={context.Description ?? "(none)"} textChars={context.Text.Length}");
+        }
+
+        for (var index = 0; index < contextualFiles.Count; index++)
+        {
+            logger.LogDiagnostic($"[{route}] contextualResources.files[{index}] uri={contextualFiles[index].Uri}");
+        }
+    }
+
     private async Task AppendChatHistoryAsync(string userPrompt, string assistantReply, CancellationToken cancellationToken)
     {
         await AppendChatHistoryAsync(userPrompt, assistantReply, kind: null, contextLabels: Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
@@ -797,11 +902,12 @@ internal sealed class ContextRelayHost : IDisposable
         CancellationToken cancellationToken)
     {
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        logger.LogDiagnostic($"chat context sources: pinnedSnippets={snippets.Count}, localFiles={localFiles.Count}, hasSearchSummary={!string.IsNullOrWhiteSpace(lastSearchSummary)}");
+        var snippetsWithLocalFileContext = await BuildSnippetsWithLocalFileContextAsync(snippets, localFiles, cancellationToken).ConfigureAwait(false);
         var contextPayload = ChatContextPayloadBuilder.Build(
-            snippets,
-            lastSearchSummary,
-            localFiles,
-            file => ContextRelayLocalizedStrings.GetLocalFileContextLabel(file.RelativePath));
+            snippetsWithLocalFileContext,
+            lastSearchSummary);
+        LogChatPayloadDiagnostics("chat", message, contextPayload);
         var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
         var reply = await copilotChatAdapter
             .SendMessageAsync(accessToken, conversationId, message, contextPayload.SendOptions, cancellationToken)
@@ -848,6 +954,8 @@ internal sealed class ContextRelayHost : IDisposable
         var workIqQuery = localFiles.Count == 0
             ? query
             : await FileContextPromptBuilder.BuildWorkIqPromptAsync(query, localFiles, cancellationToken).ConfigureAwait(false);
+        logger.LogDiagnostic(
+            $"/workiq outbound summary: localFileCount={localFiles.Count}, queryLength={query.Length}, composedQueryLength={workIqQuery.Length}");
         var reply = await workIqAdapter
             .SendMessageAsync(token.AccessToken, workIqQuery, workIqContextId, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
@@ -873,21 +981,40 @@ internal sealed class ContextRelayHost : IDisposable
         string originalInput,
         CancellationToken cancellationToken)
     {
-        if (FileMentionResolver.ExtractCandidates(rawPrompt).Count == 0)
+        var candidates = FileMentionResolver.ExtractCandidates(rawPrompt);
+        if (candidates.Count == 0)
         {
+            logger.LogDiagnostic("No #file mention candidates detected in prompt.");
             return new FilePromptContext(fallbackPrompt, Array.Empty<ResolvedFileMention>());
         }
 
+        logger.LogDiagnostic($"Detected {candidates.Count} #file mention candidate(s): {string.Join(", ", candidates.Select(candidate => candidate.RawPath))}");
         var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        logger.LogDiagnostic(
+            $"Workspace roots for mention resolution: count={workspaceRoots.Count}, values={string.Join(" | ", workspaceRoots.Take(5))}" +
+            (workspaceRoots.Count > 5 ? " | ..." : string.Empty));
         var resolution = FileMentionResolver.Resolve(rawPrompt, workspaceRoots);
+        logger.LogDiagnostic(
+            $"Mention resolution result: localFiles={resolution.Files.Count}, errors={resolution.Errors.Count}, cleanedPromptLength={resolution.CleanedPrompt.Length}");
         if (resolution.Errors.Count > 0)
         {
+            foreach (var error in resolution.Errors)
+            {
+                logger.LogDiagnostic($"Mention resolution error: code={error.Code}, detail={error.Detail}");
+            }
+
             return await RefreshFilePromptErrorAsync(GetFileMentionResolutionErrorMessage(resolution.Errors[0]), originalInput, cancellationToken).ConfigureAwait(false);
         }
 
         if (string.IsNullOrWhiteSpace(resolution.CleanedPrompt))
         {
+            logger.LogDiagnostic("Mention resolution produced an empty prompt after removing #file mentions.");
             return await RefreshFilePromptErrorAsync(ContextRelayLocalizedStrings.FileMentionPromptEmptyStatus, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (resolution.Files.Count > 0)
+        {
+            logger.LogDiagnostic($"Resolved local files: {string.Join(", ", resolution.Files.Select(file => file.RelativePath))}");
         }
 
         return new FilePromptContext(resolution.CleanedPrompt, resolution.Files);

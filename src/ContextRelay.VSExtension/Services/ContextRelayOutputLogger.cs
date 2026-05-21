@@ -68,6 +68,16 @@ internal sealed class ContextRelayOutputLogger : IGraphLogger, IWorkIqLogger
         WriteDebug($"[{DateTimeOffset.UtcNow:O}] {message}");
     }
 
+    public void LogDiagnostic(string message)
+    {
+        if (!graphDebugLoggingEnabled && !workIqDebugLoggingEnabled)
+        {
+            return;
+        }
+
+        WriteDebug($"[{DateTimeOffset.UtcNow:O}] [diag] {message}");
+    }
+
     public void LogInformation(string message)
     {
         WriteOutput($"[{DateTimeOffset.UtcNow:O}] {message}");

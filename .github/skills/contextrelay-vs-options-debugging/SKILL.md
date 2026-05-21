@@ -13,7 +13,13 @@ Primary workflow:
 2. Collect a deterministic ActivityLog (`/log`).
 3. Validate VSIX and pkgdef/package registration artifacts.
 4. Separate "category invisible" failures from "page load failed" failures.
-5. Only then modify packaging or registration.
+5. For tool window/panel failures, separate provider-construction failures from command-triggered cancellation failures.
+6. Only then modify packaging, registration, or panel initialization flow.
+7. When a new VS extension bug is confirmed, append a "Known ... Failure" section in this skill with:
+   - symptom signature,
+   - root cause,
+   - remediation,
+   - and verification steps.
 
 Use these sample scripts first (they are examples and can be adapted to your extension/repo):
 - [get-active-visual-studio-instance.ps1](sample_codes/get-active-visual-studio-instance.ps1)
@@ -255,6 +261,48 @@ Do **not** replace it with the non-existent `xunit.runner.visualstudio.v3` packa
 
 ---
 
+## Known Tool Window Failure: frame construction canceled (`OperationCanceledException`)
+
+### Symptom signature
+
+- Visual Studio shows:
+  - `Construction of frame content failed`
+  - frame caption is your extension panel/tool window
+- ActivityLog stack is mostly VS internals, for example:
+  - `ThreadingTools.WithCancellationSlow`
+  - `RemoteToolWindow.EnsureToolWindowProviderAsync`
+  - `RemoteToolWindow.GetContentAsync`
+  - `WindowFrame.ConstructContent...`
+- Exception type:
+  - `System.OperationCanceledException`
+
+### Why this happens
+
+Panel/tool window creation can inherit cancellation tokens from command execution or shell lifecycle transitions.  
+If panel initialization depends on those transient tokens, cancellation can occur during provider/content construction and surface as a user-visible frame construction failure.
+
+### What to check first
+
+1. In your `ToolWindow.GetContentAsync(...)`, verify whether deferred initialization is started with the incoming `cancellationToken`.
+2. In command handlers that call `ShowToolWindowAsync(...)`, verify whether command cancellation token is passed through.
+3. Inspect catch filters that swallow cancellation only when a specific token is canceled (`when (token.IsCancellationRequested)`), which can miss linked/transient cancellation sources.
+
+### Remediation direction
+
+- Decouple deferred panel initialization from transient shell/command cancellation:
+  - run deferred initialization with `CancellationToken.None` (or a dedicated lifetime token).
+- For open-panel commands, avoid passing short-lived command tokens directly into `ShowToolWindowAsync(...)` when this causes intermittent panel creation aborts.
+- Treat initialization-time `OperationCanceledException` as non-fatal unless the extension is being disposed intentionally.
+
+### Verification
+
+1. Rebuild/reinstall VSIX.
+2. Open panel repeatedly from command + menu paths.
+3. Confirm ActivityLog no longer records frame-construction errors for the panel.
+4. Confirm normal disposal/shutdown still works (no leaked background work).
+
+---
+
 ## Known Publish Failure: publisher name mismatch
 
 ### Symptom signature
@@ -328,6 +376,7 @@ Expected output: all three files reference `KazushiKamegawa`.
 - Do not set `OutputType=Exe` or `UseAppHost=true` in the test project; this causes xUnit v3 catastrophic startup failure in CI.
 - Do not change the publisher name away from `KazushiKamegawa`; all manifest files must agree on this value for Marketplace publish to succeed.
 - Prefer VSSDK / VisualStudio.Extensibility APIs over direct Win32 API usage whenever both are available (for example, prefer VS shell-owned file dialog APIs over `Microsoft.Win32.OpenFileDialog`), because VS-owned APIs preserve proper IDE ownership, modality, and compatibility.
+- For VS extension panel/tool window fixes, invoke this skill first and follow its panel-cancellation checklist before changing runtime code.
 
 ## How to Adapt This Skill to a Specific Extension
 

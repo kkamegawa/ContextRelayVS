@@ -77,6 +77,7 @@
   <data name="HandoffUpdated_Format" xml:space="preserve"><value>引き継ぎ文書を更新しました ({0} ファイル)。</value></data>
   <data name="AskPreviewOpenedStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答を新しいエディター タブで開きました ({0})。{1} 件のピン留めスニペットをコンテキストとして使用し、共有チャット履歴にも保存しました。</value></data>
   <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットをコンテキストとして使用しました。</value></data>
+  <data name="AskReplyShownWithContextBreakdownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットと {1} 件のローカル ファイル コンテキストを使用しました。</value></data>
   <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件の明示的な ContextRelay コンテキストを使用しました。</value></data>
   <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>1 回のメッセージで参照できるファイルは最大 {0} 個です。</value></data>
   <data name="LocalFileContextLabel_Format" xml:space="preserve"><value>ローカル ファイル: {0}</value></data>

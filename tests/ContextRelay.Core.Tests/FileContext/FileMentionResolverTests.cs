@@ -35,10 +35,23 @@ public sealed class FileMentionResolverTests : IDisposable
         var result = FileMentionResolver.Resolve("Summarize #docs/plan.md for me", new[] { root });
 
         Assert.Empty(result.Errors);
-        Assert.Equal("Summarize for me", result.CleanedPrompt);
+        Assert.Equal("Summarize docs/plan.md for me", result.CleanedPrompt);
         Assert.Single(result.Files);
         Assert.Equal("docs/plan.md", result.Files[0].RelativePath);
         Assert.StartsWith("file:///", result.Files[0].Uri, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_PreservesQuotedMentionPathTextInCleanedPrompt()
+    {
+        WriteFile("notes\\release plan.md", "Release items");
+
+        var result = FileMentionResolver.Resolve("Review #\"notes/release plan.md\" now", new[] { root });
+
+        Assert.Empty(result.Errors);
+        Assert.Equal("Review notes/release plan.md now", result.CleanedPrompt);
+        Assert.Single(result.Files);
+        Assert.Equal("notes/release plan.md", result.Files[0].RelativePath);
     }
 
     [Fact]
