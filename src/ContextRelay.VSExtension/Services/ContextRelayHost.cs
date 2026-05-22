@@ -99,6 +99,16 @@ internal sealed class ContextRelayHost : IDisposable
         }
     }
 
+    public void LogUiDiagnostic(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        logger.LogDiagnostic($"[ui] {message}");
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -152,6 +162,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
 
         var statusMessage = ContextRelayLocalizedStrings.IsReadyStatus(state.StatusMessage)
             ? ContextRelayLocalizedStrings.ReadyStatus
@@ -496,18 +507,24 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await SyncDebugLoggingOptionsAsync(cancellationToken).ConfigureAwait(false);
             var currentQuery = GetDraftQueryText();
+            logger.LogDiagnostic($"[ui] AddFilesToQuery invoked with currentQueryLength={currentQuery.Length}");
             var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
 
             var selectedFiles = await packageServices
                 .PickWorkspaceFilesAsync(workspaceRoots.Count > 0 ? workspaceRoots[0] : null, cancellationToken)
                 .ConfigureAwait(false);
+            logger.LogDiagnostic($"[ui] AddFilesToQuery picker returned selectedFileCount={selectedFiles.Count}");
             if (selectedFiles.Count == 0)
             {
+                logger.LogDiagnostic("[ui] AddFilesToQuery canceled because no files were selected.");
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerNoFilesSelectedStatus, currentQuery, cancellationToken).ConfigureAwait(false);
             }
 
             var mergeResult = MergeSelectedFilesIntoQuery(currentQuery, selectedFiles, workspaceRoots);
+            logger.LogDiagnostic(
+                $"[ui] AddFilesToQuery merged files with mergedQueryLength={mergeResult.QueryText.Length} status=\"{mergeResult.StatusMessage}\"");
             return await RefreshStateCoreAsync(mergeResult.StatusMessage, mergeResult.QueryText, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -591,7 +608,9 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task ShowDebugLogAsync(CancellationToken cancellationToken = default)
     {
+        await SyncDebugLoggingOptionsAsync(cancellationToken).ConfigureAwait(false);
         logger.ShowDebugPane();
+        logger.LogDiagnostic("[ui] Debug log pane opened.");
         await RefreshStateAsync(ContextRelayLocalizedStrings.DebugLogOpenedStatus).ConfigureAwait(false);
     }
 
@@ -1149,6 +1168,12 @@ internal sealed class ContextRelayHost : IDisposable
             logger.LogWarning($"Unable to read cached account: {ex.Message}");
             return null;
         }
+    }
+
+    private async Task SyncDebugLoggingOptionsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
     }
 
     private static IReadOnlyList<ContextSource> GetEnabledSources(SlashCommandParseResult route, ContextRelaySettingsSnapshot settings)
