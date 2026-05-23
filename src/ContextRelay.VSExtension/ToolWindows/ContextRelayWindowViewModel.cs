@@ -120,10 +120,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 return;
             }
 
+            var previousQuery = queryText;
             queryText = value;
+            host.UpdateDraftQueryText(queryText);
             RaiseNotifyPropertyChangedEvent(nameof(QueryText));
             if (!isApplyingState)
             {
+                if (ShouldLogComposerTransition(previousQuery, queryText))
+                {
+                    host.LogUiDiagnostic(
+                        $"QueryText changed previousLength={previousQuery.Length} currentLength={queryText.Length} startsWithSlash={queryText.StartsWith("/", StringComparison.Ordinal)}");
+                }
+
                 UpdateCommandSuggestions();
                 UpdateTransientHelpText();
             }
@@ -332,6 +340,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private void ApplyState(ContextRelayHostState state)
     {
+        var queryChanged = !string.Equals(queryText, state.QueryText, StringComparison.Ordinal);
         isApplyingState = true;
         try
         {
@@ -345,27 +354,37 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
             ChatHistory = state.ChatHistory.Select(item => new ChatHistoryItemViewModel(item, this)).ToArray();
-            CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
-            VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
-            SelectedCommandSuggestion = null;
-            commandSuggestionWindowStart = 0;
-            IsCommandPopupOpen = false;
+            if (queryChanged)
+            {
+                CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+                VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+                SelectedCommandSuggestion = null;
+                commandSuggestionWindowStart = 0;
+                IsCommandPopupOpen = false;
+            }
         }
         finally
         {
             isApplyingState = false;
+        }
+
+        if (!queryChanged && IsCommandPopupOpen)
+        {
+            UpdateTransientHelpText();
         }
     }
 
     private async Task SubmitAsync(CancellationToken ct)
     {
         var query = QueryText;
+        host.LogUiDiagnostic($"SubmitAsync invoked queryLength={query.Length} startsWithSlash={query.StartsWith("/", StringComparison.Ordinal)}");
         CloseCommandPopup();
         await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, ct).ConfigureAwait(false); }).ConfigureAwait(false);
     }
 
     private async Task ConfirmQueryInputAsync(CancellationToken ct)
     {
+        host.LogUiDiagnostic($"ConfirmQueryInput invoked popupOpen={IsCommandPopupOpen} suggestionCount={commandSuggestions.Count}");
         if (ApplySelectedCommandSuggestion())
         {
             return;
@@ -378,6 +397,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     {
         if (isBusy)
         {
+            host.LogUiDiagnostic("RunBusyAsync ignored because the view model is already busy.");
             return;
         }
 
@@ -398,6 +418,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     {
         if (commandSuggestions.Count == 0)
         {
+            host.LogUiDiagnostic($"MoveCommandSelection ignored delta={delta} because no suggestions are available.");
             return;
         }
 
@@ -413,6 +434,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         SelectCommandSuggestion(nextIndex);
+        host.LogUiDiagnostic($"MoveCommandSelection applied delta={delta} selectedIndex={nextIndex}");
     }
 
     private bool ApplySelectedCommandSuggestion()
@@ -424,11 +446,13 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     {
         if (!SlashCommandSuggestion.TryBuildCommittedQuery(IsCommandPopupOpen, suggestion, out var committedQuery))
         {
+            host.LogUiDiagnostic("ApplyCommandSuggestion skipped because popup was closed or no suggestion was selected.");
             return false;
         }
 
         SelectedCommandSuggestion = suggestion;
         QueryText = committedQuery;
+        host.LogUiDiagnostic($"ApplyCommandSuggestion committed command={suggestion?.Name ?? "(unknown)"}");
         CloseCommandPopup();
         return true;
     }
@@ -443,6 +467,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         SelectedCommandSuggestion = commandSuggestions.Count > 0 ? commandSuggestions[0] : null;
         UpdateVisibleCommandSuggestions();
         IsCommandPopupOpen = commandSuggestions.Count > 0;
+        host.LogUiDiagnostic($"UpdateCommandSuggestions updated count={commandSuggestions.Count} popupOpen={IsCommandPopupOpen}");
     }
 
     private void UpdateTransientHelpText()
@@ -491,11 +516,16 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private void CloseCommandPopup()
     {
+        var hadSuggestions = commandSuggestions.Count > 0;
         CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
         VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
         SelectedCommandSuggestion = null;
         commandSuggestionWindowStart = 0;
         IsCommandPopupOpen = false;
+        if (hadSuggestions)
+        {
+            host.LogUiDiagnostic("CloseCommandPopup cleared command suggestions.");
+        }
     }
 
     private void SelectCommandSuggestion(int index)
@@ -597,5 +627,14 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         return -1;
+    }
+
+    private static bool ShouldLogComposerTransition(string previousQuery, string currentQuery)
+    {
+        return currentQuery.Length == 0 ||
+            currentQuery.StartsWith("/", StringComparison.Ordinal) ||
+            previousQuery.StartsWith("/", StringComparison.Ordinal) ||
+            currentQuery.IndexOf('#') >= 0 ||
+            previousQuery.IndexOf('#') >= 0;
     }
 }

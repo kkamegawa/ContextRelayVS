@@ -34,6 +34,7 @@ internal sealed class ContextRelayHost : IDisposable
     private readonly ContextRelayOutputLogger logger;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly CancellationTokenSource disposeCancellation = new();
+    private readonly object draftQuerySync = new();
     private readonly Lazy<IContextRelayAuthProvider> authProvider;
     private readonly FileSystemSharedSessionStore sharedStore;
     private readonly SharedStoreWatcher watcher;
@@ -48,6 +49,7 @@ internal sealed class ContextRelayHost : IDisposable
     private string? lastSearchSummary;
     private string? copilotConversationId;
     private string? workIqContextId;
+    private string draftQueryText = string.Empty;
     private string? cacheWorkspaceRoot;
     private int cacheTtlSeconds = 300;
     private int cacheMaxEntries = 200;
@@ -89,6 +91,24 @@ internal sealed class ContextRelayHost : IDisposable
 
     public event EventHandler<ContextRelayStateChangedEventArgs>? StateChanged;
 
+    public void UpdateDraftQueryText(string queryText)
+    {
+        lock (draftQuerySync)
+        {
+            draftQueryText = queryText ?? string.Empty;
+        }
+    }
+
+    public void LogUiDiagnostic(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        logger.LogDiagnostic($"[ui] {message}");
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -101,7 +121,7 @@ internal sealed class ContextRelayHost : IDisposable
 
             await logger.InitializeAsync(cancellationToken).ConfigureAwait(false);
             initialized = true;
-            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -120,7 +140,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             state = new ContextRelayHostState
             {
-                QueryText = state.QueryText,
+                QueryText = GetDraftQueryText(),
                 HelpText = ContextRelayLocalizedStrings.GenericHelpText,
                 StatusMessage = ContextRelayLocalizedStrings.GetToolWindowInitializationFailedStatus(exception.Message),
                 SignedInUser = state.SignedInUser,
@@ -142,6 +162,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
 
         var statusMessage = ContextRelayLocalizedStrings.IsReadyStatus(state.StatusMessage)
             ? ContextRelayLocalizedStrings.ReadyStatus
@@ -198,6 +219,7 @@ internal sealed class ContextRelayHost : IDisposable
             var trimmed = input?.Trim() ?? string.Empty;
             var route = SlashCommandRouter.Parse(trimmed);
             state.QueryText = trimmed;
+            UpdateDraftQueryText(trimmed);
 
             if (route.Target == RouteTarget.Clear)
             {
@@ -362,7 +384,7 @@ internal sealed class ContextRelayHost : IDisposable
                 }
 
                 logger.LogInformation($"Unpinned snippet '{item.Title}'.");
-                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ResultUnpinnedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ResultUnpinnedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
             }
 
             var hydrationResult = await TryHydrateContextItemForHandoffAsync(item, cancellationToken).ConfigureAwait(false);
@@ -384,7 +406,7 @@ internal sealed class ContextRelayHost : IDisposable
                 hydrationResult.FellBackToExcerpt
                     ? ContextRelayLocalizedStrings.ResultPinnedWithExcerptFallbackStatus
                     : ContextRelayLocalizedStrings.ResultPinnedStatus,
-                state.QueryText,
+                GetDraftQueryText(),
                 cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -408,7 +430,7 @@ internal sealed class ContextRelayHost : IDisposable
             var hydrated = await TryHydrateContextItemForHandoffAsync(item, cancellationToken).ConfigureAwait(false);
             var excerpt = BuildHandoffExcerpt(hydrated.Item);
             await AppendMarkdownToFileAsync(handoffPath, excerpt, cancellationToken).ConfigureAwait(false);
-            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AppendedToHandoffStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AppendedToHandoffStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -422,7 +444,7 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             await snippetRepository.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetRemovedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetRemovedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -436,7 +458,7 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             await snippetRepository.ClearAsync(cancellationToken).ConfigureAwait(false);
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetsClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetsClearedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -454,7 +476,7 @@ internal sealed class ContextRelayHost : IDisposable
             lastSearchSummary = null;
             copilotConversationId = null;
             workIqContextId = null;
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -472,7 +494,7 @@ internal sealed class ContextRelayHost : IDisposable
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Search cache cleared.");
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SearchCacheClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SearchCacheClearedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -485,23 +507,30 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await SyncDebugLoggingOptionsAsync(cancellationToken).ConfigureAwait(false);
+            var currentQuery = GetDraftQueryText();
+            logger.LogDiagnostic($"[ui] AddFilesToQuery invoked with currentQueryLength={currentQuery.Length}");
             var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
 
             var selectedFiles = await packageServices
                 .PickWorkspaceFilesAsync(workspaceRoots.Count > 0 ? workspaceRoots[0] : null, cancellationToken)
                 .ConfigureAwait(false);
+            logger.LogDiagnostic($"[ui] AddFilesToQuery picker returned selectedFileCount={selectedFiles.Count}");
             if (selectedFiles.Count == 0)
             {
-                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerNoFilesSelectedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+                logger.LogDiagnostic("[ui] AddFilesToQuery canceled because no files were selected.");
+                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerNoFilesSelectedStatus, currentQuery, cancellationToken).ConfigureAwait(false);
             }
 
-            var mergeResult = MergeSelectedFilesIntoQuery(state.QueryText, selectedFiles, workspaceRoots);
+            var mergeResult = MergeSelectedFilesIntoQuery(currentQuery, selectedFiles, workspaceRoots);
+            logger.LogDiagnostic(
+                $"[ui] AddFilesToQuery merged files with mergedQueryLength={mergeResult.QueryText.Length} status=\"{mergeResult.StatusMessage}\"");
             return await RefreshStateCoreAsync(mergeResult.StatusMessage, mergeResult.QueryText, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             logger.LogError("Adding local files to the query failed.", ex);
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerAddFilesFailedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.FilePickerAddFilesFailedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -516,7 +545,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             var result = await EnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
             logger.LogInformation($"Generated handoff docs in '{result.OutputDirectory}'.");
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.GetHandoffUpdatedStatus(result.WrittenFiles.Count), state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.GetHandoffUpdatedStatus(result.WrittenFiles.Count), GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -579,7 +608,9 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task ShowDebugLogAsync(CancellationToken cancellationToken = default)
     {
+        await SyncDebugLoggingOptionsAsync(cancellationToken).ConfigureAwait(false);
         logger.ShowDebugPane();
+        logger.LogDiagnostic("[ui] Debug log pane opened.");
         await RefreshStateAsync(ContextRelayLocalizedStrings.DebugLogOpenedStatus).ConfigureAwait(false);
     }
 
@@ -1071,7 +1102,7 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            await RefreshStateCoreAsync(statusMessage, state.QueryText, CancellationToken.None).ConfigureAwait(false);
+            await RefreshStateCoreAsync(statusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
         }
         finally
         {
@@ -1081,10 +1112,12 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task<ContextRelayHostState> RefreshStateCoreAsync(string statusMessage, string queryText, CancellationToken cancellationToken)
     {
+        UpdateDraftQueryText(queryText);
         var chatHistory = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var handoffIndex = await sharedStore.GetHandoffIndexAsync(cancellationToken).ConfigureAwait(false);
+        var effectiveQueryText = GetDraftQueryText();
 
         string? signedInUser = state.SignedInUser;
         if (shouldResolveSignedInUser)
@@ -1095,8 +1128,8 @@ internal sealed class ContextRelayHost : IDisposable
 
         state = new ContextRelayHostState
         {
-            QueryText = queryText,
-            HelpText = ContextRelayLocalizedStrings.GetHelpTextForQuery(queryText),
+            QueryText = effectiveQueryText,
+            HelpText = ContextRelayLocalizedStrings.GetHelpTextForQuery(effectiveQueryText),
             StatusMessage = statusMessage,
             SignedInUser = signedInUser,
             LastHandoffPath = ResolveHandoffPath(workspaceRoot, handoffIndex),
@@ -1107,6 +1140,14 @@ internal sealed class ContextRelayHost : IDisposable
 
         StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state));
         return state;
+    }
+
+    private string GetDraftQueryText()
+    {
+        lock (draftQuerySync)
+        {
+            return draftQueryText;
+        }
     }
 
     private async Task<string?> TryGetSignedInUserAsync(CancellationToken cancellationToken)
@@ -1127,6 +1168,12 @@ internal sealed class ContextRelayHost : IDisposable
             logger.LogWarning($"Unable to read cached account: {ex.Message}");
             return null;
         }
+    }
+
+    private async Task SyncDebugLoggingOptionsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
     }
 
     private static IReadOnlyList<ContextSource> GetEnabledSources(SlashCommandParseResult route, ContextRelaySettingsSnapshot settings)

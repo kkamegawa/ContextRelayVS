@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11" Version="0.2.1.0" Language="en-US" Publisher="KazushiKamegawa" />
+        <Identity Id="ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11" Version="0.2.1.0" Language="en-US" Publisher="KazushiKamegawa" />
         <DisplayName>ContextRelay for Visual Studio</DisplayName>
         <Description xml:space="preserve">Surface Microsoft 365 context (SharePoint, OneDrive, Teams, Mail) in a Visual Studio tool window. Out-of-process extension built with Microsoft.VisualStudio.Extensibility SDK.</Description>
         <MoreInfo>https://github.com/kkamegawa/ContextRelayVS</MoreInfo>

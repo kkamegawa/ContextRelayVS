@@ -73,6 +73,71 @@ public sealed class FilePickerMentionFormattingTests
     }
 
     [Fact]
+    public void MergeSelectedFilesIntoQuery_WhenCurrentQueryIsAskCommand_PreservesSlashCommand()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true);
+        var mergeMethod = hostType!.GetMethod("MergeSelectedFilesIntoQuery", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(mergeMethod);
+
+        var workspaceRoot = CreateTemporaryWorkspace();
+        try
+        {
+            var absolutePath = Path.Combine(workspaceRoot, "docs", "summary.md");
+            Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
+            File.WriteAllText(absolutePath, "sample");
+
+            var result = mergeMethod!.Invoke(obj: null, parameters: new object[]
+            {
+                "/ask",
+                new[] { absolutePath },
+                new[] { workspaceRoot }
+            });
+
+            Assert.NotNull(result);
+            var queryText = GetStringProperty(result!, "QueryText");
+            Assert.Equal("/ask #docs/summary.md", queryText);
+        }
+        finally
+        {
+            TryDeleteDirectory(workspaceRoot);
+        }
+    }
+
+    [Fact]
+    public void MergeSelectedFilesIntoQuery_WhenCurrentQueryContainsAskInstruction_PreservesInstructionShape()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true);
+        var mergeMethod = hostType!.GetMethod("MergeSelectedFilesIntoQuery", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(mergeMethod);
+
+        var workspaceRoot = CreateTemporaryWorkspace();
+        try
+        {
+            var absolutePath = Path.Combine(workspaceRoot, "docs", "summary.md");
+            Directory.CreateDirectory(Path.GetDirectoryName(absolutePath)!);
+            File.WriteAllText(absolutePath, "sample");
+
+            var existingQuery = "/ask  Summarize this\nas markdown";
+            var result = mergeMethod!.Invoke(obj: null, parameters: new object[]
+            {
+                existingQuery,
+                new[] { absolutePath },
+                new[] { workspaceRoot }
+            });
+
+            Assert.NotNull(result);
+            var queryText = GetStringProperty(result!, "QueryText");
+            Assert.Equal("/ask  Summarize this\nas markdown #docs/summary.md", queryText);
+        }
+        finally
+        {
+            TryDeleteDirectory(workspaceRoot);
+        }
+    }
+
+    [Fact]
     public void MergeSelectedFilesIntoQuery_WhenSelectionIsUnsupported_DoesNotAppend()
     {
         var assembly = LoadBuiltExtensionAssembly();
