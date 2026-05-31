@@ -70,10 +70,23 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("ToolWindowTextBrushKey", xaml, StringComparison.Ordinal);
         Assert.Contains("Focusable\" Value=\"False\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsTabStop\" Value=\"False\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Content=\"{Binding DebugLogButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{Binding ShowDebugLogCommand}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("EventTrigger EventName=\"Loaded\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("CallMethodAction", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("xmlns:i=\"http://schemas.microsoft.com/xaml/behaviors\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("mc:Ignorable=\"i\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ViewModel_DoesNotExposePanelOnlyDebugLogMembers()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+
+        Assert.NotNull(viewModelType);
+        Assert.Null(viewModelType!.GetProperty("DebugLogButtonText", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic));
+        Assert.Null(viewModelType.GetProperty("ShowDebugLogCommand", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic));
     }
 
     [Theory]
