@@ -30,6 +30,9 @@ namespace ContextRelay.VSExtension.Services;
 
 internal sealed class ContextRelayHost : IDisposable
 {
+    private readonly record struct CreatedFileTargetContext(string RootDirectory, bool ShouldAddToSolutionExplorer, bool FolderWasSelected);
+    private readonly record struct HandoffDocumentWriteContext(HandoffGenerationResult GenerationResult, CreatedFileTargetContext TargetContext);
+
     private readonly IContextRelayPackageServices packageServices;
     private readonly ContextRelayOutputLogger logger;
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -426,7 +429,14 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+            var handoffContext = await TryEnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+            if (handoffContext is null)
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var handoffPath = handoffContext.Value.GenerationResult.HandoffPath ?? handoffContext.Value.GenerationResult.PlanPath;
             var hydrated = await TryHydrateContextItemForHandoffAsync(item, cancellationToken).ConfigureAwait(false);
             var excerpt = BuildHandoffExcerpt(hydrated.Item);
             await AppendMarkdownToFileAsync(handoffPath, excerpt, cancellationToken).ConfigureAwait(false);
@@ -543,7 +553,13 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var result = await EnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
+            var handoffContext = await TryEnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
+            if (handoffContext is null)
+            {
+                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+            }
+
+            var result = handoffContext.Value.GenerationResult;
             logger.LogInformation($"Generated handoff docs in '{result.OutputDirectory}'.");
             return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.GetHandoffUpdatedStatus(result.WrittenFiles.Count), GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
@@ -555,7 +571,14 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task CopyHandoffPromptAsync(CancellationToken cancellationToken = default)
     {
-        var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        var handoffContext = await TryEnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        if (handoffContext is null)
+        {
+            await RefreshStateAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus).ConfigureAwait(false);
+            return;
+        }
+
+        var handoffPath = handoffContext.Value.GenerationResult.HandoffPath ?? handoffContext.Value.GenerationResult.PlanPath;
         var prompt = BuildHandoffPrompt(handoffPath);
         await packageServices.CopyTextToClipboardAsync(prompt, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handoff prompt copied to clipboard.");
@@ -585,7 +608,14 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task OpenHandoffDocumentAsync(CancellationToken cancellationToken = default)
     {
-        var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        var handoffContext = await TryEnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        if (handoffContext is null)
+        {
+            await RefreshStateAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus).ConfigureAwait(false);
+            return;
+        }
+
+        var handoffPath = handoffContext.Value.GenerationResult.HandoffPath ?? handoffContext.Value.GenerationResult.PlanPath;
         await packageServices.OpenDocumentAsync(handoffPath, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(ContextRelayLocalizedStrings.OpenedHandoffStatus).ConfigureAwait(false);
     }
@@ -741,20 +771,24 @@ internal sealed class ContextRelayHost : IDisposable
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<string> EnsureHandoffDocPathAsync(CancellationToken cancellationToken)
+    private async Task<HandoffDocumentWriteContext?> TryEnsureHandoffDocPathAsync(CancellationToken cancellationToken)
     {
-        var result = await EnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
-        return result.HandoffPath ?? result.PlanPath;
+        return await TryEnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HandoffGenerationResult> EnsureHandoffDocsAsync(CancellationToken cancellationToken)
+    private async Task<HandoffDocumentWriteContext?> TryEnsureHandoffDocsAsync(CancellationToken cancellationToken)
     {
-        var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
         logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
+        var targetContext = await TryResolveCreatedFileTargetContextAsync(cancellationToken).ConfigureAwait(false);
+        if (targetContext is null)
+        {
+            logger.LogInformation("Skipped handoff generation because no target folder was selected.");
+            return null;
+        }
+
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        var fallbackRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return await handoffDocumentGenerator.GenerateAsync(
+        var result = await handoffDocumentGenerator.GenerateAsync(
             new HandoffContext
             {
                 Snippets = snippets,
@@ -763,11 +797,13 @@ internal sealed class ContextRelayHost : IDisposable
             new HandoffGenerationOptions
             {
                 OutputDirectory = string.IsNullOrWhiteSpace(settings.OutputDirectory) ? ".contextrelay" : settings.OutputDirectory,
-                WorkspaceRoot = workspaceRoot,
-                FallbackRootDirectory = fallbackRoot,
+                WorkspaceRoot = targetContext.Value.RootDirectory,
+                FallbackRootDirectory = targetContext.Value.RootDirectory,
                 IncludeHandoffDocument = true
             },
             cancellationToken).ConfigureAwait(false);
+        await RegisterCreatedFilesAsync(result.WrittenFiles, targetContext.Value, cancellationToken).ConfigureAwait(false);
+        return new HandoffDocumentWriteContext(result, targetContext.Value);
     }
 
     private async Task AppendSearchHistoryAsync(string query, IReadOnlyList<ContextItem> results, CancellationToken cancellationToken)
@@ -1088,12 +1124,20 @@ internal sealed class ContextRelayHost : IDisposable
         ContextRelaySettingsSnapshot settings,
         CancellationToken cancellationToken)
     {
-        var outputDirectory = await ResolveOutputDirectoryAsync(settings, cancellationToken).ConfigureAwait(false);
+        var targetContext = await TryResolveCreatedFileTargetContextAsync(cancellationToken).ConfigureAwait(false);
+        if (targetContext is null)
+        {
+            await RefreshStateAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus).ConfigureAwait(false);
+            return;
+        }
+
+        var outputDirectory = ResolveOutputDirectory(settings, targetContext.Value.RootDirectory);
         Directory.CreateDirectory(outputDirectory);
         var fileExtension = AskPreviewLanguageDetector.GetFileExtension(previewDocument.LanguageId);
         var fileName = ContextRelayLocalizedStrings.GetAskPreviewDocumentTitle(query, fileExtension);
         var filePath = Path.Combine(outputDirectory, fileName);
         await WriteAllTextAsync(filePath, previewDocument.Content, cancellationToken).ConfigureAwait(false);
+        await RegisterCreatedFilesAsync(new[] { filePath }, targetContext.Value, cancellationToken).ConfigureAwait(false);
         await packageServices.OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }
 
@@ -1321,19 +1365,78 @@ internal sealed class ContextRelayHost : IDisposable
         await RefreshStateAsync(statusMessage).ConfigureAwait(false);
     }
 
-    private async Task<string> ResolveOutputDirectoryAsync(ContextRelaySettingsSnapshot settings, CancellationToken cancellationToken)
+    private static string ResolveOutputDirectory(ContextRelaySettingsSnapshot settings, string rootDirectory)
     {
-        var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var outputDirectory = string.IsNullOrWhiteSpace(settings.OutputDirectory) ? ".contextrelay" : settings.OutputDirectory;
         if (Path.IsPathRooted(outputDirectory))
         {
             return Path.GetFullPath(outputDirectory);
         }
 
-        var baseDirectory = !string.IsNullOrWhiteSpace(workspaceRoot)
-            ? workspaceRoot
-            : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.GetFullPath(Path.Combine(baseDirectory!, outputDirectory));
+        return Path.GetFullPath(Path.Combine(rootDirectory, outputDirectory));
+    }
+
+    private async Task RegisterCreatedFilesAsync(
+        IReadOnlyList<string> filePaths,
+        CreatedFileTargetContext targetContext,
+        CancellationToken cancellationToken)
+    {
+        if (filePaths.Count == 0)
+        {
+            return;
+        }
+
+        if (!targetContext.ShouldAddToSolutionExplorer)
+        {
+            return;
+        }
+
+        var addedCount = await packageServices.TryAddFilesToSolutionAsync(filePaths, cancellationToken).ConfigureAwait(false);
+        if (addedCount > 0)
+        {
+            logger.LogInformation($"Added {addedCount} ContextRelay-created file(s) to Solution Explorer.");
+            return;
+        }
+
+        logger.LogInformation(
+            "ContextRelay created files on disk, but automatic Solution Explorer registration is not available in the current workspace.");
+    }
+
+    private async Task<CreatedFileTargetContext?> TryResolveCreatedFileTargetContextAsync(CancellationToken cancellationToken)
+    {
+        var initialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var targetContext = await ResolveCreatedFileTargetContextAsync(
+            packageServices.GetSolutionRootAsync,
+            packageServices.PickWorkspaceFolderAsync,
+            initialDirectory,
+            cancellationToken).ConfigureAwait(false);
+        if (targetContext is { FolderWasSelected: true } selectedTarget)
+        {
+            logger.LogInformation($"Selected '{selectedTarget.RootDirectory}' as the target folder for ContextRelay-created files.");
+        }
+
+        return targetContext;
+    }
+
+    private static async Task<CreatedFileTargetContext?> ResolveCreatedFileTargetContextAsync(
+        Func<CancellationToken, Task<string?>> getSolutionRootAsync,
+        Func<string?, CancellationToken, Task<string?>> pickFolderAsync,
+        string? initialDirectory,
+        CancellationToken cancellationToken)
+    {
+        var workspaceRoot = await getSolutionRootAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            return new CreatedFileTargetContext(Path.GetFullPath(workspaceRoot), ShouldAddToSolutionExplorer: true, FolderWasSelected: false);
+        }
+
+        var selectedFolder = await pickFolderAsync(initialDirectory, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(selectedFolder))
+        {
+            return null;
+        }
+
+        return new CreatedFileTargetContext(Path.GetFullPath(selectedFolder), ShouldAddToSolutionExplorer: false, FolderWasSelected: true);
     }
 
     private static string FormatContextItemForClipboard(ContextItem item)

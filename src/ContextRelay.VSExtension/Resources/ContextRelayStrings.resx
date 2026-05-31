@@ -48,6 +48,7 @@
   <data name="FilePickerNoFilesSelectedStatus" xml:space="preserve"><value>No files were selected.</value></data>
   <data name="FilePickerNoWorkspaceFilesSelectedStatus" xml:space="preserve"><value>None of the selected files are eligible workspace files for # mentions.</value></data>
   <data name="FilePickerAddFilesFailedStatus" xml:space="preserve"><value>Failed to add selected files. Check the output log for details.</value></data>
+  <data name="CreatedFilesFolderSelectionCanceledStatus" xml:space="preserve"><value>No target folder was selected. ContextRelay did not create any files.</value></data>
   <data name="WorkIqLocalFileContextDisabledStatus" xml:space="preserve"><value>Local file context for Work IQ is disabled. Enable "Allow local file context for Work IQ" in ContextRelay options to send bounded file text with /workiq #file prompts.</value></data>
   <data name="FileMentionWorkspaceUnavailableStatus" xml:space="preserve"><value>Open a solution or workspace file before using #file mentions.</value></data>
   <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>Chat and snippets cleared.</value></data>
@@ -95,6 +96,7 @@
   <data name="FileMentionUnsupportedFileTypeStatus_Format" xml:space="preserve"><value>Unsupported file type for #{0}. Only Copilot-supported file extensions are allowed.</value></data>
   <data name="AddFilesDialogTitle" xml:space="preserve"><value>Select files to add as context</value></data>
   <data name="AddFilesDialogFilter" xml:space="preserve"><value>All files (*.*)|*.*</value></data>
+  <data name="CreatedFilesFolderDialogTitle" xml:space="preserve"><value>Select a folder for ContextRelay-created files</value></data>
   <data name="HelpFor_mail" xml:space="preserve"><value>Example: /mail from:alice subject:budget&#10;Example: /mail incident review</value></data>
   <data name="HelpFor_teams" xml:space="preserve"><value>Example: /teams sprint review&#10;Example: /teams from:bob mentions:me</value></data>
   <data name="HelpFor_sharepoint" xml:space="preserve"><value>Example: /sharepoint VPN setup guide&#10;Example: /sharepoint architecture</value></data>
