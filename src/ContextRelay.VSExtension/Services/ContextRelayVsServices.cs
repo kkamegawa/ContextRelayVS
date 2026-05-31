@@ -113,6 +113,12 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         return roots.Count > 0 ? roots[0] : null;
     }
 
+    public async Task<IReadOnlyList<string>> GetWorkspaceFilesAsync(CancellationToken cancellationToken = default)
+    {
+        var workspaceRoots = await GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        return EnumerateWorkspaceFiles(workspaceRoots, cancellationToken);
+    }
+
     public async Task OpenDocumentAsync(string filePath, CancellationToken cancellationToken = default)
     {
         try
@@ -213,6 +219,99 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
+    }
+
+    private static IReadOnlyList<string> EnumerateWorkspaceFiles(IReadOnlyList<string> workspaceRoots, CancellationToken cancellationToken)
+    {
+        const int maxFiles = 2_000;
+        var files = new List<string>(capacity: Math.Min(maxFiles, 256));
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var workspaceRoot in workspaceRoots
+                     .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                     .Select(Path.GetFullPath)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var path in SafeEnumerateWorkspaceFiles(workspaceRoot))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!Core.FileContext.CopilotSupportedFilePolicy.IsSupported(path))
+                {
+                    continue;
+                }
+
+                var relativePath = Path.GetRelativePath(workspaceRoot, path)
+                    .Replace(Path.DirectorySeparatorChar, '/')
+                    .Replace(Path.AltDirectorySeparatorChar, '/');
+                if (!seenPaths.Add(relativePath))
+                {
+                    continue;
+                }
+
+                files.Add(relativePath);
+                if (files.Count >= maxFiles)
+                {
+                    return files;
+                }
+            }
+        }
+
+        return files;
+    }
+
+    private static IEnumerable<string> SafeEnumerateWorkspaceFiles(string workspaceRoot)
+    {
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(workspaceRoot);
+
+        while (pendingDirectories.Count > 0)
+        {
+            var currentDirectory = pendingDirectories.Pop();
+            IEnumerable<string> subDirectories;
+            try
+            {
+                subDirectories = Directory.EnumerateDirectories(currentDirectory);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var subDirectory in subDirectories)
+            {
+                if (ShouldSkipDirectory(subDirectory))
+                {
+                    continue;
+                }
+
+                pendingDirectories.Push(subDirectory);
+            }
+
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(currentDirectory);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                yield return file;
+            }
+        }
+    }
+
+    private static bool ShouldSkipDirectory(string directoryPath)
+    {
+        var directoryName = Path.GetFileName(directoryPath);
+        return directoryName.StartsWith(".", StringComparison.Ordinal) ||
+            directoryName.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+            directoryName.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+            directoryName.Equals("node_modules", StringComparison.OrdinalIgnoreCase);
     }
 
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Resources;
 using ContextRelay.Core.Router;
 
@@ -57,11 +58,13 @@ internal static class ContextRelayLocalizedStrings
     public static string DebugLogOpenedStatus => GetString("DebugLogOpenedStatus");
     public static string SearchButtonText => GetString("SearchButtonText");
     public static string SearchResultsHeaderText => GetString("SearchResultsHeaderText");
+    public static string SearchSummaryHeaderText => GetString("SearchSummaryHeaderText");
     public static string WindowTitleText => GetString("WindowTitleText");
     public static string SnippetsHeaderText => GetString("SnippetsHeaderText");
     public static string ChatHistoryHeaderText => GetString("ChatHistoryHeaderText");
     public static string SearchToolTip => GetString("SearchToolTip");
     public static string CommandPopupHeaderText => GetString("CommandPopupHeaderText");
+    public static string FileMentionPopupHeaderText => GetString("FileMentionPopupHeaderText");
     public static string PinButtonText => GetString("PinButtonText");
     public static string OpenButtonText => GetString("OpenButtonText");
     public static string DeleteButtonText => GetString("DeleteButtonText");
@@ -184,13 +187,18 @@ internal static class ContextRelayLocalizedStrings
 
     public static string GetHelpTextForQuery(string? queryText)
     {
-        var command = ExtractSlashCommand(queryText);
-        if (string.IsNullOrEmpty(command))
+        var parsed = SlashCommandRouter.Parse(queryText ?? string.Empty);
+        if (parsed.Target == RouteTarget.Chat)
         {
             return GenericHelpText;
         }
 
-        var normalizedCommand = command!.ToLowerInvariant();
+        if (parsed.SearchScope == SearchScope.Scoped && parsed.SourceCommandNames.Count > 1)
+        {
+            return GetScopedSourceHelpText(parsed.SourceCommandNames);
+        }
+
+        var normalizedCommand = parsed.SlashCommandName?.ToLowerInvariant() ?? string.Empty;
         return normalizedCommand switch
         {
             "/mail" => GetString("HelpFor_mail"),
@@ -210,23 +218,23 @@ internal static class ContextRelayLocalizedStrings
 
     public static IReadOnlyList<SlashCommandSuggestion> GetCommandSuggestions(string? queryText)
     {
-        var trimmed = queryText?.TrimStart() ?? string.Empty;
-        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+        if (!TryGetSlashSelectionContext(queryText, out var context))
         {
             return Array.Empty<SlashCommandSuggestion>();
         }
 
-        var whitespaceIndex = trimmed.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
-        if (whitespaceIndex >= 0)
-        {
-            return Array.Empty<SlashCommandSuggestion>();
-        }
-
-        var prefix = trimmed;
+        var combinableCommands = SlashCommandRouter.GetCombinableCommands();
         var suggestions = new List<SlashCommandSuggestion>();
         foreach (var command in SlashCommandRouter.GetSupportedCommands())
         {
-            if (!command.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (!command.StartsWith(context.Partial, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (context.CombinableOnly &&
+                (!combinableCommands.Contains(command, StringComparer.OrdinalIgnoreCase) ||
+                    context.SelectedCommands.Contains(command)))
             {
                 continue;
             }
@@ -235,7 +243,8 @@ internal static class ContextRelayLocalizedStrings
             {
                 Icon = SourcePresentation.GetCommandIcon(command),
                 Name = command,
-                Description = GetCommandDescription(command)
+                Description = GetCommandDescription(command),
+                CommittedQuery = BuildCommittedQuery(context, command)
             });
         }
 
@@ -252,16 +261,60 @@ internal static class ContextRelayLocalizedStrings
         return GenericHelpText;
     }
 
-    private static string? ExtractSlashCommand(string? queryText)
+    private static string GetScopedSourceHelpText(IReadOnlyList<string> commands)
     {
-        var trimmed = queryText?.TrimStart() ?? string.Empty;
+        var prefix = string.Join(" ", commands);
+        return Format("HelpFor_scopedSources_Format", prefix, prefix);
+    }
+
+    private static bool TryGetSlashSelectionContext(string? queryText, out SlashSelectionContext context)
+    {
+        var text = queryText ?? string.Empty;
+        var trimmed = text.Trim();
         if (!trimmed.StartsWith("/", StringComparison.Ordinal))
         {
-            return null;
+            context = default;
+            return false;
         }
 
-        var whitespaceIndex = trimmed.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
-        return whitespaceIndex >= 0 ? trimmed.Substring(0, whitespaceIndex) : trimmed;
+        var hasTrailingWhitespace = text.Length > 0 && char.IsWhiteSpace(text[text.Length - 1]);
+        var tokens = trimmed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0)
+        {
+            context = default;
+            return false;
+        }
+
+        var partial = hasTrailingWhitespace ? "/" : tokens[^1].ToLowerInvariant();
+        if (!partial.StartsWith("/", StringComparison.Ordinal))
+        {
+            context = default;
+            return false;
+        }
+
+        var previousTokens = (hasTrailingWhitespace ? tokens : tokens[..^1])
+            .Select(token => token.ToLowerInvariant())
+            .ToArray();
+        var combinableCommands = SlashCommandRouter.GetCombinableCommands();
+        var selectedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var token in previousTokens)
+        {
+            if (!combinableCommands.Contains(token, StringComparer.OrdinalIgnoreCase))
+            {
+                context = default;
+                return false;
+            }
+
+            selectedCommands.Add(token);
+        }
+
+        context = new SlashSelectionContext(previousTokens, partial, selectedCommands, previousTokens.Length > 0);
+        return true;
+    }
+
+    private static string BuildCommittedQuery(SlashSelectionContext context, string command)
+    {
+        return string.Join(" ", context.PreviousTokens.Concat(new[] { command })) + " ";
     }
 
     private static string SanitizeFileName(string value)
@@ -421,4 +474,10 @@ internal static class ContextRelayLocalizedStrings
             ? JapaneseCulture
             : EnglishCulture;
     }
+
+    private readonly record struct SlashSelectionContext(
+        IReadOnlyList<string> PreviousTokens,
+        string Partial,
+        HashSet<string> SelectedCommands,
+        bool CombinableOnly);
 }

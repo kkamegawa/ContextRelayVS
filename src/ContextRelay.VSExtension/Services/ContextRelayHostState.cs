@@ -23,4 +23,8 @@ internal sealed class ContextRelayHostState
     public IReadOnlyList<SharedSnippetItem> Snippets { get; set; } = Array.Empty<SharedSnippetItem>();
 
     public IReadOnlyList<SharedChatHistoryItem> ChatHistory { get; set; } = Array.Empty<SharedChatHistoryItem>();
+
+    public string SearchSummary { get; set; } = string.Empty;
+
+    public IReadOnlyList<string> WorkspaceFiles { get; set; } = Array.Empty<string>();
 }

@@ -17,6 +17,9 @@ public sealed class SlashCommandSuggestion
     public string Description { get; set; } = string.Empty;
 
     [DataMember]
+    public string CommittedQuery { get; set; } = string.Empty;
+
+    [DataMember]
     public AsyncCommand? ApplyCommand { get; set; }
 
     /// <summary>
@@ -34,9 +37,12 @@ public sealed class SlashCommandSuggestion
             return false;
         }
 
-        committedQuery = suggestion.Name.EndsWith(" ", StringComparison.Ordinal)
+        var sourceText = string.IsNullOrWhiteSpace(suggestion.CommittedQuery)
             ? suggestion.Name
-            : $"{suggestion.Name} ";
+            : suggestion.CommittedQuery;
+        committedQuery = sourceText.EndsWith(" ", StringComparison.Ordinal)
+            ? sourceText
+            : $"{sourceText} ";
         return true;
     }
 }
