@@ -177,43 +177,66 @@
                 <TabControl Background="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}"
                             BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
                     <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding SearchResultsHeaderText}">
-                        <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemsSource="{Binding SearchResults}" BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
-                                        <Border.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="{Binding PinButtonText}" Command="{Binding PinCommand}" />
-                                                <MenuItem Header="{Binding CopyMenuText}" Command="{Binding CopyCommand}" />
-                                                <MenuItem Header="{Binding AppendToHandoffMenuText}" Command="{Binding AppendToHandoffCommand}" />
-                                                <Separator />
-                                                <MenuItem Header="{Binding OpenInBrowserMenuText}" Command="{Binding OpenCommand}" />
-                                            </ContextMenu>
-                                        </Border.ContextMenu>
-                                        <Grid>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <DockPanel Grid.Row="0">
-                                                <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
-                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
-                                                    <TextBlock Text="{Binding SourceIcon}" Margin="0,0,4,0" Style="{StaticResource MutedTextStyle}" />
-                                                    <TextBlock Text="{Binding SourceLabel}" Style="{StaticResource MutedTextStyle}" />
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0"
+                                    Margin="8,8,8,0"
+                                    Padding="8"
+                                    Style="{StaticResource SurfaceBorderStyle}"
+                                    Visibility="{Binding HasSearchSummary, Converter={StaticResource BoolToVisConverter}}">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold"
+                                               Text="{Binding SearchSummaryHeaderText}"
+                                               Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Text="{Binding SearchSummary}"
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource MutedTextStyle}" />
+                                </StackPanel>
+                            </Border>
+
+                            <ListBox Grid.Row="1" Style="{StaticResource ThemedListBoxStyle}" ItemsSource="{Binding SearchResults}" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
+                                            <Border.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="{Binding PinButtonText}" Command="{Binding PinCommand}" />
+                                                    <MenuItem Header="{Binding CopyMenuText}" Command="{Binding CopyCommand}" />
+                                                    <MenuItem Header="{Binding AppendToHandoffMenuText}" Command="{Binding AppendToHandoffCommand}" />
+                                                    <Separator />
+                                                    <MenuItem Header="{Binding OpenInBrowserMenuText}" Command="{Binding OpenCommand}" />
+                                                </ContextMenu>
+                                            </Border.ContextMenu>
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <DockPanel Grid.Row="0">
+                                                    <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                                                        <TextBlock Text="{Binding SourceIcon}" Margin="0,0,4,0" Style="{StaticResource MutedTextStyle}" />
+                                                        <TextBlock Text="{Binding SourceLabel}" Style="{StaticResource MutedTextStyle}" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                                <TextBlock Grid.Row="1" Margin="0,4,0,0" Text="{Binding Snippet}" TextWrapping="Wrap" />
+                                                <StackPanel Grid.Row="2" Margin="0,6,0,0" Orientation="Horizontal">
+                                                    <TextBlock Margin="0,0,12,0" Text="{Binding Timestamp}" Style="{StaticResource MutedTextStyle}" />
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding PinButtonText}" Command="{Binding PinCommand}" />
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Padding="8,2" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}" />
                                                 </StackPanel>
-                                            </DockPanel>
-                                            <TextBlock Grid.Row="1" Margin="0,4,0,0" Text="{Binding Snippet}" TextWrapping="Wrap" />
-                                            <StackPanel Grid.Row="2" Margin="0,6,0,0" Orientation="Horizontal">
-                                                <TextBlock Margin="0,0,12,0" Text="{Binding Timestamp}" Style="{StaticResource MutedTextStyle}" />
-                                                <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding PinButtonText}" Command="{Binding PinCommand}" />
-                                                <Button Style="{StaticResource ThemedButtonStyle}" Padding="8,2" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
                     </TabItem>
 
                     <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding SnippetsHeaderText}">

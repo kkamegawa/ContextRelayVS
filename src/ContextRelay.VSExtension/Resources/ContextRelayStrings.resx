@@ -25,11 +25,13 @@
   <data name="DebugLogOpenedStatus" xml:space="preserve"><value>Opened ContextRelay Debug output.</value></data>
   <data name="SearchButtonText" xml:space="preserve"><value>Send</value></data>
   <data name="SearchResultsHeaderText" xml:space="preserve"><value>Search results</value></data>
+  <data name="SearchSummaryHeaderText" xml:space="preserve"><value>Latest search summary</value></data>
   <data name="WindowTitleText" xml:space="preserve"><value>ContextRelay</value></data>
   <data name="SnippetsHeaderText" xml:space="preserve"><value>Pinned snippets</value></data>
   <data name="ChatHistoryHeaderText" xml:space="preserve"><value>Shared chat history</value></data>
   <data name="SearchToolTip" xml:space="preserve"><value>Type plain text to chat with Copilot, or use /mail /teams /sharepoint /onedrive /onenote /task /connectors /all /ask /workiq /clear</value></data>
   <data name="CommandPopupHeaderText" xml:space="preserve"><value>Slash commands</value></data>
+  <data name="FileMentionPopupHeaderText" xml:space="preserve"><value>File mentions</value></data>
   <data name="PinButtonText" xml:space="preserve"><value>Pin</value></data>
   <data name="OpenButtonText" xml:space="preserve"><value>Open</value></data>
   <data name="DeleteButtonText" xml:space="preserve"><value>Delete</value></data>
@@ -102,7 +104,8 @@
   <data name="HelpFor_onenote" xml:space="preserve"><value>Example: /onenote architecture decision log&#10;Example: /onenote section notebook architecture</value></data>
   <data name="HelpFor_task" xml:space="preserve"><value>Example: /task release checklist&#10;Example: /task metadata comments onboarding</value></data>
   <data name="HelpFor_connectors" xml:space="preserve"><value>Example: /connectors incident tracker&#10;Example: /connectors external knowledge base</value></data>
-  <data name="HelpFor_all" xml:space="preserve"><value>Example: /all architecture decisions&#10;Plain text without a slash command starts or continues Microsoft 365 Copilot chat.</value></data>
+  <data name="HelpFor_all" xml:space="preserve"><value>Example: /all architecture decisions&#10;Example: /mail /onedrive architecture decisions&#10;Plain text without a slash command starts or continues Microsoft 365 Copilot chat.</value></data>
+  <data name="HelpFor_scopedSources_Format" xml:space="preserve"><value>Example: {0} architecture decisions&#10;Example: {1} incident review&#10;Searches only the explicitly requested sources.</value></data>
   <data name="HelpFor_ask" xml:space="preserve"><value>Example: /ask #README.md Summarize this file as a bullet list&#10;Example: /ask Translate the pinned docs to Japanese and format as markdown&#10;Pinned snippets or # file mentions are used as context and the response is shown in the panel.</value></data>
   <data name="HelpFor_workiq" xml:space="preserve"><value>Example: /workiq Summarize my recent emails from Alice&#10;Example: /workiq #docs/plan.md Find related workplace context&#10;Sends a natural language query to the Work IQ Gateway (A2A protocol). # file mentions send bounded local file text only when explicitly enabled.</value></data>
   <data name="HelpFor_clear" xml:space="preserve"><value>Example: /clear&#10;Clears the current chat transcript and discards all pinned snippets.</value></data>

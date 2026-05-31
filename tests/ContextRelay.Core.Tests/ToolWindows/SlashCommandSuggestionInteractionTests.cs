@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
 using System.Reflection;
+using ContextRelay.Core.Models;
+using ContextRelay.Core.Router;
 using Xunit;
 
 namespace ContextRelay.Core.Tests.ToolWindows;
@@ -24,6 +26,28 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.True(result);
         Assert.Equal("/onedrive ", Assert.IsType<string>(parameters[2]));
+    }
+
+    [Fact]
+    public void TryBuildCommittedQuery_WhenCommittedQueryIsProvided_PreservesFullSelectionContext()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
+        var method = suggestionType!.GetMethod("TryBuildCommittedQuery", BindingFlags.Static | BindingFlags.NonPublic);
+        var suggestion = Activator.CreateInstance(suggestionType);
+        var nameProperty = suggestionType.GetProperty("Name");
+        var committedQueryProperty = suggestionType.GetProperty("CommittedQuery");
+        Assert.NotNull(method);
+        Assert.NotNull(nameProperty);
+        Assert.NotNull(committedQueryProperty);
+        nameProperty!.SetValue(suggestion, "/onedrive");
+        committedQueryProperty!.SetValue(suggestion, "/mail /onedrive ");
+        var parameters = new object?[] { true, suggestion, null };
+
+        var result = (bool)method!.Invoke(obj: null, parameters)!;
+
+        Assert.True(result);
+        Assert.Equal("/mail /onedrive ", Assert.IsType<string>(parameters[2]));
     }
 
     [Fact]
@@ -91,6 +115,120 @@ public sealed class SlashCommandSuggestionInteractionTests
         var result = (int)method!.Invoke(obj: null, new object[] { totalCount, selectedIndex, currentWindowStart, maxVisibleCount })!;
 
         Assert.Equal(expectedStart, result);
+    }
+
+    [Fact]
+    public void LocalizedStrings_GetCommandSuggestions_SupportsCombinableCommands()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var stringsType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true);
+        var method = stringsType!.GetMethod("GetCommandSuggestions", BindingFlags.Static | BindingFlags.Public);
+        stringsType.GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)?.Invoke(obj: null, parameters: new object?[] { "en" });
+        Assert.NotNull(method);
+
+        var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method!.Invoke(obj: null, parameters: new object?[] { "/mail /on" }));
+        var enumerator = suggestions.GetEnumerator();
+        Assert.True(enumerator.MoveNext());
+        var firstSuggestion = enumerator.Current!;
+
+        Assert.Equal("/onedrive", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("Name")!.GetValue(firstSuggestion)));
+        Assert.Equal("/mail /onedrive ", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("CommittedQuery")!.GetValue(firstSuggestion)));
+    }
+
+    [Fact]
+    public void BuildComposerSuggestions_WhenHashMentionIsTyped_ReturnsFileSuggestions()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+        var method = viewModelType!.GetMethod("BuildComposerSuggestions", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method!.Invoke(obj: null, new object[]
+        {
+            "/ask #docs/pl",
+            new[] { "docs/plan.md", "docs/summary.md" }
+        }));
+        var enumerator = suggestions.GetEnumerator();
+        Assert.True(enumerator.MoveNext());
+        var firstSuggestion = enumerator.Current!;
+
+        Assert.Equal("docs/plan.md", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("Name")!.GetValue(firstSuggestion)));
+        Assert.Equal("/ask #docs/plan.md", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("CommittedQuery")!.GetValue(firstSuggestion)));
+    }
+
+    [Fact]
+    public void EmbeddedXaml_ShowsSearchSummaryPanel()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        using var stream = assembly.GetManifestResourceStream("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowContent.xaml");
+
+        Assert.NotNull(stream);
+
+        using var reader = new StreamReader(stream!);
+        var xaml = reader.ReadToEnd();
+
+        Assert.Contains("Text=\"{Binding SearchSummaryHeaderText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding SearchSummary}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{Binding HasSearchSummary, Converter={StaticResource BoolToVisConverter}}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ContextRelayHost_NormalizeAssistantReplyForDisplay_StripsSingleWrappingFenceForChat()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true);
+        var method = hostType!.GetMethod("NormalizeAssistantReplyForDisplay", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var result = Assert.IsType<string>(method!.Invoke(obj: null, parameters: new object[]
+        {
+            RouteTarget.Chat,
+            "convert to json",
+            "```json\n{\"ok\":true}\n```"
+        }));
+
+        Assert.Equal("{\"ok\":true}", result);
+    }
+
+    [Fact]
+    public void ContextRelayHost_BuildSearchSummary_IncludesRequestedSourcesAndTopItems()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true)!
+            .GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)!
+            .Invoke(obj: null, parameters: new object?[] { "en" });
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true);
+        var method = hostType!.GetMethod("BuildSearchSummary", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var route = new SlashCommandParseResult
+        {
+            Target = RouteTarget.All,
+            Query = "architecture decisions",
+            SourceCommandNames = new[] { "/mail", "/onedrive" },
+            SearchScope = SearchScope.Scoped
+        };
+        var items = new[]
+        {
+            new ContextItem
+            {
+                Source = ContextSource.Mail,
+                Title = "Architecture review",
+                Cache = new ContextItemCacheInfo { Hit = true }
+            },
+            new ContextItem
+            {
+                Source = ContextSource.OneDrive,
+                Title = "Decision log"
+            }
+        };
+
+        var summary = Assert.IsType<string>(method!.Invoke(obj: null, parameters: new object[] { route, items }));
+
+        Assert.Contains("Latest search query: `architecture decisions`", summary, StringComparison.Ordinal);
+        Assert.Contains("Requested sources: Exchange Mail, OneDrive", summary, StringComparison.Ordinal);
+        Assert.Contains("- Exchange Mail: 1 item(s) (cached). Top items: Architecture review.", summary, StringComparison.Ordinal);
+        Assert.Contains("- OneDrive: 1 item(s). Top items: Decision log.", summary, StringComparison.Ordinal);
     }
 
     private static Assembly LoadBuiltExtensionAssembly()
