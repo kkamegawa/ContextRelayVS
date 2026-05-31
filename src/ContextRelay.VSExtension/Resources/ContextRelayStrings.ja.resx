@@ -42,6 +42,11 @@
   <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot チャットは無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
   <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>/ask を使うには先に 1 件以上のスニペットをピン留めするか、#path でローカル ファイルを指定してください。明示したコンテキストが Microsoft 365 Copilot に送信されます。</value></data>
   <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value># ファイル メンションを削除するとプロンプトが空になります。</value></data>
+  <data name="FilePickerWorkspaceUnavailableStatus" xml:space="preserve"><value>ローカル ファイルを追加する前にソリューションまたはワークスペース ファイルを開いてください。</value></data>
+  <data name="FilePickerNoFilesSelectedStatus" xml:space="preserve"><value>ファイルが選択されませんでした。</value></data>
+  <data name="FilePickerNoWorkspaceFilesSelectedStatus" xml:space="preserve"><value>選択したファイルの中に # メンションに使えるワークスペース ファイルはありません。</value></data>
+  <data name="FilePickerAddFilesFailedStatus" xml:space="preserve"><value>選択したファイルを追加できませんでした。詳細は出力ログを確認してください。</value></data>
+  <data name="CreatedFilesFolderSelectionCanceledStatus" xml:space="preserve"><value>保存先フォルダーが選択されなかったため、ContextRelay はファイルを作成しませんでした。</value></data>
   <data name="WorkIqLocalFileContextDisabledStatus" xml:space="preserve"><value>Work IQ のローカル ファイル コンテキストは無効です。/workiq #file でファイル本文を送信するには ContextRelay オプションで "Allow local file context for Work IQ" を有効にしてください。</value></data>
   <data name="FileMentionWorkspaceUnavailableStatus" xml:space="preserve"><value>#file メンションを使う前にソリューションまたはワークスペース ファイルを開いてください。</value></data>
   <data name="ChatAndSnippetsClearedStatus" xml:space="preserve"><value>チャット履歴とスニペットをクリアしました。</value></data>
@@ -85,6 +90,11 @@
   <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>#{0} のファイルは開いているワークスペースの外にあります。</value></data>
   <data name="FileMentionAmbiguousStatus_Format" xml:space="preserve"><value>ファイル パス "#{0}" は複数のワークスペース ルートにまたがってあいまいです。固有のパスを指定してください。</value></data>
   <data name="FileMentionUnsupportedFileTypeStatus_Format" xml:space="preserve"><value>#{0} は未対応のファイル形式です。Copilot がサポートする拡張子のみ使用できます。</value></data>
+  <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>{0} 件のファイル メンションをクエリに追加しました。</value></data>
+  <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>{0} 件のファイル メンションを追加し、{1} 件のファイルは重複、ワークスペース範囲外、または上限超過のためスキップしました。</value></data>
+  <data name="AddFilesDialogTitle" xml:space="preserve"><value>コンテキストとして追加するファイルを選択</value></data>
+  <data name="AddFilesDialogFilter" xml:space="preserve"><value>すべてのファイル (*.*)|*.*</value></data>
+  <data name="CreatedFilesFolderDialogTitle" xml:space="preserve"><value>ContextRelay が作成するファイルの保存先フォルダーを選択</value></data>
   <data name="HelpFor_mail" xml:space="preserve"><value>例: /mail from:alice subject:budget&#10;例: /mail incident review</value></data>
   <data name="HelpFor_teams" xml:space="preserve"><value>例: /teams sprint review&#10;例: /teams from:bob mentions:me</value></data>
   <data name="HelpFor_sharepoint" xml:space="preserve"><value>例: /sharepoint VPN setup guide&#10;例: /sharepoint architecture</value></data>
