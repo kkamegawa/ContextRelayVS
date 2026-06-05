@@ -10,8 +10,10 @@ internal interface IContextRelayPackageServices
     Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetWorkspaceRootsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> PickWorkspaceFilesAsync(string? initialDirectory, CancellationToken cancellationToken = default);
+    Task<string?> PickWorkspaceFolderAsync(string? initialDirectory, CancellationToken cancellationToken = default);
     Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetWorkspaceFilesAsync(CancellationToken cancellationToken = default);
+    Task<int> TryAddFilesToSolutionAsync(IReadOnlyList<string> filePaths, CancellationToken cancellationToken = default);
     Task OpenDocumentAsync(string filePath, CancellationToken cancellationToken = default);
     Task<bool> AppendToActiveDocumentAsync(string text, CancellationToken cancellationToken = default);
     Task<bool> ReplaceActiveDocumentAsync(string text, CancellationToken cancellationToken = default);

@@ -8,6 +8,7 @@ using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Shell.FileDialog;
+using Microsoft.VisualStudio.ProjectSystem.Query;
 
 namespace ContextRelay.VSExtension.Services;
 
@@ -82,6 +83,17 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         return selectedFiles;
     }
 
+    public async Task<string?> PickWorkspaceFolderAsync(string? initialDirectory, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var selectedFolder = await extensibility.Shell()
+            .ShowOpenFolderDialogAsync(CreateFolderDialogOptions(initialDirectory), cancellationToken)
+            .ConfigureAwait(false);
+        RememberWorkspaceRoot(selectedFolder);
+        return selectedFolder;
+    }
+
     private static FileDialogOptions CreateFileDialogOptions(string? initialDirectory)
     {
         var initialDirectoryValue = !string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory)
@@ -108,6 +120,19 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
             : new[] { "*.*" };
 
         return new DialogFilters(new DialogFilter(displayValue, filters));
+    }
+
+    private static FolderDialogOptions CreateFolderDialogOptions(string? initialDirectory)
+    {
+        var initialDirectoryValue = !string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory)
+            ? initialDirectory
+            : string.Empty;
+
+        return new FolderDialogOptions
+        {
+            Title = ContextRelayLocalizedStrings.CreatedFilesFolderDialogTitle,
+            InitialDirectory = initialDirectoryValue
+        };
     }
 
     public async Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)
@@ -143,6 +168,45 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         }
 
         return files;
+    }
+
+    public async Task<int> TryAddFilesToSolutionAsync(IReadOnlyList<string> filePaths, CancellationToken cancellationToken = default)
+    {
+        if (filePaths.Count == 0)
+        {
+            return 0;
+        }
+
+        var normalizedPaths = filePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedPaths.Length == 0)
+        {
+            return 0;
+        }
+
+        try
+        {
+            await extensibility.Workspaces()
+                .UpdateSolutionAsync(
+                    solutions => solutions,
+                    solutions => solutions.AddFiles(normalizedPaths),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return normalizedPaths.Length;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // Best effort — swallow non-cancellation failures
+            return 0;
+        }
     }
 
     public async Task OpenDocumentAsync(string filePath, CancellationToken cancellationToken = default)
@@ -349,6 +413,23 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         catch
         {
             return true;
+        }
+    }
+
+    private void RememberWorkspaceRoot(string? rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+        {
+            return;
+        }
+
+        var normalizedRoot = Path.GetFullPath(rootPath);
+        lock (selectedWorkspaceRootsGate)
+        {
+            selectedWorkspaceRoots = selectedWorkspaceRoots
+                .Concat(new[] { normalizedRoot })
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
     }
 

@@ -51,7 +51,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ClearSnippetsCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearSnippetsAsync(ct)).ConfigureAwait(false));
         ClearCacheCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearCacheAsync(ct)).ConfigureAwait(false));
         AddFilesCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.AddFilesToQueryAsync(ct)).ConfigureAwait(false));
-        ShowDebugLogCommand = new AsyncCommand(async (_, ct) => await host.ShowDebugLogAsync(ct).ConfigureAwait(false));
         MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
@@ -72,7 +71,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public string ClearChatButtonText { get; private set; } = string.Empty;
     [DataMember] public string ClearSnippetsButtonText { get; private set; } = string.Empty;
     [DataMember] public string ClearCacheButtonText { get; private set; } = string.Empty;
-    [DataMember] public string DebugLogButtonText { get; private set; } = string.Empty;
     [DataMember] public string SearchButtonText { get; private set; } = string.Empty;
     [DataMember] public string SearchResultsHeaderText { get; private set; } = string.Empty;
     [DataMember] public string SearchSummaryHeaderText { get; private set; } = string.Empty;
@@ -106,7 +104,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand ClearSnippetsCommand { get; }
     [DataMember] public AsyncCommand ClearCacheCommand { get; }
     [DataMember] public AsyncCommand AddFilesCommand { get; }
-    [DataMember] public AsyncCommand ShowDebugLogCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionDownCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
@@ -521,8 +518,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(ClearSnippetsButtonText));
         ClearCacheButtonText = ContextRelayLocalizedStrings.ClearCacheButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(ClearCacheButtonText));
-        DebugLogButtonText = ContextRelayLocalizedStrings.DebugLogButtonText;
-        RaiseNotifyPropertyChangedEvent(nameof(DebugLogButtonText));
         SearchButtonText = ContextRelayLocalizedStrings.SearchButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchButtonText));
         SearchResultsHeaderText = ContextRelayLocalizedStrings.SearchResultsHeaderText;

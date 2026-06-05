@@ -126,7 +126,6 @@
                     <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding CopyPromptButtonText}" Command="{Binding CopyPromptCommand}" IsEnabled="{Binding IsNotBusy}" />
                     <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding OpenHandoffButtonText}" Command="{Binding OpenHandoffCommand}" IsEnabled="{Binding IsNotBusy}" />
                     <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding OpenCopilotButtonText}" Command="{Binding OpenCopilotCommand}" IsEnabled="{Binding IsNotBusy}" />
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding DebugLogButtonText}" Command="{Binding ShowDebugLogCommand}" />
                     <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding ClearChatButtonText}" Command="{Binding ClearChatCommand}" IsEnabled="{Binding IsNotBusy}" />
                     <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding ClearSnippetsButtonText}" Command="{Binding ClearSnippetsCommand}" IsEnabled="{Binding IsNotBusy}" />
                     <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,0,6" Padding="10,4" Content="{Binding ClearCacheButtonText}" Command="{Binding ClearCacheCommand}" IsEnabled="{Binding IsNotBusy}" />
