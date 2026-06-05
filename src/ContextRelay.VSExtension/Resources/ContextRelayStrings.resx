@@ -95,6 +95,14 @@
   <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>File #{0} is outside the opened workspace.</value></data>
   <data name="FileMentionAmbiguousStatus_Format" xml:space="preserve"><value>File path "#{0}" is ambiguous across workspace roots. Use a unique path.</value></data>
   <data name="FileMentionUnsupportedFileTypeStatus_Format" xml:space="preserve"><value>Unsupported file type for #{0}. Only Copilot-supported file extensions are allowed.</value></data>
+  <data name="SearchSummaryLatestQuery_Format" xml:space="preserve"><value>Latest search query: `{0}`</value></data>
+  <data name="SearchSummaryRequestedSources_Format" xml:space="preserve"><value>Requested sources: {0}</value></data>
+  <data name="SearchSummaryNoResultsBullet" xml:space="preserve"><value>- No sources returned results.</value></data>
+  <data name="SearchSummaryTotalResults_Format" xml:space="preserve"><value>Total results: {0}</value></data>
+  <data name="SearchSummaryUntitled" xml:space="preserve"><value>Untitled</value></data>
+  <data name="SearchSummaryCachedSuffix" xml:space="preserve"><value> (cached)</value></data>
+  <data name="SearchSummaryTopItems_Format" xml:space="preserve"><value> Top items: {0}.</value></data>
+  <data name="SearchSummarySourceLine_Format" xml:space="preserve"><value>- {0}: {1} item(s){2}.{3}</value></data>
   <data name="AddFilesDialogTitle" xml:space="preserve"><value>Select files to add as context</value></data>
   <data name="AddFilesDialogFilter" xml:space="preserve"><value>All files (*.*)|*.*</value></data>
   <data name="HelpFor_mail" xml:space="preserve"><value>Example: /mail from:alice subject:budget&#10;Example: /mail incident review</value></data>

@@ -87,6 +87,14 @@
   <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>#{0} のファイルは開いているワークスペースの外にあります。</value></data>
   <data name="FileMentionAmbiguousStatus_Format" xml:space="preserve"><value>ファイル パス "#{0}" は複数のワークスペース ルートにまたがってあいまいです。固有のパスを指定してください。</value></data>
   <data name="FileMentionUnsupportedFileTypeStatus_Format" xml:space="preserve"><value>#{0} は未対応のファイル形式です。Copilot がサポートする拡張子のみ使用できます。</value></data>
+  <data name="SearchSummaryLatestQuery_Format" xml:space="preserve"><value>最新の検索クエリ: `{0}`</value></data>
+  <data name="SearchSummaryRequestedSources_Format" xml:space="preserve"><value>要求されたソース: {0}</value></data>
+  <data name="SearchSummaryNoResultsBullet" xml:space="preserve"><value>- いずれのソースからも結果は返されませんでした。</value></data>
+  <data name="SearchSummaryTotalResults_Format" xml:space="preserve"><value>合計結果数: {0}</value></data>
+  <data name="SearchSummaryUntitled" xml:space="preserve"><value>無題</value></data>
+  <data name="SearchSummaryCachedSuffix" xml:space="preserve"><value> （キャッシュ）</value></data>
+  <data name="SearchSummaryTopItems_Format" xml:space="preserve"><value> 上位項目: {0}。</value></data>
+  <data name="SearchSummarySourceLine_Format" xml:space="preserve"><value>- {0}: {1} 件{2}。{3}</value></data>
   <data name="HelpFor_mail" xml:space="preserve"><value>例: /mail from:alice subject:budget&#10;例: /mail incident review</value></data>
   <data name="HelpFor_teams" xml:space="preserve"><value>例: /teams sprint review&#10;例: /teams from:bob mentions:me</value></data>
   <data name="HelpFor_sharepoint" xml:space="preserve"><value>例: /sharepoint VPN setup guide&#10;例: /sharepoint architecture</value></data>

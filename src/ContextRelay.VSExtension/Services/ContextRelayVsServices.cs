@@ -16,7 +16,10 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     private readonly VisualStudioExtensibility extensibility;
     private readonly ContextRelaySettingsService settingsService;
     private readonly object selectedWorkspaceRootsGate = new();
+    private readonly object workspaceFileCacheGate = new();
     private string[] selectedWorkspaceRoots = Array.Empty<string>();
+    private string[] cachedWorkspaceFileRoots = Array.Empty<string>();
+    private string[] cachedWorkspaceFiles = Array.Empty<string>();
 
     public ContextRelayVsServices(VisualStudioExtensibility extensibility, ContextRelaySettingsService settingsService)
     {
@@ -116,7 +119,30 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     public async Task<IReadOnlyList<string>> GetWorkspaceFilesAsync(CancellationToken cancellationToken = default)
     {
         var workspaceRoots = await GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
-        return EnumerateWorkspaceFiles(workspaceRoots, cancellationToken);
+        var normalizedRoots = workspaceRoots
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        lock (workspaceFileCacheGate)
+        {
+            if (normalizedRoots.SequenceEqual(cachedWorkspaceFileRoots, StringComparer.OrdinalIgnoreCase))
+            {
+                return cachedWorkspaceFiles;
+            }
+        }
+
+        var files = EnumerateWorkspaceFiles(normalizedRoots, cancellationToken).ToArray();
+
+        lock (workspaceFileCacheGate)
+        {
+            cachedWorkspaceFileRoots = normalizedRoots;
+            cachedWorkspaceFiles = files;
+        }
+
+        return files;
     }
 
     public async Task OpenDocumentAsync(string filePath, CancellationToken cancellationToken = default)
@@ -280,7 +306,7 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
 
             foreach (var subDirectory in subDirectories)
             {
-                if (ShouldSkipDirectory(subDirectory))
+                if (ShouldSkipDirectory(subDirectory) || IsReparsePoint(subDirectory))
                 {
                     continue;
                 }
@@ -312,6 +338,18 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
             directoryName.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
             directoryName.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
             directoryName.Equals("node_modules", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsReparsePoint(string directoryPath)
+    {
+        try
+        {
+            return (File.GetAttributes(directoryPath) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
 }

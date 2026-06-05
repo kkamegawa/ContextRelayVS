@@ -88,6 +88,7 @@ public sealed class SlashCommandRouterTests
         var result = SlashCommandRouter.Parse("/unknown test value");
 
         Assert.Equal(RouteTarget.All, result.Target);
+        Assert.Equal("/all", result.SlashCommandName);
         Assert.Equal("/unknown test value", result.Query);
         Assert.False(result.IsEmpty);
         Assert.Equal(SearchScope.All, result.SearchScope);

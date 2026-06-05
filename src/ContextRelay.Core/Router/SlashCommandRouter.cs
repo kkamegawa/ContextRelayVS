@@ -267,6 +267,7 @@ public static class SlashCommandRouter
         return new SlashCommandParseResult
         {
             Target = RouteTarget.All,
+            SlashCommandName = "/all",
             Query = normalized,
             IsEmpty = normalized.Length == 0,
             TargetSources = SearchAllSources,

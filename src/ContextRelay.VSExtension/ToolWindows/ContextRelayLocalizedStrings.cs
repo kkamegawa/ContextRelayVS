@@ -180,6 +180,27 @@ internal static class ContextRelayLocalizedStrings
     public static string GetFileMentionUnsupportedFileTypeStatus(string rawPath) =>
         Format("FileMentionUnsupportedFileTypeStatus_Format", rawPath);
 
+    public static string GetSearchSummaryLatestQuery(string query) =>
+        Format("SearchSummaryLatestQuery_Format", query);
+
+    public static string GetSearchSummaryRequestedSources(string requestedSources) =>
+        Format("SearchSummaryRequestedSources_Format", requestedSources);
+
+    public static string GetSearchSummaryNoResultsBullet => GetString("SearchSummaryNoResultsBullet");
+
+    public static string GetSearchSummaryTotalResults(int count) =>
+        Format("SearchSummaryTotalResults_Format", count);
+
+    public static string GetSearchSummaryUntitled => GetString("SearchSummaryUntitled");
+
+    public static string GetSearchSummaryCachedSuffix => GetString("SearchSummaryCachedSuffix");
+
+    public static string GetSearchSummaryTopItems(string titleSummary) =>
+        Format("SearchSummaryTopItems_Format", titleSummary);
+
+    public static string GetSearchSummarySourceLine(string sourceLabel, int count, string cachedSuffix, string topItemsSummary) =>
+        Format("SearchSummarySourceLine_Format", sourceLabel, count, cachedSuffix, topItemsSummary);
+
     public static string GetAskPreviewDocumentTitle(string query, string extension) =>
         string.IsNullOrWhiteSpace(query)
             ? $"ASK_RESPONSE_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.{NormalizeExtension(extension)}"

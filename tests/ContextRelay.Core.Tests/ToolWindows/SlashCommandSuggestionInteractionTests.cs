@@ -231,6 +231,30 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("- OneDrive: 1 item(s). Top items: Decision log.", summary, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ContextRelayHost_BuildSearchSummary_LocalizesBodyWhenUiLanguageIsJapanese()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true)!
+            .GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)!
+            .Invoke(obj: null, parameters: new object?[] { "ja" });
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true);
+        var method = hostType!.GetMethod("BuildSearchSummary", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var route = new SlashCommandParseResult
+        {
+            Target = RouteTarget.All,
+            Query = "設計判断",
+            SearchScope = SearchScope.All
+        };
+
+        var summary = Assert.IsType<string>(method!.Invoke(obj: null, parameters: new object[] { route, System.Array.Empty<ContextItem>() }));
+
+        Assert.Contains("最新の検索クエリ: `設計判断`", summary, StringComparison.Ordinal);
+        Assert.Contains("- いずれのソースからも結果は返されませんでした。", summary, StringComparison.Ordinal);
+    }
+
     private static Assembly LoadBuiltExtensionAssembly()
     {
         var assemblyPath = BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.dll");

@@ -1231,7 +1231,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var lines = new List<string>
         {
-            $"Latest search query: `{route.Query}`",
+            ContextRelayLocalizedStrings.GetSearchSummaryLatestQuery(route.Query),
             string.Empty
         };
 
@@ -1241,28 +1241,36 @@ internal sealed class ContextRelayHost : IDisposable
                 .Select(commandName => commandName.TrimStart('/'))
                 .Select(SourcePresentation.GetSourceLabel)
                 .ToArray();
-            lines.Add($"Requested sources: {string.Join(", ", requestedSources)}");
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryRequestedSources(string.Join(", ", requestedSources)));
             lines.Add(string.Empty);
         }
 
         if (results.Count == 0)
         {
-            lines.Add("- No sources returned results.");
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryNoResultsBullet);
             return string.Join(Environment.NewLine, lines);
         }
 
-        lines.Add($"Total results: {results.Count}");
+        lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryTotalResults(results.Count));
         lines.Add(string.Empty);
 
         foreach (var group in results.GroupBy(item => item.Source.ToString(), StringComparer.OrdinalIgnoreCase))
         {
             var titles = group
                 .Take(3)
-                .Select(item => string.IsNullOrWhiteSpace(item.Title) ? "Untitled" : item.Title)
+                .Select(item => string.IsNullOrWhiteSpace(item.Title) ? ContextRelayLocalizedStrings.GetSearchSummaryUntitled : item.Title)
                 .ToArray();
-            var cacheSummary = group.Any(item => item.Cache?.Hit == true) ? " (cached)" : string.Empty;
-            var titleSummary = titles.Length > 0 ? $" Top items: {string.Join("; ", titles)}." : string.Empty;
-            lines.Add($"- {SourcePresentation.GetSourceLabel(group.Key)}: {group.Count()} item(s){cacheSummary}.{titleSummary}");
+            var cacheSummary = group.Any(item => item.Cache?.Hit == true)
+                ? ContextRelayLocalizedStrings.GetSearchSummaryCachedSuffix
+                : string.Empty;
+            var titleSummary = titles.Length > 0
+                ? ContextRelayLocalizedStrings.GetSearchSummaryTopItems(string.Join("; ", titles))
+                : string.Empty;
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummarySourceLine(
+                SourcePresentation.GetSourceLabel(group.Key),
+                group.Count(),
+                cacheSummary,
+                titleSummary));
         }
 
         return string.Join(Environment.NewLine, lines);

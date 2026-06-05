@@ -680,7 +680,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private static IReadOnlyList<SlashCommandSuggestion> BuildFileMentionSuggestions(string queryText, IReadOnlyList<string> workspaceFiles)
     {
         if (string.IsNullOrWhiteSpace(queryText) ||
-            Regex.IsMatch(queryText, "\\s$", RegexOptions.CultureInvariant))
+            char.IsWhiteSpace(queryText[^1]))
         {
             return Array.Empty<SlashCommandSuggestion>();
         }
