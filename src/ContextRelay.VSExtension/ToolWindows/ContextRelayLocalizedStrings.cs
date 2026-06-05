@@ -79,6 +79,7 @@ internal static class ContextRelayLocalizedStrings
     public static string FilePickerNoFilesSelectedStatus => GetString("FilePickerNoFilesSelectedStatus");
     public static string FilePickerNoWorkspaceFilesSelectedStatus => GetString("FilePickerNoWorkspaceFilesSelectedStatus");
     public static string FilePickerAddFilesFailedStatus => GetString("FilePickerAddFilesFailedStatus");
+    public static string CreatedFilesFolderSelectionCanceledStatus => GetString("CreatedFilesFolderSelectionCanceledStatus");
     public static string WorkIqLocalFileContextDisabledStatus => GetString("WorkIqLocalFileContextDisabledStatus");
     public static string FileMentionWorkspaceUnavailableStatus => GetString("FileMentionWorkspaceUnavailableStatus");
     public static string ChatAndSnippetsClearedStatus => GetString("ChatAndSnippetsClearedStatus");
@@ -120,6 +121,7 @@ internal static class ContextRelayLocalizedStrings
     public static string TypeQueryStatus => GenericHelpText;
     public static string AddFilesDialogTitle => GetString("AddFilesDialogTitle");
     public static string AddFilesDialogFilter => GetString("AddFilesDialogFilter");
+    public static string CreatedFilesFolderDialogTitle => GetString("CreatedFilesFolderDialogTitle");
 
     public static bool IsReadyStatus(string? statusMessage)
     {
