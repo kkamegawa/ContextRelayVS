@@ -108,29 +108,12 @@
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Style="{StaticResource SurfaceBorderStyle}" Padding="10" Margin="0,0,0,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0">
-                    <TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding WindowTitleText}" Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
-                    <TextBlock Margin="0,3,0,0" Text="{Binding SignedInUserText}" Style="{StaticResource MutedTextStyle}" />
-                    <TextBlock Margin="0,3,0,0" Text="{Binding StatusMessage}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
-                    <TextBlock Margin="0,3,0,0" Text="{Binding HelpText}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
-                </StackPanel>
-
-                <WrapPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Top">
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding GenerateHandoffButtonText}" Command="{Binding GenerateHandoffCommand}" IsEnabled="{Binding IsNotBusy}" />
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding CopyPromptButtonText}" Command="{Binding CopyPromptCommand}" IsEnabled="{Binding IsNotBusy}" />
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding OpenHandoffButtonText}" Command="{Binding OpenHandoffCommand}" IsEnabled="{Binding IsNotBusy}" />
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding OpenCopilotButtonText}" Command="{Binding OpenCopilotCommand}" IsEnabled="{Binding IsNotBusy}" />
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding ClearChatButtonText}" Command="{Binding ClearChatCommand}" IsEnabled="{Binding IsNotBusy}" />
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,6,6" Padding="10,4" Content="{Binding ClearSnippetsButtonText}" Command="{Binding ClearSnippetsCommand}" IsEnabled="{Binding IsNotBusy}" />
-                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,0,6" Padding="10,4" Content="{Binding ClearCacheButtonText}" Command="{Binding ClearCacheCommand}" IsEnabled="{Binding IsNotBusy}" />
-                </WrapPanel>
-            </Grid>
+            <StackPanel>
+                <TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding WindowTitleText}" Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+                <TextBlock Margin="0,3,0,0" Text="{Binding SignedInUserText}" Style="{StaticResource MutedTextStyle}" />
+                <TextBlock Margin="0,3,0,0" Text="{Binding StatusMessage}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+                <TextBlock Margin="0,3,0,0" Text="{Binding HelpText}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
+            </StackPanel>
         </Border>
 
         <Grid Grid.Row="1">
