@@ -323,7 +323,8 @@ internal sealed class ContextRelayHost : IDisposable
                     throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
                 }
 
-                await AppendChatHistoryAsync(filePrompt.Prompt, reply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+                var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Ask, filePrompt.Prompt, reply);
+                await AppendChatHistoryAsync(filePrompt.Prompt, normalizedReply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 return await RefreshStateCoreAsync(
                     filePrompt.Files.Count == 0
@@ -984,7 +985,8 @@ internal sealed class ContextRelayHost : IDisposable
             throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
         }
 
-        await AppendChatHistoryAsync(message, reply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+        var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Chat, message, reply);
+        await AppendChatHistoryAsync(message, normalizedReply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handled plain chat with Microsoft 365 Copilot.");
         return await RefreshStateCoreAsync(
             contextPayload.Labels.Count == 0
@@ -1160,6 +1162,7 @@ internal sealed class ContextRelayHost : IDisposable
         var chatHistory = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
+        var workspaceFiles = await packageServices.GetWorkspaceFilesAsync(cancellationToken).ConfigureAwait(false);
         var handoffIndex = await sharedStore.GetHandoffIndexAsync(cancellationToken).ConfigureAwait(false);
         var effectiveQueryText = GetDraftQueryText();
 
@@ -1179,7 +1182,9 @@ internal sealed class ContextRelayHost : IDisposable
             LastHandoffPath = ResolveHandoffPath(workspaceRoot, handoffIndex),
             SearchResults = currentSearchResults,
             Snippets = snippets,
-            ChatHistory = chatHistory
+            ChatHistory = chatHistory,
+            SearchSummary = lastSearchSummary ?? string.Empty,
+            WorkspaceFiles = workspaceFiles
         };
 
         StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state));
@@ -1231,12 +1236,23 @@ internal sealed class ContextRelayHost : IDisposable
             }
         }
 
-        if (route.Target == RouteTarget.All && settings.ConnectorsEnabled)
+        if (route.SearchScope == SearchScope.All && settings.ConnectorsEnabled)
         {
             sources.Add(ContextSource.Connectors);
         }
 
         return sources;
+    }
+
+    private static string NormalizeAssistantReplyForDisplay(RouteTarget routeTarget, string prompt, string reply)
+    {
+        if (routeTarget is not (RouteTarget.Chat or RouteTarget.Ask))
+        {
+            return reply.Trim();
+        }
+
+        var previewDocument = AskPreviewLanguageDetector.Detect(prompt, reply);
+        return previewDocument.Content.Trim();
     }
 
     private static bool IsEnabled(ContextSource source, ContextRelaySettingsSnapshot settings)
@@ -1257,12 +1273,51 @@ internal sealed class ContextRelayHost : IDisposable
 
     private static string BuildSearchSummary(SlashCommandParseResult route, IReadOnlyList<ContextItem> results)
     {
-        if (results.Count == 0)
+        var lines = new List<string>
         {
-            return $"No results found for '{route.Query}'.";
+            ContextRelayLocalizedStrings.GetSearchSummaryLatestQuery(route.Query),
+            string.Empty
+        };
+
+        if (route.SourceCommandNames.Count > 0)
+        {
+            var requestedSources = route.SourceCommandNames
+                .Select(commandName => commandName.TrimStart('/'))
+                .Select(SourcePresentation.GetSourceLabel)
+                .ToArray();
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryRequestedSources(string.Join(", ", requestedSources)));
+            lines.Add(string.Empty);
         }
 
-        return $"Query '{route.Query}' returned {results.Count} result(s): {string.Join(", ", results.Take(5).Select(item => item.Title))}.";
+        if (results.Count == 0)
+        {
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryNoResultsBullet);
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryTotalResults(results.Count));
+        lines.Add(string.Empty);
+
+        foreach (var group in results.GroupBy(item => item.Source.ToString(), StringComparer.OrdinalIgnoreCase))
+        {
+            var titles = group
+                .Take(3)
+                .Select(item => string.IsNullOrWhiteSpace(item.Title) ? ContextRelayLocalizedStrings.GetSearchSummaryUntitled : item.Title)
+                .ToArray();
+            var cacheSummary = group.Any(item => item.Cache?.Hit == true)
+                ? ContextRelayLocalizedStrings.GetSearchSummaryCachedSuffix
+                : string.Empty;
+            var titleSummary = titles.Length > 0
+                ? ContextRelayLocalizedStrings.GetSearchSummaryTopItems(string.Join("; ", titles))
+                : string.Empty;
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummarySourceLine(
+                SourcePresentation.GetSourceLabel(group.Key),
+                group.Count(),
+                cacheSummary,
+                titleSummary));
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static string BuildHandoffPrompt(string handoffPath)

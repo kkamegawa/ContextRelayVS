@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Models;
@@ -23,12 +24,14 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private string helpText = ContextRelayLocalizedStrings.GenericHelpText;
     private string statusMessage = ContextRelayLocalizedStrings.ReadyStatus;
     private string signedInUserText = ContextRelayLocalizedStrings.SignedOutText;
+    private string searchSummary = string.Empty;
     private IReadOnlyList<ContextItemViewModel> searchResults = Array.Empty<ContextItemViewModel>();
     private IReadOnlyList<SnippetItemViewModel> snippets = Array.Empty<SnippetItemViewModel>();
     private IReadOnlyList<ChatHistoryItemViewModel> chatHistory = Array.Empty<ChatHistoryItemViewModel>();
     private IReadOnlyList<SlashCommandSuggestion> commandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private IReadOnlyList<SlashCommandSuggestion> visibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private SlashCommandSuggestion? selectedCommandSuggestion;
+    private IReadOnlyList<string> workspaceFiles = Array.Empty<string>();
     private bool isApplyingState;
     private string windowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
 
@@ -70,6 +73,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public string ClearCacheButtonText { get; private set; } = string.Empty;
     [DataMember] public string SearchButtonText { get; private set; } = string.Empty;
     [DataMember] public string SearchResultsHeaderText { get; private set; } = string.Empty;
+    [DataMember] public string SearchSummaryHeaderText { get; private set; } = string.Empty;
     [DataMember] public string SnippetsHeaderText { get; private set; } = string.Empty;
     [DataMember] public string ChatHistoryHeaderText { get; private set; } = string.Empty;
     [DataMember] public string SearchToolTipText { get; private set; } = string.Empty;
@@ -176,6 +180,24 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             }
         }
     }
+
+    [DataMember]
+    public string SearchSummary
+    {
+        get => searchSummary;
+        private set
+        {
+            if (searchSummary != value)
+            {
+                searchSummary = value;
+                RaiseNotifyPropertyChangedEvent(nameof(SearchSummary));
+                RaiseNotifyPropertyChangedEvent(nameof(HasSearchSummary));
+            }
+        }
+    }
+
+    [DataMember]
+    public bool HasSearchSummary => !string.IsNullOrWhiteSpace(SearchSummary);
 
     [DataMember]
     public bool IsCommandPopupOpen
@@ -348,9 +370,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             SignedInUserText = string.IsNullOrWhiteSpace(state.SignedInUser)
                 ? ContextRelayLocalizedStrings.SignedOutText
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
+            SearchSummary = state.SearchSummary;
             SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
             ChatHistory = state.ChatHistory.Select(item => new ChatHistoryItemViewModel(item, this)).ToArray();
+            workspaceFiles = state.WorkspaceFiles;
             if (queryChanged)
             {
                 CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
@@ -456,7 +480,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private void UpdateCommandSuggestions()
     {
-        var suggestions = ContextRelayLocalizedStrings.GetCommandSuggestions(QueryText);
+        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles);
         CommandSuggestions = suggestions
             .Select(CreateInteractiveSuggestion)
             .ToArray();
@@ -464,6 +488,10 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         SelectedCommandSuggestion = commandSuggestions.Count > 0 ? commandSuggestions[0] : null;
         UpdateVisibleCommandSuggestions();
         IsCommandPopupOpen = commandSuggestions.Count > 0;
+        CommandPopupHeaderText = commandSuggestions.Count > 0 && IsFileMentionSuggestion(commandSuggestions[0])
+            ? ContextRelayLocalizedStrings.FileMentionPopupHeaderText
+            : ContextRelayLocalizedStrings.CommandPopupHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
         host.LogUiDiagnostic($"UpdateCommandSuggestions updated count={commandSuggestions.Count} popupOpen={IsCommandPopupOpen}");
     }
 
@@ -494,6 +522,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(SearchButtonText));
         SearchResultsHeaderText = ContextRelayLocalizedStrings.SearchResultsHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchResultsHeaderText));
+        SearchSummaryHeaderText = ContextRelayLocalizedStrings.SearchSummaryHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(SearchSummaryHeaderText));
         SnippetsHeaderText = ContextRelayLocalizedStrings.SnippetsHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(SnippetsHeaderText));
         ChatHistoryHeaderText = ContextRelayLocalizedStrings.ChatHistoryHeaderText;
@@ -569,7 +599,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             Icon = suggestion.Icon,
             Name = suggestion.Name,
-            Description = suggestion.Description
+            Description = suggestion.Description,
+            CommittedQuery = suggestion.CommittedQuery
         };
 
         interactiveSuggestion.ApplyCommand = new AsyncCommand((_, _) =>
@@ -631,5 +662,69 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             previousQuery.StartsWith("/", StringComparison.Ordinal) ||
             currentQuery.IndexOf('#') >= 0 ||
             previousQuery.IndexOf('#') >= 0;
+    }
+
+    private static IReadOnlyList<SlashCommandSuggestion> BuildComposerSuggestions(string queryText, IReadOnlyList<string> workspaceFiles)
+    {
+        var fileSuggestions = BuildFileMentionSuggestions(queryText, workspaceFiles);
+        return fileSuggestions.Count > 0
+            ? fileSuggestions
+            : ContextRelayLocalizedStrings.GetCommandSuggestions(queryText);
+    }
+
+    private static IReadOnlyList<SlashCommandSuggestion> BuildFileMentionSuggestions(string queryText, IReadOnlyList<string> workspaceFiles)
+    {
+        if (string.IsNullOrWhiteSpace(queryText) ||
+            char.IsWhiteSpace(queryText[^1]))
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var match = Regex.Match(queryText, "(^|\\s)(#(?:\"[^\"]*\"|'[^']*'|[^\\s#]*))$", RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var token = match.Groups[2].Value;
+        if (!token.StartsWith("#", StringComparison.Ordinal))
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var tokenStart = match.Index + match.Groups[1].Length;
+        var tokenEnd = match.Index + match.Length;
+        var partialPath = token.Substring(1).Trim('"', '\'');
+        var filteredFiles = workspaceFiles
+            .Where(path => path.Contains(partialPath, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .ToArray();
+        if (filteredFiles.Length == 0)
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var suggestions = new List<SlashCommandSuggestion>(filteredFiles.Length);
+        foreach (var file in filteredFiles)
+        {
+            var fileToken = file.IndexOf(' ') >= 0 ? $"#\"{file}\"" : $"#{file}";
+            var prefix = queryText[..tokenStart];
+            var suffix = queryText[tokenEnd..];
+            var separator = suffix.StartsWith(" ", StringComparison.Ordinal) || suffix.Length == 0 ? string.Empty : " ";
+            suggestions.Add(new SlashCommandSuggestion
+            {
+                Icon = "#",
+                Name = file,
+                Description = ContextRelayLocalizedStrings.GetLocalFileContextLabel(file),
+                CommittedQuery = $"{prefix}{fileToken}{separator}{suffix}"
+            });
+        }
+
+        return suggestions;
+    }
+
+    private static bool IsFileMentionSuggestion(SlashCommandSuggestion suggestion)
+    {
+        return string.Equals(suggestion.Icon, "#", StringComparison.Ordinal);
     }
 }

@@ -2,6 +2,13 @@ using System.Collections.Generic;
 
 namespace ContextRelay.Core.Router;
 
+public enum SearchScope
+{
+    All,
+    Scoped,
+    Operation
+}
+
 public sealed class SlashCommandParseResult
 {
     public RouteTarget Target { get; set; }
@@ -13,4 +20,8 @@ public sealed class SlashCommandParseResult
     public string? SlashCommandName { get; set; }
 
     public IReadOnlyList<ContextSource> TargetSources { get; set; } = new ContextSource[0];
+
+    public IReadOnlyList<string> SourceCommandNames { get; set; } = new string[0];
+
+    public SearchScope SearchScope { get; set; } = SearchScope.Operation;
 }

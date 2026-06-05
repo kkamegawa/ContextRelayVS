@@ -12,6 +12,7 @@ internal interface IContextRelayPackageServices
     Task<IReadOnlyList<string>> PickWorkspaceFilesAsync(string? initialDirectory, CancellationToken cancellationToken = default);
     Task<string?> PickWorkspaceFolderAsync(string? initialDirectory, CancellationToken cancellationToken = default);
     Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<string>> GetWorkspaceFilesAsync(CancellationToken cancellationToken = default);
     Task<int> TryAddFilesToSolutionAsync(IReadOnlyList<string> filePaths, CancellationToken cancellationToken = default);
     Task OpenDocumentAsync(string filePath, CancellationToken cancellationToken = default);
     Task<bool> AppendToActiveDocumentAsync(string text, CancellationToken cancellationToken = default);
