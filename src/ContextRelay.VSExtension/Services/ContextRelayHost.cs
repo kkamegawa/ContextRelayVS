@@ -1427,7 +1427,11 @@ internal sealed class ContextRelayHost : IDisposable
         var workspaceRoot = await getSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(workspaceRoot))
         {
-            return new CreatedFileTargetContext(Path.GetFullPath(workspaceRoot), ShouldAddToSolutionExplorer: true, FolderWasSelected: false);
+            var fullRoot = Path.GetFullPath(workspaceRoot);
+            if (Directory.Exists(fullRoot))
+            {
+                return new CreatedFileTargetContext(fullRoot, ShouldAddToSolutionExplorer: true, FolderWasSelected: false);
+            }
         }
 
         var selectedFolder = await pickFolderAsync(initialDirectory, cancellationToken).ConfigureAwait(false);
