@@ -166,9 +166,13 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
                 .ConfigureAwait(false);
             return normalizedPaths.Length;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            // Best effort — propagate cancellation, swallow other failures
+            throw;
+        }
+        catch
+        {
+            // Best effort — swallow non-cancellation failures
             return 0;
         }
     }
