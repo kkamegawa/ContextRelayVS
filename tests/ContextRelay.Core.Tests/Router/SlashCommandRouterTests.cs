@@ -95,6 +95,19 @@ public sealed class SlashCommandRouterTests
         Assert.Equal(7, result.TargetSources.Count);
     }
 
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/ ")]
+    public void Parse_BareSlash_RoutesToEmptyChat(string input)
+    {
+        var result = SlashCommandRouter.Parse(input);
+
+        Assert.Equal(RouteTarget.Chat, result.Target);
+        Assert.Equal(string.Empty, result.Query);
+        Assert.True(result.IsEmpty);
+        Assert.Empty(result.TargetSources);
+    }
+
     [Fact]
     public void GetHelpText_ReturnsCommandSpecificExamples()
     {

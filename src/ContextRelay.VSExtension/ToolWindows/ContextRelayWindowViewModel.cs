@@ -694,7 +694,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         var tokenStart = match.Index + match.Groups[1].Length;
         var tokenEnd = match.Index + match.Length;
-        var partialPath = token.Substring(1).TrimStart('"', '\'');
+        var partialPath = token.Substring(1).Trim('"', '\'');
         var filteredFiles = workspaceFiles
             .Where(path => path.Contains(partialPath, StringComparison.OrdinalIgnoreCase))
             .Take(50)

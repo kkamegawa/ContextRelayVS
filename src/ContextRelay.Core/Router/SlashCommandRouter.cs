@@ -92,6 +92,19 @@ public static class SlashCommandRouter
             };
         }
 
+        if (string.Equals(trimmed, "/", StringComparison.Ordinal))
+        {
+            return new SlashCommandParseResult
+            {
+                Target = RouteTarget.Chat,
+                Query = string.Empty,
+                IsEmpty = true,
+                TargetSources = Array.Empty<ContextSource>(),
+                SourceCommandNames = Array.Empty<string>(),
+                SearchScope = SearchScope.Operation
+            };
+        }
+
         var commandEnd = FindCommandEnd(trimmed);
         var command = trimmed.Substring(1, commandEnd - 1);
         var rawQuery = commandEnd >= trimmed.Length ? string.Empty : trimmed.Substring(commandEnd).TrimStart();

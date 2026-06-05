@@ -170,6 +170,27 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void BuildComposerSuggestions_WhenQuotedMentionIsClosed_ReturnsMatchingFileSuggestions()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+        var method = viewModelType!.GetMethod("BuildComposerSuggestions", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method!.Invoke(obj: null, new object[]
+        {
+            "/ask #\"docs/release notes.md\"",
+            new[] { "docs/release notes.md", "docs/summary.md" }
+        }));
+        var enumerator = suggestions.GetEnumerator();
+        Assert.True(enumerator.MoveNext());
+        var firstSuggestion = enumerator.Current!;
+
+        Assert.Equal("docs/release notes.md", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("Name")!.GetValue(firstSuggestion)));
+        Assert.Equal("/ask #\"docs/release notes.md\"", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("CommittedQuery")!.GetValue(firstSuggestion)));
+    }
+
+    [Fact]
     public void EmbeddedXaml_ShowsSearchSummaryPanel()
     {
         var assembly = LoadBuiltExtensionAssembly();
