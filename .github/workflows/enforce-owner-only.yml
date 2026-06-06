@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Evaluate commit authors
         id: evaluate
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const ownerLogin = context.repo.owner.toLowerCase();
@@ -97,7 +97,7 @@ jobs:
             core.setOutput("summary", details);
 
       - name: Publish required status context
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           STATUS_STATE: ${{ steps.evaluate.outputs.state }}
           STATUS_DESCRIPTION: ${{ steps.evaluate.outputs.description }}
