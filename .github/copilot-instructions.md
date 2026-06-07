@@ -1,6 +1,7 @@
 ﻿# Copilot Instructions
 
 ## project guidelines
+- For all Visual Studio extension work, always use and follow `.github/agents/visual-studio-extension.agent.md`.
 - Marketplace Publisher ID is `KazushiKamegawa`; publisher/author display-name metadata for ContextRelay.VSExtension must be `kkamegawa`.
 - All code should be written in English and encoded in UTF-8 with BOM and Windows line endings (CRLF).
 - All code should be well-documented with comments explaining the purpose of functions, classes, and important code blocks.

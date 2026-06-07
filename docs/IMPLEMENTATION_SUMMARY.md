@@ -98,7 +98,8 @@
   - `source.extension.vsixmanifest` with VsPackage asset
   - Installation targets: VS Community/Pro/Enterprise [17.9,)
   - Architectures: amd64, arm64
-  - Publisher: KazushiKamegawa
+  - Publisher/author display name: `kkamegawa`
+  - Marketplace Publisher ID (`vs-publish.json`): `KazushiKamegawa`
 
 #### Phase 7: Build & Validation ✅
 - [x] Full solution builds with 0 errors
