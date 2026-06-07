@@ -356,6 +356,6 @@
     <AssertVsixContents
       VsixPath="$(TargetVsixContainer)"
       RequiredEntries="extension.vsixmanifest;ContextRelay.VSExtension.Package.dll;ContextRelay.VSExtension.Package.pkgdef;Community.VisualStudio.Toolkit.dll"
-      RequiredManifestSubstrings="Microsoft.VisualStudio.VsPackage|ContextRelay.VSExtension.Package.pkgdef|Microsoft.VisualStudio.Assembly|ContextRelay.VSExtension.Package.dll|Community.VisualStudio.Toolkit.dll|Microsoft.VisualStudio.Community|Microsoft.VisualStudio.Pro|Microsoft.VisualStudio.Enterprise|VSSDK+VisualStudio.Extensibility" />
+      RequiredManifestSubstrings="Publisher=&quot;kkamegawa&quot;|Microsoft.VisualStudio.VsPackage|ContextRelay.VSExtension.Package.pkgdef|Microsoft.VisualStudio.Assembly|ContextRelay.VSExtension.Package.dll|Community.VisualStudio.Toolkit.dll|Microsoft.VisualStudio.Community|Microsoft.VisualStudio.Pro|Microsoft.VisualStudio.Enterprise|VSSDK+VisualStudio.Extensibility" />
   </Target>
 </Project>

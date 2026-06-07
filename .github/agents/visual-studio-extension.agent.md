@@ -157,7 +157,7 @@ When producing a solution, include:
 Follow `.github/copilot-instructions.md` for repository-wide expectations, especially:
 
 - publisher name consistency
-- for this repository, keep publisher/author metadata as `KazushiKamegawa` and require Marketplace publisher display name to match exactly before publish
+- for this repository, keep the Marketplace Publisher ID as `KazushiKamegawa`, keep publisher/author display-name metadata as `kkamegawa`, and require the Marketplace publisher display name to match exactly before publish
 - English source code and documentation
 - UTF-8 with BOM and CRLF for code files
 - clear comments for important code paths
