@@ -14,7 +14,8 @@ This repository now includes the repo-side assets needed to package and publish 
 1. Complete the host validation checklist in [e2e_checklist.md](e2e_checklist.md), including `/rootsuffix Exp`.
 2. Review `source.extension.vsixmanifest` metadata and bump the version.
 3. Verify `vs-publish.json` matches the intended Marketplace listing.
-4. Create a Visual Studio Marketplace publisher and generate a PAT for publishing.
+4. Ensure the Visual Studio Marketplace publisher display name is exactly `KazushiKamegawa` (it must match the extension publisher/author metadata used in the VSIX manifests).
+5. Create a Visual Studio Marketplace publisher and generate a PAT for publishing.
 
 ## GitHub Actions usage
 

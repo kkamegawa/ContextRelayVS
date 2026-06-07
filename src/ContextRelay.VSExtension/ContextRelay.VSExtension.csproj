@@ -232,6 +232,30 @@
                     setupManifestText = reader.ReadToEnd();
                 }
 
+                // Guard against Marketplace "Part is not listed in the package manifest"
+                // failures by requiring manifest.json files[] entries for every required payload file.
+                foreach (string requiredFile in entries)
+                {
+                    string fileName = requiredFile.Trim();
+                    if (string.IsNullOrEmpty(fileName))
+                    {
+                        continue;
+                    }
+
+                    string escapedFileName = fileName.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                    string manifestNeedle = "\"fileName\":\"/" + escapedFileName + "\"";
+                    if (setupManifestText.IndexOf(manifestNeedle, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        Log.LogError("manifest.json in produced VSIX is missing files[] entry for: /{0}", fileName);
+                    }
+                }
+
+                System.Text.RegularExpressions.Match manifestIdMatch = System.Text.RegularExpressions.Regex.Match(
+                    manifestText,
+                    "Identity\\s+Id=\"([^\"]+)\"",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                string manifestId = manifestIdMatch.Success ? manifestIdMatch.Groups[1].Value : string.Empty;
+
                 if (System.Text.RegularExpressions.Regex.IsMatch(
                         setupManifestText,
                         "\"version\"\\s*:\\s*\"0\\.0\\.0\\.0\"",
@@ -243,6 +267,30 @@
                 if (setupManifestText.IndexOf("\\\\Common7\\\\IDE\\\\VSExtensions\\\\", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     Log.LogError("manifest.json in produced VSIX still routes extensionDir to VSExtensions; expected Extensions for installer validation.");
+                }
+
+                if (!string.IsNullOrEmpty(manifestId))
+                {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(
+                            setupManifestText,
+                            "\"id\"\\s*:\\s*\"" + System.Text.RegularExpressions.Regex.Escape(manifestId) + "\"",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    {
+                        Log.LogError("manifest.json in produced VSIX has an id that does not match extension.vsixmanifest Identity Id: {0}", manifestId);
+                    }
+
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(
+                            setupManifestText,
+                            "\"vsixId\"\\s*:\\s*\"" + System.Text.RegularExpressions.Regex.Escape(manifestId) + "\"",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    {
+                        Log.LogError("manifest.json in produced VSIX has a vsixId that does not match extension.vsixmanifest Identity Id: {0}", manifestId);
+                    }
+                }
+
+                if (setupManifestText.IndexOf("ContextRelayVS.kkamegawa", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Log.LogError("manifest.json in produced VSIX still contains stale ContextRelayVS.kkamegawa identity text.");
                 }
 
                 ZipArchiveEntry catalogEntry = zip.Entries.FirstOrDefault(en => string.Equals(en.FullName, "catalog.json", StringComparison.OrdinalIgnoreCase));
@@ -267,6 +315,27 @@
                 if (catalogText.IndexOf("\\\\Common7\\\\IDE\\\\VSExtensions\\\\", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     Log.LogError("catalog.json in produced VSIX still routes extensionDir to VSExtensions; expected Extensions for installer validation.");
+                }
+
+                if (!System.Text.RegularExpressions.Regex.IsMatch(
+                        catalogText,
+                        "\"vsixPackage\"\\s*:\\s*\"[^\"]+\\.vsix\"",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    Log.LogError("catalog.json in produced VSIX is missing required vsixPackage mapping for installer validation.");
+                }
+
+                if (!string.IsNullOrEmpty(manifestId))
+                {
+                    if (catalogText.IndexOf(manifestId + ",version=", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        Log.LogError("catalog.json in produced VSIX has a package identity that does not match extension.vsixmanifest Identity Id: {0}", manifestId);
+                    }
+                }
+
+                if (catalogText.IndexOf("ContextRelayVS.kkamegawa", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Log.LogError("catalog.json in produced VSIX still contains stale ContextRelayVS.kkamegawa identity text.");
                 }
             }
         }
