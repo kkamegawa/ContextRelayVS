@@ -20,7 +20,7 @@ internal sealed class ContextRelayExtension : Extension
         Metadata = new(
             // Keep the extension identity stable so Visual Studio upgrades in-place and
             // restores existing tool window frames instead of reporting "tool window not found".
-            id: "ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
+            id: "ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
             version: ExtensionAssemblyVersion,
             publisherName: "KazushiKamegawa",
             displayName: "ContextRelay for Visual Studio",
