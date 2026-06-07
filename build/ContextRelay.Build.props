@@ -599,12 +599,121 @@
                             escapedVsixPackageFileName = System.Text.RegularExpressions.Regex.Escape(vsixPackageFileName);
                         }
 
-                        // Add vsixPackage to package entries where missing.
-                        catalogText = System.Text.RegularExpressions.Regex.Replace(
-                            catalogText,
-                            "\"type\"\\s*:\\s*\"(Component|Vsix)\"\\s*(,)?\\s*(?!\"vsixPackage\"\\s*:)",
-                            "\"type\":\"$1\",\"vsixPackage\":\"" + vsixPackageFileName + "\"$2",
+                        // Add vsixPackage to package entries where missing. Check the
+                        // containing object so an existing key later in the object is not
+                        // duplicated.
+                        bool TryFindContainingObject(string json, int propertyIndex, out int objectStart, out int objectEnd)
+                        {
+                            objectStart = -1;
+                            objectEnd = -1;
+                            var objectStarts = new System.Collections.Generic.Stack<int>();
+                            bool inString = false;
+                            bool escaped = false;
+                            for (int i = 0; i < propertyIndex; i++)
+                            {
+                                char current = json[i];
+                                if (inString)
+                                {
+                                    if (escaped)
+                                    {
+                                        escaped = false;
+                                    }
+                                    else if (current == '\\')
+                                    {
+                                        escaped = true;
+                                    }
+                                    else if (current == '"')
+                                    {
+                                        inString = false;
+                                    }
+                                    continue;
+                                }
+
+                                if (current == '"')
+                                {
+                                    inString = true;
+                                }
+                                else if (current == '{')
+                                {
+                                    objectStarts.Push(i);
+                                }
+                                else if (current == '}' && objectStarts.Count > 0)
+                                {
+                                    objectStarts.Pop();
+                                }
+                            }
+
+                            if (objectStarts.Count == 0)
+                            {
+                                return false;
+                            }
+
+                            objectStart = objectStarts.Peek();
+                            int depth = 0;
+                            inString = false;
+                            escaped = false;
+                            for (int i = objectStart; i < json.Length; i++)
+                            {
+                                char current = json[i];
+                                if (inString)
+                                {
+                                    if (escaped)
+                                    {
+                                        escaped = false;
+                                    }
+                                    else if (current == '\\')
+                                    {
+                                        escaped = true;
+                                    }
+                                    else if (current == '"')
+                                    {
+                                        inString = false;
+                                    }
+                                    continue;
+                                }
+
+                                if (current == '"')
+                                {
+                                    inString = true;
+                                }
+                                else if (current == '{')
+                                {
+                                    depth++;
+                                }
+                                else if (current == '}' && --depth == 0)
+                                {
+                                    objectEnd = i;
+                                    return true;
+                                }
+                            }
+
+                            return false;
+                        }
+
+                        var packageTypeRegex = new System.Text.RegularExpressions.Regex(
+                            "\"type\"\\s*:\\s*\"(Component|Vsix)\"\\s*(,)?",
                             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        catalogText = packageTypeRegex.Replace(
+                            catalogText,
+                            match =>
+                            {
+                                int objectStart;
+                                int objectEnd;
+                                if (TryFindContainingObject(catalogText, match.Index, out objectStart, out objectEnd))
+                                {
+                                    string packageObject = catalogText.Substring(objectStart, objectEnd - objectStart + 1);
+                                    if (System.Text.RegularExpressions.Regex.IsMatch(
+                                            packageObject,
+                                            "\"vsixPackage\"\\s*:",
+                                            System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                                    {
+                                        return match.Value;
+                                    }
+                                }
+
+                                return "\"type\":\"" + match.Groups[1].Value + "\",\"vsixPackage\":\""
+                                    + vsixPackageFileName + "\"" + match.Groups[2].Value;
+                            });
 
                         // Keep info-level value aligned as well for installer compatibility.
                         if (!System.Text.RegularExpressions.Regex.IsMatch(
