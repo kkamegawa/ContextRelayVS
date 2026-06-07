@@ -1,7 +1,7 @@
 ﻿# Copilot Instructions
 
 ## project guidelines
-- publisher name for ContextRelay.VSExtension should be unified as 'KazushiKamegawa'.
+- Marketplace Publisher ID is `KazushiKamegawa`; publisher/author display-name metadata for ContextRelay.VSExtension must be `kkamegawa`.
 - All code should be written in English and encoded in UTF-8 with BOM and Windows line endings (CRLF).
 - All code should be well-documented with comments explaining the purpose of functions, classes, and important code blocks.
 - UI must support internationalization, allowing both English and Japanese languages, with a language toggle button that applies changes instantly without requiring a restart. If a translation is missing, display the text in English as a fallback. If the language toggle fails, display an error message in the current language and log the issue for debugging.

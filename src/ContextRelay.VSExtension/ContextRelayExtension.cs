@@ -22,7 +22,7 @@ internal sealed class ContextRelayExtension : Extension
             // upgrades in-place and restores existing tool window frames.
             id: "ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
             version: ExtensionAssemblyVersion,
-            publisherName: "KazushiKamegawa",
+            publisherName: "kkamegawa",
             displayName: "ContextRelay for Visual Studio",
             description: "Surface Microsoft 365 context in a Visual Studio tool window."),
     };

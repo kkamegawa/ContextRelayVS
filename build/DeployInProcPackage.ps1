@@ -48,7 +48,7 @@ param(
     [string]$ExtensionId = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$PublisherName = "KazushiKamegawa",
+    [string]$PublisherName = "kkamegawa",
 
     [Parameter(Mandatory = $false)]
     [string]$SidecarName = "ContextRelay.Package",

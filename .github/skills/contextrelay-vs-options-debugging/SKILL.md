@@ -314,22 +314,23 @@ If panel initialization depends on those transient tokens, cancellation can occu
 
 ### Why this happens
 
-The Marketplace publisher name in all three installer manifests must exactly match the **registered publisher account** on Visual Studio Marketplace:
+The publisher/author display name in the VSIX metadata must exactly match the **Publisher display name** registered on Visual Studio Marketplace. This is distinct from the Marketplace Publisher ID used by publishing tools:
 
 | File | Field |
 |------|-------|
 | `source.extension.vsixmanifest` | `<Identity ... Publisher="...">`  |
 | `extension.vsixmanifest` (output) | same after detokenization |
-| `manifest.json` | `"publisher"` |
-| `catalog.json` | publisher-related fields |
+| `ContextRelayExtension.cs` | `ExtensionConfiguration.Metadata.publisherName` |
+| `vs-publish.json` | `"publisher"` is the Marketplace Publisher ID, not the display name |
 
-For this repository the correct publisher name is **`KazushiKamegawa`** (single word, mixed case).
+For this repository, the Marketplace Publisher ID is **`KazushiKamegawa`** and the correct publisher/author display name is **`kkamegawa`**.
 
 ### What to check
 
-1. Confirm `source.extension.vsixmanifest` contains `Publisher="KazushiKamegawa"`.
-2. After any repack/patch step, open the produced VSIX and verify the same value is preserved in all three manifest files.
-3. If you use a build task that patches `manifest.json` or `catalog.json`, ensure the publisher token is not hardcoded to a different value or left as a placeholder.
+1. Confirm `source.extension.vsixmanifest` contains `Publisher="kkamegawa"`.
+2. Confirm `vs-publish.json` contains Publisher ID `"publisher": "KazushiKamegawa"`.
+3. After any repack/patch step, open the produced VSIX and verify the display name is preserved.
+4. If you use a build task that patches publisher metadata, ensure it does not substitute the Publisher ID for the display name.
 
 ### Quick audit pattern
 
@@ -341,7 +342,7 @@ $vsix = Get-ChildItem '.\src' -Filter *.vsix -Recurse |
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::OpenRead($vsix.FullName)
 try {
-    foreach ($name in 'extension.vsixmanifest','manifest.json','catalog.json') {
+    foreach ($name in 'extension.vsixmanifest') {
         $entry = $zip.Entries | Where-Object { $_.FullName -ieq $name } | Select-Object -First 1
         if (-not $entry) { Write-Host "Missing: $name"; continue }
         $reader = New-Object System.IO.StreamReader($entry.Open())
@@ -355,13 +356,13 @@ try {
 } finally { $zip.Dispose() }
 ```
 
-Expected output: all three files reference `KazushiKamegawa`.
+Expected output: VSIX publisher/author display-name metadata references `kkamegawa`.
 
 ### Remediation direction
 
-- Keep `Publisher="KazushiKamegawa"` in `source.extension.vsixmanifest` — this is the single source of truth.
-- Ensure any post-pack manifest patch task propagates this value to `manifest.json` and `catalog.json`.
-- Do not introduce a separate build-time variable that overrides the publisher value unless every downstream manifest patch reads from the same variable.
+- Keep `Publisher="kkamegawa"` in `source.extension.vsixmanifest` as the display-name source of truth.
+- Keep `"publisher": "KazushiKamegawa"` in `vs-publish.json` as the Marketplace Publisher ID.
+- Ensure any post-pack manifest patch task preserves the VSIX display-name metadata.
 
 ---
 
@@ -374,7 +375,7 @@ Expected output: all three files reference `KazushiKamegawa`.
   1. Options node visibility
   2. property page load behavior
 - Do not set `OutputType=Exe` or `UseAppHost=true` in the test project; this causes xUnit v3 catastrophic startup failure in CI.
-- Do not change the publisher name away from `KazushiKamegawa`; all manifest files must agree on this value for Marketplace publish to succeed.
+- Do not conflate the Marketplace Publisher ID `KazushiKamegawa` with the publisher display name `kkamegawa`.
 - Prefer VSSDK / VisualStudio.Extensibility APIs over direct Win32 API usage whenever both are available (for example, prefer VS shell-owned file dialog APIs over `Microsoft.Win32.OpenFileDialog`), because VS-owned APIs preserve proper IDE ownership, modality, and compatibility.
 - For VS extension panel/tool window fixes, invoke this skill first and follow its panel-cancellation checklist before changing runtime code.
 
