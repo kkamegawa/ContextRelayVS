@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: read    # least-privilege for checkout
       checks: write     # required by dorny/test-reporter
+      id-token: write   # required by codecov/codecov-action v7
 
     steps:
       - name: Checkout
