@@ -37,6 +37,7 @@
   </ItemGroup>
   <ItemGroup>
 	<PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.551" />
+	<PackageReference Include="MessagePack" Version="2.5.301" />
 	<PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" ExcludeAssets="runtime" />
 	<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034" PrivateAssets="all" GeneratePathProperty="true" />
 	<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
