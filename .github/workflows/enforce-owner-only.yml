@@ -33,7 +33,8 @@ jobs:
 
             const allowedBotLogins = new Set([
               "github-copilot[bot]",
-              "copilot"
+              "copilot",
+              "dependabot[bot]"
             ]);
 
             function isAllowedLogin(login) {
@@ -81,8 +82,8 @@ jobs:
 
             if (blocked.length === 0) {
               core.setOutput("state", "success");
-              core.setOutput("description", "All commits are from owner or Copilot.");
-              core.setOutput("summary", "Owner/Copilot commit policy passed.");
+              core.setOutput("description", "All commits are from owner, Copilot, or Dependabot.");
+              core.setOutput("summary", "Owner/Copilot/Dependabot commit policy passed.");
               return;
             }
 
