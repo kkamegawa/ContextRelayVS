@@ -26,9 +26,22 @@ public sealed class InProcPackageVsixPackagingTests
         using var archive = ZipFile.OpenRead(vsixPath);
 
         AssertEntryPresent(archive, "extension.vsixmanifest");
+        AssertEntryPresent(archive, ".vsextension/extension.json");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.dll");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.pkgdef");
         AssertEntryPresent(archive, "Community.VisualStudio.Toolkit.dll");
+
+        var extensionJsonEntry = archive.GetEntry(".vsextension/extension.json");
+        Assert.NotNull(extensionJsonEntry);
+
+        string extensionJson;
+        using (var stream = extensionJsonEntry!.Open())
+        using (var reader = new StreamReader(stream))
+        {
+            extensionJson = reader.ReadToEnd();
+        }
+
+        Assert.DoesNotContain("%ContextRelay.", extensionJson, StringComparison.Ordinal);
 
         var manifestEntry = archive.GetEntry("extension.vsixmanifest");
         Assert.NotNull(manifestEntry);
