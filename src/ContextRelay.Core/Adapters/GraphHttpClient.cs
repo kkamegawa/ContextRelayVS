@@ -15,6 +15,7 @@ public sealed class GraphHttpClient
     public const string DefaultGraphBase = "https://graph.microsoft.com";
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(300);
 
+    private static readonly TimeSpan HttpClientDefaultTimeout = TimeSpan.FromSeconds(100);
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient httpClient;
     private readonly IGraphLogger? logger;
@@ -23,6 +24,11 @@ public sealed class GraphHttpClient
     public GraphHttpClient(HttpClient? httpClient = null, IGraphLogger? logger = null, string? baseUrl = null)
     {
         this.httpClient = httpClient ?? new HttpClient { Timeout = DefaultTimeout };
+        if (httpClient is not null && httpClient.Timeout == HttpClientDefaultTimeout)
+        {
+            this.httpClient.Timeout = DefaultTimeout;
+        }
+
         this.logger = logger;
         BaseUrl = baseUrl ?? DefaultGraphBase;
     }
