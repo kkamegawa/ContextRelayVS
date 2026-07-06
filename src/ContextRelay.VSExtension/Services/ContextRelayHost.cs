@@ -326,10 +326,11 @@ internal sealed class ContextRelayHost : IDisposable
                 var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Ask, filePrompt.Prompt, reply);
                 await AppendChatHistoryAsync(filePrompt.Prompt, normalizedReply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
+                var askStatus = filePrompt.Files.Count == 0
+                    ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count)
+                    : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(snippets.Count, filePrompt.Files.Count);
                 return await RefreshStateCoreAsync(
-                    filePrompt.Files.Count == 0
-                        ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count)
-                        : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(snippets.Count, filePrompt.Files.Count),
+                    AddCopilotIntegrityWarningIfNeeded(askStatus),
                     trimmed,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -988,12 +989,20 @@ internal sealed class ContextRelayHost : IDisposable
         var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Chat, message, reply);
         await AppendChatHistoryAsync(message, normalizedReply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handled plain chat with Microsoft 365 Copilot.");
+        var chatStatus = contextPayload.Labels.Count == 0
+            ? ContextRelayLocalizedStrings.ChatReplyShownStatus
+            : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(contextPayload.Labels.Count);
         return await RefreshStateCoreAsync(
-            contextPayload.Labels.Count == 0
-                ? ContextRelayLocalizedStrings.ChatReplyShownStatus
-                : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(contextPayload.Labels.Count),
+            AddCopilotIntegrityWarningIfNeeded(chatStatus),
             originalInput,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private string AddCopilotIntegrityWarningIfNeeded(string status)
+    {
+        return copilotChatAdapter.LastResponseDiagnostics.MayBeIncomplete
+            ? ContextRelayLocalizedStrings.GetCopilotResponseMayBeIncompleteStatus(status)
+            : status;
     }
 
     private async Task<ContextRelayHostState> HandleWorkIqCommandAsync(

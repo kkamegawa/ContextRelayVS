@@ -85,6 +85,7 @@
   <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットをコンテキストとして使用しました。</value></data>
   <data name="AskReplyShownWithContextBreakdownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットと {1} 件のローカル ファイル コンテキストを使用しました。</value></data>
   <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件の明示的な ContextRelay コンテキストを使用しました。</value></data>
+  <data name="CopilotResponseMayBeIncompleteStatus_Format" xml:space="preserve"><value>{0} 自動継続後も応答がまだ不完全な可能性があります。</value></data>
   <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>1 回のメッセージで参照できるファイルは最大 {0} 個です。</value></data>
   <data name="LocalFileContextLabel_Format" xml:space="preserve"><value>ローカル ファイル: {0}</value></data>
   <data name="FileMentionNotFoundStatus_Format" xml:space="preserve"><value>#{0} のファイルが見つかりません。</value></data>

@@ -13,6 +13,13 @@ public sealed class GraphHttpClientTests
     }
 
     [Fact]
+    public void DefaultTimeout_AllowsLongCopilotResponses()
+    {
+        var client = new GraphHttpClient();
+        Assert.Equal(GraphHttpClient.DefaultTimeout, client.Timeout);
+    }
+
+    [Fact]
     public void CustomBaseUrl_IsPreserved()
     {
         var client = new GraphHttpClient(baseUrl: "https://graph.microsoft.us");

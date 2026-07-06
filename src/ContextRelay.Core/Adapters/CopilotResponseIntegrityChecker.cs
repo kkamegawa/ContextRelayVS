@@ -1,0 +1,122 @@
+using System;
+using System.Text.RegularExpressions;
+
+namespace ContextRelay.Core.Adapters;
+
+public static class CopilotResponseIntegrityChecker
+{
+    private const int MinimumSoftTruncationLength = 240;
+    private static readonly Regex CodeFenceRegex = new(@"(^|\r?\n)```", RegexOptions.Compiled);
+    private static readonly Regex IncompleteMarkdownLinkRegex = new(@"\[[^\]\r\n]+\]\([^)\r\n]*$", RegexOptions.Compiled);
+    private static readonly char[] TerminalCharacters =
+    {
+        '.', '!', '?', ':', ';', ')', ']', '}', '"', '\'', '`', '>', '|',
+        '\u3002', '\uFF01', '\uFF1F', '\u300D', '\u300F', '\u201D'
+    };
+
+    public static CopilotResponseIntegrityResult Evaluate(string response)
+    {
+        if (response is null)
+        {
+            throw new ArgumentNullException(nameof(response));
+        }
+
+        var trimmed = response.Trim();
+        if (trimmed.Length == 0)
+        {
+            return CopilotResponseIntegrityResult.Complete;
+        }
+
+        if (HasUnbalancedCodeFences(trimmed))
+        {
+            return CopilotResponseIntegrityResult.Truncated("unbalanced-code-fence");
+        }
+
+        if (IncompleteMarkdownLinkRegex.IsMatch(trimmed))
+        {
+            return CopilotResponseIntegrityResult.Truncated("incomplete-markdown-link");
+        }
+
+        if (HasIncompleteTableRow(trimmed))
+        {
+            return CopilotResponseIntegrityResult.Truncated("incomplete-markdown-table");
+        }
+
+        if (LooksSoftTruncated(trimmed))
+        {
+            return CopilotResponseIntegrityResult.Truncated("missing-terminal-punctuation");
+        }
+
+        return CopilotResponseIntegrityResult.Complete;
+    }
+
+    private static bool HasUnbalancedCodeFences(string value)
+    {
+        return CodeFenceRegex.Matches(value).Count % 2 != 0;
+    }
+
+    private static bool HasIncompleteTableRow(string value)
+    {
+        var lines = value.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        string? lastLine = null;
+        for (var index = lines.Length - 1; index >= 0; index--)
+        {
+            var candidate = lines[index].Trim();
+            if (candidate.Length == 0)
+            {
+                continue;
+            }
+
+            lastLine = candidate;
+            break;
+        }
+
+        return lastLine is not null &&
+            lastLine.StartsWith("|", StringComparison.Ordinal) &&
+            !lastLine.EndsWith("|", StringComparison.Ordinal);
+    }
+
+    private static bool LooksSoftTruncated(string value)
+    {
+        if (value.Length < MinimumSoftTruncationLength)
+        {
+            return false;
+        }
+
+        var last = value[value.Length - 1];
+        if (Array.IndexOf(TerminalCharacters, last) >= 0)
+        {
+            return false;
+        }
+
+        return char.IsLetterOrDigit(last) ||
+            last == ',' ||
+            last == '-' ||
+            last == '\u3001';
+    }
+}
+
+public sealed class CopilotResponseIntegrityResult
+{
+    public static CopilotResponseIntegrityResult Complete { get; } = new(false, null);
+
+    private CopilotResponseIntegrityResult(bool isLikelyTruncated, string? reason)
+    {
+        IsLikelyTruncated = isLikelyTruncated;
+        Reason = reason;
+    }
+
+    public bool IsLikelyTruncated { get; }
+
+    public string? Reason { get; }
+
+    public static CopilotResponseIntegrityResult Truncated(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("Truncation reason must not be empty.", nameof(reason));
+        }
+
+        return new CopilotResponseIntegrityResult(true, reason);
+    }
+}
