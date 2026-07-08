@@ -58,4 +58,45 @@ public sealed class CopilotResponseIntegrityCheckerTests
 
         Assert.False(result.IsLikelyTruncated);
     }
+
+    [Fact]
+    public void Evaluate_TreatsShortAnswerEndingInDigitAsComplete()
+    {
+        var text = new string('a', 220) + "\n\nThe final count is 42";
+
+        var result = CopilotResponseIntegrityChecker.Evaluate(text);
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_TreatsBulletListEndingWithoutPunctuationAsComplete()
+    {
+        var text = new string('a', 220) + "\n\n- Final item";
+
+        var result = CopilotResponseIntegrityChecker.Evaluate(text);
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_TreatsHeadingWithoutPunctuationAsComplete()
+    {
+        var text = new string('a', 220) + "\n\n## Next steps";
+
+        var result = CopilotResponseIntegrityChecker.Evaluate(text);
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_DetectsTrailingCommaRegardlessOfLineLength()
+    {
+        var text = new string('a', 240) + "\n\nshort,";
+
+        var result = CopilotResponseIntegrityChecker.Evaluate(text);
+
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("missing-terminal-punctuation", result.Reason);
+    }
 }

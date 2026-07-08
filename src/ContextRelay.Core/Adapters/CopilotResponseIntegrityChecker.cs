@@ -6,8 +6,10 @@ namespace ContextRelay.Core.Adapters;
 public static class CopilotResponseIntegrityChecker
 {
     private const int MinimumSoftTruncationLength = 240;
+    private const int MinimumTruncatedLineLength = 80;
     private static readonly Regex CodeFenceRegex = new(@"(^|\r?\n)```", RegexOptions.Compiled);
     private static readonly Regex IncompleteMarkdownLinkRegex = new(@"\[[^\]\r\n]+\]\([^)\r\n]*$", RegexOptions.Compiled);
+    private static readonly Regex StructuralLineRegex = new(@"^(#{1,6}\s|[-*+]\s|\d+[.)]\s)", RegexOptions.Compiled);
     private static readonly char[] TerminalCharacters =
     {
         '.', '!', '?', ':', ';', ')', ']', '}', '"', '\'', '`', '>', '|',
@@ -89,10 +91,46 @@ public static class CopilotResponseIntegrityChecker
             return false;
         }
 
-        return char.IsLetterOrDigit(last) ||
-            last == ',' ||
-            last == '-' ||
-            last == '\u3001';
+        // A trailing comma almost never ends a complete response, so treat it
+        // as truncated regardless of the shape of the final line.
+        if (last == ',' || last == '\u3001')
+        {
+            return true;
+        }
+
+        if (!(char.IsLetterOrDigit(last) || last == '-'))
+        {
+            return false;
+        }
+
+        // A response can legitimately end in a letter, digit, or hyphen when
+        // the final line is a heading, list item, or short standalone value
+        // (e.g. "## Next steps", "- Final item", "The count is 42"). Only
+        // treat this as a truncation signal when the final line reads like
+        // unfinished prose: not a structural markdown line, and long enough
+        // that a natural sentence would normally have ended in punctuation.
+        var lastLine = GetLastNonEmptyLine(value);
+        if (StructuralLineRegex.IsMatch(lastLine))
+        {
+            return false;
+        }
+
+        return lastLine.Length >= MinimumTruncatedLineLength;
+    }
+
+    private static string GetLastNonEmptyLine(string value)
+    {
+        var lines = value.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        for (var index = lines.Length - 1; index >= 0; index--)
+        {
+            var candidate = lines[index].Trim();
+            if (candidate.Length > 0)
+            {
+                return candidate;
+            }
+        }
+
+        return string.Empty;
     }
 }
 
