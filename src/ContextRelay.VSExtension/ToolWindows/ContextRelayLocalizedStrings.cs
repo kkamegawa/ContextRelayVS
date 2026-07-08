@@ -158,6 +158,9 @@ internal static class ContextRelayLocalizedStrings
 
     public static string GetChatReplyShownWithContextStatus(int contextCount) => Format("ChatReplyShownWithContextStatus_Format", contextCount);
 
+    public static string GetCopilotResponseMayBeIncompleteStatus(string baseStatus) =>
+        Format("CopilotResponseMayBeIncompleteStatus_Format", baseStatus);
+
     public static string GetFilePickerFilesAddedStatus(int fileCount) => Format("FilePickerFilesAddedStatus_Format", fileCount);
 
     public static string GetFilePickerFilesAddedPartialStatus(int fileCount, int skippedCount) =>

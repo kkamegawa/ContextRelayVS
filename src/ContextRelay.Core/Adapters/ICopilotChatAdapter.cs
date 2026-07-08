@@ -5,6 +5,8 @@ namespace ContextRelay.Core.Adapters;
 
 public interface ICopilotChatAdapter
 {
+    CopilotChatResponseDiagnostics LastResponseDiagnostics { get; }
+
     Task<string> AskAsync(string accessToken, string prompt, CancellationToken cancellationToken = default);
 
     Task<string> CreateConversationAsync(string accessToken, CancellationToken cancellationToken = default);

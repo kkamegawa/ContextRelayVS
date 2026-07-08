@@ -303,6 +303,38 @@ If panel initialization depends on those transient tokens, cancellation can occu
 
 ---
 
+## Known Menu Failure: unresolved `%ContextRelay.*.DisplayName%` tokens
+
+### Symptom signature
+
+- Visual Studio Tools menu shows literal resource tokens such as:
+  - `%ContextRelay.Menu.DisplayName%`
+  - `%ContextRelay.Command.<Name>.DisplayName%`
+- The affected extension's `.vsextension/extension.json` contains those `%...%` strings in `controlContainers[].displayName`, `tooltipText`, or `commandSets[].commands[]`.
+- `.vsextension/string-resources.json` may still be present in the VSIX, so the package looks correct at first glance.
+
+### Why this happens
+
+`Microsoft.VisualStudio.Extensibility` requires command/menu metadata strings in source to reference `string-resources.json` keys; otherwise analyzer `CEE0027` fails the build. In some Visual Studio channels, menu metadata token resolution can fail at runtime and the shell displays the raw `%...%` key.
+
+### Remediation
+
+- Keep source `CommandConfiguration` and `MenuConfiguration` strings in `%string-resource-key%` form so the SDK analyzer remains satisfied.
+- Patch the generated `.vsextension/extension.json` after the SDK emits it, replacing only known extension-owned display tokens with stable display text.
+- Patch both:
+  - the bin output `.vsextension/extension.json`, for local build/test reflection checks
+  - the produced VSIX `.vsextension/extension.json`, for installer/runtime metadata
+- Add tests and build assertions that fail if produced extension metadata still contains `%ContextRelay.` tokens.
+
+### Verification
+
+1. Build the extension.
+2. Inspect bin output `.vsextension/extension.json` for unresolved extension-owned tokens.
+3. Inspect VSIX `.vsextension/extension.json` for unresolved extension-owned tokens.
+4. Reinstall the VSIX into a clean Visual Studio instance or clear the target instance's extension metadata cache before checking Tools menu UI.
+
+---
+
 ## Known Publish Failure: publisher name mismatch
 
 ### Symptom signature

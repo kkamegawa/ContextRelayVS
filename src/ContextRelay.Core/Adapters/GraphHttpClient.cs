@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -12,7 +13,9 @@ namespace ContextRelay.Core.Adapters;
 public sealed class GraphHttpClient
 {
     public const string DefaultGraphBase = "https://graph.microsoft.com";
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(300);
 
+    private static readonly TimeSpan HttpClientDefaultTimeout = TimeSpan.FromSeconds(100);
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient httpClient;
     private readonly IGraphLogger? logger;
@@ -20,7 +23,12 @@ public sealed class GraphHttpClient
 
     public GraphHttpClient(HttpClient? httpClient = null, IGraphLogger? logger = null, string? baseUrl = null)
     {
-        this.httpClient = httpClient ?? new HttpClient();
+        this.httpClient = httpClient ?? new HttpClient { Timeout = DefaultTimeout };
+        if (httpClient is not null && httpClient.Timeout == HttpClientDefaultTimeout)
+        {
+            this.httpClient.Timeout = DefaultTimeout;
+        }
+
         this.logger = logger;
         BaseUrl = baseUrl ?? DefaultGraphBase;
     }
@@ -29,6 +37,13 @@ public sealed class GraphHttpClient
     {
         get => baseUrl;
         set => baseUrl = CloudEndpoints.NormalizeEndpoint(value, DefaultGraphBase);
+    }
+
+    public TimeSpan Timeout => httpClient.Timeout;
+
+    internal void LogDiagnostic(string message)
+    {
+        logger?.Log(message);
     }
 
     public async Task<HttpResponseMessage> SendAsync(
@@ -47,9 +62,22 @@ public sealed class GraphHttpClient
             request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
         }
 
-        var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        logger?.Log($"<- {(int)response.StatusCode} {response.ReasonPhrase} {url}");
-        return response;
+        try
+        {
+            var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            logger?.Log($"<- {(int)response.StatusCode} {response.ReasonPhrase} {url}");
+            return response;
+        }
+        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger?.Log($"x Graph API request timed out after {httpClient.Timeout.TotalSeconds:0}s {url}");
+            throw new TimeoutException("Graph API request timed out before the response completed.", ex);
+        }
+        catch (HttpRequestException ex) when (ex.InnerException is IOException)
+        {
+            logger?.Log($"x Graph API response stream was interrupted {url}");
+            throw new IOException("Graph API response stream was interrupted before completion.", ex);
+        }
     }
 
     public async Task<HttpResponseMessage> SendWithRetryAsync(
