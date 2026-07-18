@@ -160,7 +160,7 @@ public sealed class GraphHttpClient
             return result;
         }
 
-        var body = await SafeReadBodyAsync(response).ConfigureAwait(false);
+        var body = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
         var errorCode = TryGetErrorCode(body);
         var requestId = response.Headers.Contains("request-id")
             ? string.Join(",", response.Headers.GetValues("request-id"))
@@ -204,11 +204,42 @@ public sealed class GraphHttpClient
         return null;
     }
 
-    private static async Task<string> SafeReadBodyAsync(HttpResponseMessage response)
+    private async Task<string> SafeReadBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
+        using var timeoutSource = Timeout == System.Threading.Timeout.InfiniteTimeSpan
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (timeoutSource is not null)
+        {
+            timeoutSource.CancelAfter(Timeout);
+        }
+
+        var readToken = timeoutSource?.Token ?? cancellationToken;
         try
         {
-            return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using var buffer = new MemoryStream();
+            var bytes = new byte[8192];
+            while (true)
+            {
+                var read = await stream.ReadAsync(bytes, 0, bytes.Length, readToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                buffer.Write(bytes, 0, read);
+            }
+
+            return Encoding.UTF8.GetString(buffer.ToArray());
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && timeoutSource?.IsCancellationRequested == true)
+        {
+            throw new TimeoutException("Graph API error response body timed out before completion.", ex);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {

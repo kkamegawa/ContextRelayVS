@@ -282,11 +282,15 @@ public sealed class FileSystemSharedSessionStore : ISharedSessionStore
 
     private IReadOnlyList<SharedChatHistoryItem> MergeChatHistory(IReadOnlyList<SharedChatHistoryItem> current, IEnumerable<SharedChatHistoryItem> incoming)
     {
+        var incomingList = (incoming ?? Array.Empty<SharedChatHistoryItem>()).ToList();
         var merged = current
-            .Concat(incoming)
+            .Concat(incomingList)
             .Where(item => !string.IsNullOrWhiteSpace(item.Id))
             .GroupBy(item => item.Id, StringComparer.Ordinal)
-            .Select(group => group.OrderByDescending(GetChatTimestamp).First())
+            .Select(group => group
+                .OrderByDescending(GetChatTimestamp)
+                .ThenByDescending(item => incomingList.Contains(item) ? 1 : 0)
+                .First())
             .OrderBy(GetChatTimestamp)
             .ToList();
 

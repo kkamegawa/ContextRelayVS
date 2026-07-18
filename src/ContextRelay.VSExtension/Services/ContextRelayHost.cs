@@ -660,15 +660,16 @@ internal sealed class ContextRelayHost : IDisposable
             RecordManualContinuationDiagnostics(stitched, copilotChatAdapter.LastResponseDiagnostics);
             var continuationItem = new SharedChatHistoryItem
             {
-                Id = Guid.NewGuid().ToString("N"),
+                Id = currentItem.Id,
                 Role = currentItem.Role,
                 Text = stitched,
-                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                Metadata = new Dictionary<string, JsonElement>(currentItem.Metadata)
+                Timestamp = currentItem.Timestamp,
+                Metadata = new Dictionary<string, JsonElement>(currentItem.Metadata),
+                ExtensionData = new Dictionary<string, JsonElement>(currentItem.ExtensionData)
             };
             await sharedStore.AppendChatHistoryAsync(new[] { continuationItem }, cancellationToken).ConfigureAwait(false);
             copilotConversationAssistantItemId = continuationItem.Id;
-            logger.LogInformation("Fetched and appended Microsoft 365 Copilot continuation.");
+            logger.LogInformation("Fetched and updated Microsoft 365 Copilot continuation.");
             await RefreshStateCoreAsync(
                 AddCopilotIntegrityWarningIfNeeded(ContextRelayLocalizedStrings.AssistantResponseContinuedStatus),
                 GetDraftQueryText(),

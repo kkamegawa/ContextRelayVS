@@ -135,6 +135,23 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
+    public void Evaluate_TreatsBoldMarkerInsideTildeFencedCodeAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("~~~text\nliteral ** marker\n~~~");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_DetectsUnbalancedTildeCodeFence()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("~~~text\nliteral content");
+
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("unbalanced-code-fence", result.Reason);
+    }
+
+    [Fact]
     public void Evaluate_TreatsBoldMarkerInsideInlineCodeAsComplete()
     {
         var result = CopilotResponseIntegrityChecker.Evaluate("The literal `**` marker is not emphasis.");
@@ -170,6 +187,22 @@ public sealed class CopilotResponseIntegrityCheckerTests
     public void Evaluate_TreatsThematicBreakInsideResponseAsComplete()
     {
         var result = CopilotResponseIntegrityChecker.Evaluate("First section.\n\n***\n\nSecond section.");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_TreatsAsteriskOperatorAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("The expression is 2**3.");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_TreatsIntrawordUnderscoresAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("The token is FOO__BAR.");
 
         Assert.False(result.IsLikelyTruncated);
     }

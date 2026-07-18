@@ -88,6 +88,26 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task AppendChatHistoryAsync_PrefersIncomingItemWhenDuplicateTimestampMatches()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+
+        await store.AppendChatHistoryAsync(new[]
+        {
+            CreateChatItem("1", "2026-04-19T00:00:01Z", "partial")
+        }, cancellationToken);
+
+        var result = await store.AppendChatHistoryAsync(new[]
+        {
+            CreateChatItem("1", "2026-04-19T00:00:01Z", "partial plus continuation")
+        }, cancellationToken);
+
+        Assert.Single(result);
+        Assert.Equal("partial plus continuation", result[0].Text);
+    }
+
+    [Fact]
     public async Task UpsertHandoffIndexAsync_UsesWorkspaceScopedLastWriterWins()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

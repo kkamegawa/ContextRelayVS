@@ -8,7 +8,6 @@ public static class CopilotResponseIntegrityChecker
 {
     private const int MinimumSoftTruncationLength = 240;
     private const int MinimumTruncatedLineLength = 80;
-    private static readonly Regex CodeFenceRegex = new(@"(^|\r?\n)```", RegexOptions.Compiled);
     private static readonly Regex IncompleteMarkdownLinkRegex = new(@"\[[^\]\r\n]+\]\([^)\r\n]*$", RegexOptions.Compiled);
     private static readonly Regex HeadingLineRegex = new(@"^#{1,6}\s+\S", RegexOptions.Compiled);
     private static readonly Regex ListLineRegex = new(@"^([-*+]\s|\d+[.)]\s)", RegexOptions.Compiled);
@@ -68,7 +67,34 @@ public static class CopilotResponseIntegrityChecker
 
     private static bool HasUnbalancedCodeFences(string value)
     {
-        return CodeFenceRegex.Matches(value).Count % 2 != 0;
+        var insideFence = false;
+        var fenceMarker = '\0';
+        var fenceLength = 0;
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (!TryReadFenceMarker(value, index, out var marker, out var length))
+            {
+                continue;
+            }
+
+            if (!insideFence)
+            {
+                insideFence = true;
+                fenceMarker = marker;
+                fenceLength = length;
+            }
+            else if (marker == fenceMarker && length >= fenceLength)
+            {
+                insideFence = false;
+                fenceMarker = '\0';
+                fenceLength = 0;
+            }
+
+            index += length - 1;
+        }
+
+        return insideFence;
     }
 
     private static bool HasIncompleteTableRow(string value)
@@ -144,8 +170,8 @@ public static class CopilotResponseIntegrityChecker
     private static bool HasUnbalancedBoldMarker(string value)
     {
         var textWithoutCode = RemoveThematicBreakLines(RemoveMarkdownCodeSections(value));
-        return Regex.Matches(textWithoutCode, @"(?<!\\)\*\*").Count % 2 != 0 ||
-            Regex.Matches(textWithoutCode, @"(?<![\\_])__(?!_)").Count % 2 != 0;
+        return HasUnbalancedStrongDelimiter(textWithoutCode, '*') ||
+            HasUnbalancedStrongDelimiter(textWithoutCode, '_');
     }
 
     private static string RemoveThematicBreakLines(string value)
@@ -167,14 +193,30 @@ public static class CopilotResponseIntegrityChecker
     {
         var builder = new StringBuilder(value.Length);
         var insideFence = false;
+        var fenceMarker = '\0';
+        var fenceLength = 0;
 
         for (var index = 0; index < value.Length; index++)
         {
-            if (IsFenceMarkerAt(value, index))
+            if (TryReadFenceMarker(value, index, out var marker, out var length))
             {
-                insideFence = !insideFence;
-                index += 2;
-                continue;
+                if (!insideFence)
+                {
+                    insideFence = true;
+                    fenceMarker = marker;
+                    fenceLength = length;
+                    index += length - 1;
+                    continue;
+                }
+
+                if (marker == fenceMarker && length >= fenceLength)
+                {
+                    insideFence = false;
+                    fenceMarker = '\0';
+                    fenceLength = 0;
+                    index += length - 1;
+                    continue;
+                }
             }
 
             if (insideFence)
@@ -184,7 +226,7 @@ public static class CopilotResponseIntegrityChecker
 
             if (value[index] == '`')
             {
-                var delimiterLength = CountBacktickRun(value, index);
+                var delimiterLength = CountRun(value, index, '`');
                 var closingIndex = FindMatchingBacktickRun(value, index + delimiterLength, delimiterLength);
                 if (closingIndex >= 0)
                 {
@@ -199,24 +241,156 @@ public static class CopilotResponseIntegrityChecker
         return builder.ToString();
     }
 
-    private static bool IsFenceMarkerAt(string value, int index)
+    private static bool HasUnbalancedStrongDelimiter(string value, char marker)
     {
-        return index + 2 < value.Length &&
-            value[index] == '`' &&
-            value[index + 1] == '`' &&
-            value[index + 2] == '`' &&
-            (index == 0 || value[index - 1] == '\n' || value[index - 1] == '\r');
+        var openers = 0;
+        var unmatchedClosers = 0;
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (value[index] != marker || IsEscaped(value, index))
+            {
+                continue;
+            }
+
+            var runLength = CountRun(value, index, marker);
+            if (runLength < 2)
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            var previous = index == 0 ? '\0' : value[index - 1];
+            var nextIndex = index + runLength;
+            var next = nextIndex >= value.Length ? '\0' : value[nextIndex];
+            if (char.IsLetterOrDigit(previous) && char.IsLetterOrDigit(next))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            var delimiterPairs = runLength / 2;
+            var canOpen = CanOpenStrongDelimiter(previous, next, marker);
+            var canClose = CanCloseStrongDelimiter(previous, next, marker);
+            if (canClose)
+            {
+                var matched = Math.Min(openers, delimiterPairs);
+                openers -= matched;
+                delimiterPairs -= matched;
+                unmatchedClosers += delimiterPairs;
+            }
+
+            if (canOpen)
+            {
+                openers += delimiterPairs;
+            }
+
+            index += runLength - 1;
+        }
+
+        return openers > 0 || unmatchedClosers > 0;
     }
 
-    private static int CountBacktickRun(string value, int index)
+    private static bool CanOpenStrongDelimiter(char previous, char next, char marker)
+    {
+        var leftFlanking = IsLeftFlanking(previous, next);
+        var rightFlanking = IsRightFlanking(previous, next);
+        if (marker == '_')
+        {
+            return leftFlanking && (!rightFlanking || IsPunctuation(previous));
+        }
+
+        return leftFlanking;
+    }
+
+    private static bool CanCloseStrongDelimiter(char previous, char next, char marker)
+    {
+        var leftFlanking = IsLeftFlanking(previous, next);
+        var rightFlanking = IsRightFlanking(previous, next);
+        if (marker == '_')
+        {
+            return rightFlanking && (!leftFlanking || IsPunctuation(next));
+        }
+
+        return rightFlanking;
+    }
+
+    private static bool IsLeftFlanking(char previous, char next)
+    {
+        return next != '\0' &&
+            !char.IsWhiteSpace(next) &&
+            (!IsPunctuation(next) || previous == '\0' || char.IsWhiteSpace(previous) || IsPunctuation(previous));
+    }
+
+    private static bool IsRightFlanking(char previous, char next)
+    {
+        return previous != '\0' &&
+            !char.IsWhiteSpace(previous) &&
+            (!IsPunctuation(previous) || next == '\0' || char.IsWhiteSpace(next) || IsPunctuation(next));
+    }
+
+    private static bool IsPunctuation(char value)
+    {
+        return value != '\0' && char.IsPunctuation(value);
+    }
+
+    private static bool IsEscaped(string value, int index)
+    {
+        var slashCount = 0;
+        for (var cursor = index - 1; cursor >= 0 && value[cursor] == '\\'; cursor--)
+        {
+            slashCount++;
+        }
+
+        return slashCount % 2 != 0;
+    }
+
+    private static bool TryReadFenceMarker(string value, int index, out char marker, out int length)
+    {
+        marker = '\0';
+        length = 0;
+        if (!IsLineStart(value, index))
+        {
+            return false;
+        }
+
+        var cursor = index;
+        var spaces = 0;
+        while (cursor < value.Length && value[cursor] == ' ' && spaces < 4)
+        {
+            cursor++;
+            spaces++;
+        }
+
+        if (spaces > 3 || cursor >= value.Length || (value[cursor] != '`' && value[cursor] != '~'))
+        {
+            return false;
+        }
+
+        marker = value[cursor];
+        length = CountRun(value, cursor, marker);
+        return length >= 3;
+    }
+
+    private static bool IsLineStart(string value, int index)
+    {
+        return index == 0 || value[index - 1] == '\n' || value[index - 1] == '\r';
+    }
+
+    private static int CountRun(string value, int index, char marker)
     {
         var length = 0;
-        while (index + length < value.Length && value[index + length] == '`')
+        while (index + length < value.Length && value[index + length] == marker)
         {
             length++;
         }
 
         return length;
+    }
+
+    private static int CountBacktickRun(string value, int index)
+    {
+        return CountRun(value, index, '`');
     }
 
     private static int FindMatchingBacktickRun(string value, int startIndex, int delimiterLength)

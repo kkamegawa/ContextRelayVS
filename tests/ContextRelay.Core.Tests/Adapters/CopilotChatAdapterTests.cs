@@ -190,6 +190,31 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingErrorBodyStalls()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingQueueHttpMessageHandler(
+            CreateStallingErrorResponse(),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "messages": [
+                    { "text": "Summarize." },
+                    { "text": "Fallback after stalled error body." }
+                  ]
+                }
+                """));
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(100) };
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
+
+        Assert.Equal("Fallback after stalled error body.", reply);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
+        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingTransportFails()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -291,6 +316,14 @@ public sealed class CopilotChatAdapterTests
     private static HttpResponseMessage CreateStallingStreamResponse()
     {
         return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new StallingReadStream())
+        };
+    }
+
+    private static HttpResponseMessage CreateStallingErrorResponse()
+    {
+        return new HttpResponseMessage(HttpStatusCode.BadRequest)
         {
             Content = new StreamContent(new StallingReadStream())
         };
