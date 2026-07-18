@@ -115,6 +115,32 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_StopsContinuationWhenStitchingAddsNoNewContent()
+    {
+        // The continuation repeats the tail of the existing response verbatim (full overlap),
+        // so stitching adds nothing. Automatic continuation must stop after one attempt instead
+        // of retrying up to MaxContinuationRounds while resending the same stateful request.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string repeatedTail = "This exact sentence recurs verbatim across every turn.";
+        var handler = new RecordingQueueHttpMessageHandler(
+            CreateUnclosedFenceResponse(repeatedTail),
+            CreatePlainPartResponse(repeatedTail),
+            CreatePlainPartResponse(repeatedTail),
+            CreatePlainPartResponse(repeatedTail),
+            CreatePlainPartResponse(repeatedTail),
+            CreatePlainPartResponse(repeatedTail));
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Create a fenced block.", cancellationToken: cancellationToken);
+
+        Assert.Contains(repeatedTail, reply, StringComparison.Ordinal);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.True(adapter.LastResponseDiagnostics.MayBeIncomplete);
+        Assert.Equal(1, adapter.LastResponseDiagnostics.ContinuationRounds);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsUnavailable()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

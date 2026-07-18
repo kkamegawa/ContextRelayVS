@@ -216,6 +216,17 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
+    public void Evaluate_DetectsUnmatchedOpenerWithLetterNeighbors()
+    {
+        // Unlike "2**3" (digit-digit, an operator) or "FOO__BAR" (identifier), letters
+        // surrounding an unmatched "**" are a genuine unclosed bold marker.
+        var result = CopilotResponseIntegrityChecker.Evaluate("word**partial emphasis");
+
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("unbalanced-bold-marker", result.Reason);
+    }
+
+    [Fact]
     public void Evaluate_TreatsClosingOnlyAsteriskRunAsComplete()
     {
         var result = CopilotResponseIntegrityChecker.Evaluate("Use the glob src/**.");

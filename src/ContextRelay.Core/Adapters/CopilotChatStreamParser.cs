@@ -14,7 +14,8 @@ internal static class CopilotChatStreamParser
     public static async Task<CopilotChatAdapter.CopilotChatTurnResult> ParseAsync(
         Stream stream,
         string requestMessage,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        CancellationToken callerCancellationToken = default)
     {
         if (stream is null)
         {
@@ -27,6 +28,7 @@ internal static class CopilotChatStreamParser
         var latestPartLengths = Array.Empty<int>();
         var latestMessageCount = 0;
         var eventCount = 0;
+        var interrupted = false;
 
         while (true)
         {
@@ -39,6 +41,15 @@ internal static class CopilotChatStreamParser
             {
                 // Transport failure after a valid snapshot has been captured.
                 // Surface the snapshot rather than propagating the exception.
+                interrupted = true;
+                break;
+            }
+            catch (OperationCanceledException) when (latestText.Length > 0 && !callerCancellationToken.IsCancellationRequested)
+            {
+                // An internal body-read timeout (not the caller) fired after a valid snapshot
+                // was captured: surface the snapshot instead of discarding it. Real caller
+                // cancellation still propagates because the filter above requires it to be unset.
+                interrupted = true;
                 break;
             }
 
@@ -65,11 +76,37 @@ internal static class CopilotChatStreamParser
                 continue;
             }
 
-            // SSE comments and unknown fields do not contribute to event data.
+            if (line.StartsWith(":", StringComparison.Ordinal))
+            {
+                // SSE comment; never contributes to event data.
+                continue;
+            }
+
+            if (dataLines.Count > 0 && LooksLikeJsonContinuation(line))
+            {
+                // The documented chatOverStream response only prefixes the first physical
+                // line of the JSON body with "data:"; the remaining body lines (including
+                // the closing brace) stream unprefixed until the top-level object closes.
+                dataLines.Add(line);
+                continue;
+            }
+
+            // A genuine SSE field (id, event, retry, or an unrecognized extension field).
         }
 
         ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
-        return new CopilotChatAdapter.CopilotChatTurnResult(latestText, latestMessageCount, latestPartLengths, eventCount);
+        return new CopilotChatAdapter.CopilotChatTurnResult(latestText, latestMessageCount, latestPartLengths, eventCount, interrupted);
+    }
+
+    private static bool LooksLikeJsonContinuation(string line)
+    {
+        var trimmed = line.TrimStart();
+        if (trimmed.Length == 0)
+        {
+            return false;
+        }
+
+        return trimmed[0] is '{' or '}' or '[' or ']' or '"';
     }
 
     private static bool ConsumeEvent(

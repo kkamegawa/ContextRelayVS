@@ -266,7 +266,17 @@ public static class CopilotResponseIntegrityChecker
             var previous = index == 0 ? '\0' : value[index - 1];
             var nextIndex = index + runLength;
             var next = nextIndex >= value.Length ? '\0' : value[nextIndex];
-            if (char.IsLetterOrDigit(previous) && char.IsLetterOrDigit(next))
+
+            // Intraword underscores (e.g. FOO__BAR) are identifier characters, not emphasis.
+            if (marker == '_' && char.IsLetterOrDigit(previous) && char.IsLetterOrDigit(next))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            // A digit-digit run (e.g. 2**3) is an arithmetic operator, not emphasis. Letters
+            // around ** are not exempted: "word**partial emphasis" is a genuine unmatched opener.
+            if (marker == '*' && char.IsDigit(previous) && char.IsDigit(next))
             {
                 index += runLength - 1;
                 continue;
