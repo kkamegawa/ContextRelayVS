@@ -12,6 +12,7 @@ public static class CopilotResponseIntegrityChecker
     private static readonly Regex IncompleteMarkdownLinkRegex = new(@"\[[^\]\r\n]+\]\([^)\r\n]*$", RegexOptions.Compiled);
     private static readonly Regex HeadingLineRegex = new(@"^#{1,6}\s+\S", RegexOptions.Compiled);
     private static readonly Regex ListLineRegex = new(@"^([-*+]\s|\d+[.)]\s)", RegexOptions.Compiled);
+    private static readonly Regex ThematicBreakLineRegex = new(@"^\s{0,3}((\*\s*){3,}|(_\s*){3,}|(-\s*){3,})\s*$", RegexOptions.Compiled);
     private static readonly char[] TerminalCharacters =
     {
         '.', '!', '?', ':', ';', ')', ']', '}', '"', '\'', '`', '>', '|',
@@ -142,9 +143,24 @@ public static class CopilotResponseIntegrityChecker
 
     private static bool HasUnbalancedBoldMarker(string value)
     {
-        var textWithoutCode = RemoveMarkdownCodeSections(value);
+        var textWithoutCode = RemoveThematicBreakLines(RemoveMarkdownCodeSections(value));
         return Regex.Matches(textWithoutCode, @"(?<!\\)\*\*").Count % 2 != 0 ||
             Regex.Matches(textWithoutCode, @"(?<![\\_])__(?!_)").Count % 2 != 0;
+    }
+
+    private static string RemoveThematicBreakLines(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var lines = value.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        foreach (var line in lines)
+        {
+            if (!ThematicBreakLineRegex.IsMatch(line))
+            {
+                builder.AppendLine(line);
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static string RemoveMarkdownCodeSections(string value)
