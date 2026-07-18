@@ -76,24 +76,37 @@ internal static class CopilotChatStreamParser
             return;
         }
 
-        using var document = JsonDocument.Parse(payload);
-        if (!document.RootElement.TryGetProperty("messages", out var messagesElement) ||
-            messagesElement.ValueKind != JsonValueKind.Array)
+        JsonDocument document;
+        try
         {
+            document = JsonDocument.Parse(payload);
+        }
+        catch (JsonException)
+        {
+            // Malformed JSON in a later event must not discard an already-captured valid snapshot.
             return;
         }
 
-        var messages = messagesElement.EnumerateArray().ToArray();
-        var parts = ExtractAssistantParts(messages, requestMessage);
-        if (parts.Count == 0)
+        using (document)
         {
-            return;
-        }
+            if (!document.RootElement.TryGetProperty("messages", out var messagesElement) ||
+                messagesElement.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
 
-        var candidateText = CopilotChatAdapter.JoinResponseParts(parts);
-        latestText = candidateText;
-        latestPartLengths = parts.Select(part => part.Length).ToArray();
-        latestMessageCount = messages.Length;
+            var messages = messagesElement.EnumerateArray().ToArray();
+            var parts = ExtractAssistantParts(messages, requestMessage);
+            if (parts.Count == 0)
+            {
+                return;
+            }
+
+            var candidateText = CopilotChatAdapter.JoinResponseParts(parts);
+            latestText = candidateText;
+            latestPartLengths = parts.Select(part => part.Length).ToArray();
+            latestMessageCount = messages.Length;
+        }
     }
 
     private static IReadOnlyList<string> ExtractAssistantParts(JsonElement[] messages, string requestMessage)

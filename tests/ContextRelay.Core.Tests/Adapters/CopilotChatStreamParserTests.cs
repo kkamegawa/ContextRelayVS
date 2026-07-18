@@ -75,15 +75,33 @@ public sealed class CopilotChatStreamParserTests
     }
 
     [Fact]
-    public async Task ParseAsync_ThrowsForMalformedJsonEvent()
+    public async Task ParseAsync_IgnoresMalformedJsonEvent()
     {
+        // A single malformed event no longer throws; the result is empty since no valid snapshot exists.
         var stream = ToStream("""
             data: {"messages":[
 
             """);
 
-        await Assert.ThrowsAnyAsync<System.Text.Json.JsonException>(
-            () => CopilotChatStreamParser.ParseAsync(stream, "Prompt", TestContext.Current.CancellationToken));
+        var result = await CopilotChatStreamParser.ParseAsync(stream, "Prompt", TestContext.Current.CancellationToken);
+
+        Assert.Equal(string.Empty, result.Text);
+    }
+
+    [Fact]
+    public async Task ParseAsync_PreservesValidSnapshotAfterMalformedJsonEvent()
+    {
+        // A malformed event that arrives after a valid snapshot must not discard the valid snapshot.
+        var stream = ToStream("""
+            data: {"messages":[{"text":"Prompt"},{"text":"Valid answer."}]}
+
+            data: {"messages":[
+
+            """);
+
+        var result = await CopilotChatStreamParser.ParseAsync(stream, "Prompt", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Valid answer.", result.Text);
     }
 
     [Fact]
