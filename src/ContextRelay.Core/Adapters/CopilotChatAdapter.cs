@@ -190,10 +190,33 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         }
 
         var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        var result = await CopilotChatStreamParser.ParseAsync(stream, message, cancellationToken).ConfigureAwait(false);
+        var result = await ParseStreamWithTimeoutAsync(stream, message, cancellationToken).ConfigureAwait(false);
         graphClient.LogDiagnostic(
             $"Copilot chat stream diagnostics: events={result.StreamEventCount}, messageCount={result.MessageCount}, totalLength={result.Text.Length}");
         return result;
+    }
+
+    private async Task<CopilotChatTurnResult> ParseStreamWithTimeoutAsync(
+        Stream stream,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var timeout = graphClient.Timeout;
+        if (timeout == Timeout.InfiniteTimeSpan)
+        {
+            return await CopilotChatStreamParser.ParseAsync(stream, message, cancellationToken).ConfigureAwait(false);
+        }
+
+        using var streamTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        streamTimeout.CancelAfter(timeout);
+        try
+        {
+            return await CopilotChatStreamParser.ParseAsync(stream, message, streamTimeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && streamTimeout.IsCancellationRequested)
+        {
+            throw new TimeoutException("Copilot chat stream timed out before the response body completed.", ex);
+        }
     }
 
     private async Task<CopilotChatTurnResult> SendSingleMessageAsync(

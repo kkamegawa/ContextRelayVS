@@ -51,7 +51,8 @@ public static class CopilotResponseIntegrityChecker
             return CopilotResponseIntegrityResult.Truncated("unbalanced-bold-marker");
         }
 
-        if (HeadingLineRegex.IsMatch(GetLastNonEmptyLine(trimmed)))
+        if (trimmed.Length >= MinimumSoftTruncationLength &&
+            HeadingLineRegex.IsMatch(GetLastNonEmptyLine(trimmed)))
         {
             return CopilotResponseIntegrityResult.Truncated("dangling-heading");
         }

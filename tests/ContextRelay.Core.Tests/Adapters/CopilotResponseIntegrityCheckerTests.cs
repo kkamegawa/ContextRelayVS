@@ -80,9 +80,17 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
-    public void Evaluate_DetectsDanglingHeading()
+    public void Evaluate_TreatsShortStandaloneHeadingAsComplete()
     {
-        var text = new string('a', 220) + "\n\n## Next steps";
+        var result = CopilotResponseIntegrityChecker.Evaluate("## Next steps");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_DetectsDanglingHeadingInLongResponse()
+    {
+        var text = new string('a', 260) + "\n\n## Next steps";
 
         var result = CopilotResponseIntegrityChecker.Evaluate(text);
 

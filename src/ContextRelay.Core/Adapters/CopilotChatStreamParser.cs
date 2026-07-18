@@ -49,13 +49,7 @@ internal static class CopilotChatStreamParser
                 continue;
             }
 
-            if (dataLines.Count > 0 &&
-                !line.StartsWith("id:", StringComparison.Ordinal) &&
-                !line.StartsWith("event:", StringComparison.Ordinal) &&
-                !line.StartsWith("retry:", StringComparison.Ordinal))
-            {
-                dataLines.Add(line);
-            }
+            // SSE comments and unknown fields do not contribute to event data.
         }
 
         ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);

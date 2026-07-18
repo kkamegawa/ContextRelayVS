@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -164,6 +165,31 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingBodyStalls()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingQueueHttpMessageHandler(
+            CreateStallingStreamResponse(),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "messages": [
+                    { "text": "Summarize." },
+                    { "text": "Fallback after stalled body." }
+                  ]
+                }
+                """));
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(100) };
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
+
+        Assert.Equal("Fallback after stalled body.", reply);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
+        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsThrottled()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -237,6 +263,14 @@ public sealed class CopilotChatAdapterTests
         };
     }
 
+    private static HttpResponseMessage CreateStallingStreamResponse()
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new StallingReadStream())
+        };
+    }
+
     private static string CompressJson(string json)
     {
         using var document = JsonDocument.Parse(json);
@@ -290,6 +324,53 @@ public sealed class CopilotChatAdapterTests
             }
 
             return (HttpResponseMessage)current;
+        }
+    }
+
+    private sealed class StallingReadStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return 0;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
         }
     }
 }

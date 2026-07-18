@@ -37,11 +37,33 @@ public sealed class CopilotChatStreamParserTests
     {
         var stream = ToStream("""
             data: {
-              "messages": [
-                { "text": "Prompt" },
-                { "text": "Assistant reply." }
-              ]
-            }
+            data:   "messages": [
+            data:     { "text": "Prompt" },
+            data:     { "text": "Assistant reply." }
+            data:   ]
+            data: }
+            id:1
+
+            """);
+
+        var result = await CopilotChatStreamParser.ParseAsync(stream, "Prompt", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Assistant reply.", result.Text);
+        Assert.Equal(1, result.StreamEventCount);
+    }
+
+    [Fact]
+    public async Task ParseAsync_IgnoresCommentsAndUnknownFieldsInsideEvent()
+    {
+        var stream = ToStream("""
+            data: {
+            : keep-alive
+            data:   "messages": [
+            x-extra: ignored
+            data:     { "text": "Prompt" },
+            data:     { "text": "Assistant reply." }
+            data:   ]
+            data: }
             id:1
 
             """);
