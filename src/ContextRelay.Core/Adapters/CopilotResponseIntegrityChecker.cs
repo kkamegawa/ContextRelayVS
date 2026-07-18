@@ -272,6 +272,13 @@ public static class CopilotResponseIntegrityChecker
                 continue;
             }
 
+            // Skip path glob patterns such as **/ or **\ (e.g. **/*.cs).
+            if (marker == '*' && runLength == 2 && (next == '/' || next == '\\'))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
             var delimiterPairs = runLength / 2;
             var canOpen = CanOpenStrongDelimiter(previous, next, marker);
             var canClose = CanCloseStrongDelimiter(previous, next, marker);

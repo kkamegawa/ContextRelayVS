@@ -259,4 +259,24 @@ public sealed class CopilotResponseIntegrityCheckerTests
         Assert.True(result.IsLikelyTruncated);
         Assert.Equal("missing-terminal-punctuation", result.Reason);
     }
+
+    [Fact]
+    public void Evaluate_TreatsPathGlobDoubleAsteriskAsComplete()
+    {
+        // **/ is a path glob, not an unmatched bold opener.
+        var result = CopilotResponseIntegrityChecker.Evaluate(
+            $"{new string('a', 240)}\n\nAdd files matching **/*.cs to the project.");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_TreatsWindowsPathGlobAsComplete()
+    {
+        // **\ is also a glob separator (Windows path).
+        var result = CopilotResponseIntegrityChecker.Evaluate(
+            $"{new string('a', 240)}\n\nPattern: **\\*.cs");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
 }
