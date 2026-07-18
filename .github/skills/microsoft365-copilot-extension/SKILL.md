@@ -132,11 +132,12 @@ For document-style output:
 2. send the same request body to the streamed chat surface (`<COPILOT_CHAT_STREAM_ENDPOINT>`)
 3. parse all server-sent events and keep the latest non-empty assistant snapshot
 4. ignore prompt echo messages and empty intermediate events
-5. if streaming is unavailable or malformed, fall back to the synchronous chat surface (`<COPILOT_CHAT_ENDPOINT>`)
+5. fall back to the synchronous chat surface (`<COPILOT_CHAT_ENDPOINT>`) only when streaming fails before the stateful request is accepted, or when the streamed endpoint returns an explicit fallback status
 6. run integrity checks after the final text is assembled
 7. provide a manual "continue" action that sends a continuation prompt in the same conversation when heuristics miss an incomplete response
 
 Do not append every streamed event as a separate answer. Streamed events are snapshots; later snapshots supersede earlier intermediate text.
+After HTTP success, do not repost the same stateful turn to the synchronous chat surface for malformed SSE or body failures. Return the latest valid assistant snapshot when available, or surface a recoverable error and let the user continue explicitly.
 
 ### Pattern 4: Normalize the time zone before serialization
 
