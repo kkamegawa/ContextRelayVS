@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.SharedStore;
@@ -23,6 +23,8 @@ internal sealed class ContextRelayHostState
     public IReadOnlyList<SharedSnippetItem> Snippets { get; set; } = Array.Empty<SharedSnippetItem>();
 
     public IReadOnlyList<SharedChatHistoryItem> ChatHistory { get; set; } = Array.Empty<SharedChatHistoryItem>();
+
+    public string? ContinuableCopilotAssistantItemId { get; set; }
 
     public string SearchSummary { get; set; } = string.Empty;
 

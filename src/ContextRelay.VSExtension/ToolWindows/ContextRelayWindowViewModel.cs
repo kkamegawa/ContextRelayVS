@@ -378,9 +378,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             SearchSummary = state.SearchSummary;
             SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
-            var latestCopilotAssistantId = state.ChatHistory.LastOrDefault(item => item.IsCopilotAssistant)?.Id;
             ChatHistory = state.ChatHistory
-                .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, latestCopilotAssistantId, StringComparison.Ordinal)))
+                .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, state.ContinuableCopilotAssistantItemId, StringComparison.Ordinal)))
                 .ToArray();
             workspaceFiles = state.WorkspaceFiles;
             if (queryChanged)

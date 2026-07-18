@@ -51,6 +51,7 @@ internal sealed class ContextRelayHost : IDisposable
     private ContextRelayHostState state = new();
     private string? lastSearchSummary;
     private string? copilotConversationId;
+    private string? copilotConversationAssistantItemId;
     private string? workIqContextId;
     private string draftQueryText = string.Empty;
     private string? cacheWorkspaceRoot;
@@ -231,6 +232,7 @@ internal sealed class ContextRelayHost : IDisposable
                 currentSearchResults = Array.Empty<ContextItem>();
                 lastSearchSummary = null;
                 copilotConversationId = null;
+                copilotConversationAssistantItemId = null;
                 workIqContextId = null;
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatAndSnippetsClearedStatus, trimmed, cancellationToken).ConfigureAwait(false);
             }
@@ -324,7 +326,7 @@ internal sealed class ContextRelayHost : IDisposable
                 }
 
                 var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Ask, filePrompt.Prompt, reply);
-                await AppendChatHistoryAsync(filePrompt.Prompt, normalizedReply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+                copilotConversationAssistantItemId = await AppendChatHistoryAsync(filePrompt.Prompt, normalizedReply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 var askStatus = filePrompt.Files.Count == 0
                     ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count)
@@ -487,6 +489,7 @@ internal sealed class ContextRelayHost : IDisposable
             currentSearchResults = Array.Empty<ContextItem>();
             lastSearchSummary = null;
             copilotConversationId = null;
+            copilotConversationAssistantItemId = null;
             workIqContextId = null;
             return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
@@ -632,7 +635,7 @@ internal sealed class ContextRelayHost : IDisposable
             var currentItem = history.FirstOrDefault(item => string.Equals(item.Id, itemId, StringComparison.Ordinal));
             if (currentItem is null ||
                 !currentItem.IsCopilotAssistant ||
-                !IsLatestCopilotAssistant(history, currentItem))
+                !string.Equals(copilotConversationAssistantItemId, currentItem.Id, StringComparison.Ordinal))
             {
                 await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationUnavailableStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
                 return;
@@ -655,16 +658,16 @@ internal sealed class ContextRelayHost : IDisposable
             }
 
             RecordManualContinuationDiagnostics(stitched, copilotChatAdapter.LastResponseDiagnostics);
-            var replacement = new SharedChatHistoryItem
+            var continuationItem = new SharedChatHistoryItem
             {
-                Id = currentItem.Id,
+                Id = Guid.NewGuid().ToString("N"),
                 Role = currentItem.Role,
                 Text = stitched,
-                Timestamp = currentItem.Timestamp,
-                Metadata = currentItem.Metadata,
-                ExtensionData = new Dictionary<string, JsonElement>(currentItem.ExtensionData)
+                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                Metadata = new Dictionary<string, JsonElement>(currentItem.Metadata)
             };
-            await sharedStore.AppendChatHistoryAsync(new[] { replacement }, cancellationToken).ConfigureAwait(false);
+            await sharedStore.AppendChatHistoryAsync(new[] { continuationItem }, cancellationToken).ConfigureAwait(false);
+            copilotConversationAssistantItemId = continuationItem.Id;
             logger.LogInformation("Fetched and appended Microsoft 365 Copilot continuation.");
             await RefreshStateCoreAsync(
                 AddCopilotIntegrityWarningIfNeeded(ContextRelayLocalizedStrings.AssistantResponseContinuedStatus),
@@ -1000,23 +1003,26 @@ internal sealed class ContextRelayHost : IDisposable
         }
     }
 
-    private async Task AppendChatHistoryAsync(string userPrompt, string assistantReply, CancellationToken cancellationToken)
+    private async Task<string> AppendChatHistoryAsync(string userPrompt, string assistantReply, CancellationToken cancellationToken)
     {
-        await AppendChatHistoryAsync(userPrompt, assistantReply, kind: null, contextLabels: Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        return await AppendChatHistoryAsync(userPrompt, assistantReply, kind: null, contextLabels: Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task AppendChatHistoryAsync(
+    private async Task<string> AppendChatHistoryAsync(
         string userPrompt,
         string assistantReply,
         string? kind,
         IReadOnlyList<string> contextLabels,
         CancellationToken cancellationToken)
     {
+        var assistantItem = CreateChatItem("assistant", assistantReply, kind, contextLabels);
         await sharedStore.AppendChatHistoryAsync(new[]
         {
             CreateChatItem("user", userPrompt),
-            CreateChatItem("assistant", assistantReply, kind, contextLabels)
+            assistantItem
         }, cancellationToken).ConfigureAwait(false);
+
+        return assistantItem.Id;
     }
 
     private SharedChatHistoryItem CreateChatItem(string role, string text, string? kind = null, IReadOnlyList<string>? contextLabels = null)
@@ -1066,7 +1072,7 @@ internal sealed class ContextRelayHost : IDisposable
         }
 
         var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Chat, message, reply);
-        await AppendChatHistoryAsync(message, normalizedReply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+        copilotConversationAssistantItemId = await AppendChatHistoryAsync(message, normalizedReply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handled plain chat with Microsoft 365 Copilot.");
         var chatStatus = contextPayload.Labels.Count == 0
             ? ContextRelayLocalizedStrings.ChatReplyShownStatus
@@ -1075,12 +1081,6 @@ internal sealed class ContextRelayHost : IDisposable
             AddCopilotIntegrityWarningIfNeeded(chatStatus),
             originalInput,
             cancellationToken).ConfigureAwait(false);
-    }
-
-    private static bool IsLatestCopilotAssistant(IReadOnlyList<SharedChatHistoryItem> history, SharedChatHistoryItem item)
-    {
-        var latestCopilotAssistantId = history.LastOrDefault(candidate => candidate.IsCopilotAssistant)?.Id;
-        return string.Equals(latestCopilotAssistantId, item.Id, StringComparison.Ordinal);
     }
 
     private void RecordManualContinuationDiagnostics(string stitchedResponse, CopilotChatResponseDiagnostics continuationDiagnostics)
@@ -1291,6 +1291,7 @@ internal sealed class ContextRelayHost : IDisposable
             SearchResults = currentSearchResults,
             Snippets = snippets,
             ChatHistory = chatHistory,
+            ContinuableCopilotAssistantItemId = copilotConversationAssistantItemId,
             SearchSummary = lastSearchSummary ?? string.Empty,
             WorkspaceFiles = workspaceFiles
         };
