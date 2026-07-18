@@ -116,7 +116,7 @@ public sealed class CopilotChatStreamParserTests
     }
 
     [Fact]
-    public async Task ParseAsync_TreatesDoneEventAsTerminal()
+    public async Task ParseAsync_TreatsDoneEventAsTerminal()
     {
         // After [DONE], the parser must stop reading and return the last valid snapshot
         // without waiting for the server to close the connection.
