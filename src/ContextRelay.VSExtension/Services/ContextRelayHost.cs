@@ -608,6 +608,71 @@ internal sealed class ContextRelayHost : IDisposable
             : ContextRelayLocalizedStrings.NoActiveEditorStatus).ConfigureAwait(false);
     }
 
+    public async Task ContinueAssistantResponseAsync(string itemId, string existingText, CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(copilotConversationId))
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationUnavailableStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
+            graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
+
+            var authSettings = settings.ToAuthSettings();
+            var token = await authProvider.Value
+                .GetAccessTokenAsync(authSettings, settings.ToFeatureOptions(), cancellationToken)
+                .ConfigureAwait(false);
+
+            var history = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
+            var currentItem = history.FirstOrDefault(item => string.Equals(item.Id, itemId, StringComparison.Ordinal));
+            if (currentItem is null || !currentItem.IsCopilotAssistant)
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationUnavailableStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var continuation = await copilotChatAdapter
+                .ContinueAsync(token.AccessToken, copilotConversationId!, cancellationToken)
+                .ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(continuation))
+            {
+                throw new InvalidOperationException("Microsoft 365 Copilot returned an empty continuation response.");
+            }
+
+            var stitched = CopilotChatAdapter.StitchAssistantResponses(
+                string.IsNullOrWhiteSpace(currentItem.Text) ? existingText : currentItem.Text,
+                continuation);
+            var replacement = new SharedChatHistoryItem
+            {
+                Id = currentItem.Id,
+                Role = currentItem.Role,
+                Text = stitched,
+                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                Metadata = currentItem.Metadata
+            };
+            await sharedStore.AppendChatHistoryAsync(new[] { replacement }, cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Fetched and appended Microsoft 365 Copilot continuation.");
+            await RefreshStateCoreAsync(
+                AddCopilotIntegrityWarningIfNeeded(ContextRelayLocalizedStrings.AssistantResponseContinuedStatus),
+                GetDraftQueryText(),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContextRelayAuthenticationException ex)
+        {
+            logger.LogError("Authentication failed while fetching Copilot continuation.", ex);
+            await RefreshStateCoreAsync(ex.Message, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public async Task OpenHandoffDocumentAsync(CancellationToken cancellationToken = default)
     {
         var handoffContext = await TryEnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -77,6 +77,43 @@ public sealed class GraphHttpClient
         {
             logger?.Log($"x Graph API response stream was interrupted {url}");
             throw new IOException("Graph API response stream was interrupted before completion.", ex);
+        }
+    }
+
+    public async Task<HttpResponseMessage> SendStreamingAsync(
+        string url,
+        string accessToken,
+        HttpMethod method,
+        string? jsonBody = null,
+        CancellationToken cancellationToken = default)
+    {
+        logger?.Log($"-> {method.Method} {url} (stream)");
+
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Accept.ParseAdd("text/event-stream");
+        if (jsonBody is not null)
+        {
+            request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+        }
+
+        try
+        {
+            var response = await httpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            logger?.Log($"<- {(int)response.StatusCode} {response.ReasonPhrase} {url} (stream)");
+            return response;
+        }
+        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger?.Log($"x Graph API streaming request timed out after {httpClient.Timeout.TotalSeconds:0}s {url}");
+            throw new TimeoutException("Graph API streaming request timed out before the response completed.", ex);
+        }
+        catch (HttpRequestException ex) when (ex.InnerException is IOException)
+        {
+            logger?.Log($"x Graph API streaming response was interrupted {url}");
+            throw new IOException("Graph API streaming response was interrupted before completion.", ex);
         }
     }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -109,6 +109,9 @@ internal static class ContextRelayLocalizedStrings
     public static string CopyAssistantButtonText => GetString("CopyAssistantButtonText");
     public static string AppendAssistantButtonText => GetString("AppendAssistantButtonText");
     public static string ReplaceAssistantButtonText => GetString("ReplaceAssistantButtonText");
+    public static string ContinueAssistantButtonText => GetString("ContinueAssistantButtonText");
+    public static string AssistantResponseContinuedStatus => GetString("AssistantResponseContinuedStatus");
+    public static string AssistantContinuationUnavailableStatus => GetString("AssistantContinuationUnavailableStatus");
     public static string ContextLabelsPrefixText => GetString("ContextLabelsPrefixText");
     public static string NoResultsFoundStatus => GetString("NoResultsFoundStatus");
     public static string SourceLabelMail => GetString("SourceLabel_mail");

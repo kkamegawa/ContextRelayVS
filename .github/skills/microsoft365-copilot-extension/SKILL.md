@@ -5,7 +5,7 @@ description: Build or debug Microsoft 365 Copilot integrations in .NET or JavaSc
 
 # Microsoft 365 Copilot Extension Implementation
 
-This skill captures the reusable implementation lessons from ContextRelayVS work on plain Microsoft 365 Copilot chat, Work IQ integration, file-context relay, and the `locationHint.timeZone` regression. Use it when building or debugging a client that talks directly to Microsoft 365 Copilot surfaces from **.NET** or **JavaScript**.
+This skill captures the reusable implementation lessons from ContextRelayVS work on plain Microsoft 365 Copilot chat, Work IQ integration, file-context relay, long-response streaming, and the `locationHint.timeZone` regression. Use it when building or debugging a client that talks directly to Microsoft 365 Copilot surfaces from **.NET** or **JavaScript**.
 
 Primary workflow:
 1. Identify the target surface first: **Graph Copilot Chat** (`/beta/copilot/conversations`) or **Work IQ A2A** (`https://workiq.svc.cloud.microsoft/a2a/`).
@@ -13,7 +13,8 @@ Primary workflow:
 3. Persist the server-issued conversation handle instead of replaying history: `conversationId` for Copilot Chat, `contextId` for Work IQ.
 4. Shape context deliberately: text belongs in `additionalContext`; file references belong in `contextualResources.files` only when the API supports them.
 5. Normalize time-zone metadata before sending it. **Do not send Windows time-zone IDs in `locationHint.timeZone`; send an IANA zone or `Etc/UTC`.**
-6. Diagnose failures at the protocol boundary first: endpoint, headers, status code, error code, and request ID.
+6. For long document-style generations, prefer the streamed Copilot Chat surface and keep synchronous chat as a fallback.
+7. Diagnose failures at the protocol boundary first: endpoint, headers, status code, error code, and request ID.
 
 Use these sample files first:
 - [dotnet-copilot-chat-request.cs](sample_codes/dotnet-copilot-chat-request.cs)
@@ -27,7 +28,10 @@ Start from the repo-specific evidence before searching the wider web:
 
 - **Issue #25 / PR #26** — plain Microsoft 365 Copilot chat mode, explicit context flow, and server-owned conversation state
 - **Issue #64** — `#` file-context relay design for Copilot and Work IQ
-- **`src\ContextRelay.Core\Adapters\CopilotChatAdapter.cs`** — Graph Copilot Chat request shape and the current `locationHint.timeZone` behavior
+- **Issue #141** — streamed Copilot Chat path, stronger response-integrity checks, and manual continuation for truncated generated documents
+- **`src\ContextRelay.Core\Adapters\CopilotChatAdapter.cs`** — Graph Copilot Chat request shape, streamed/synchronous fallback behavior, and the current `locationHint.timeZone` behavior
+- **`src\ContextRelay.Core\Adapters\CopilotChatStreamParser.cs`** — Server-sent event parsing for streamed Copilot Chat snapshots
+- **`src\ContextRelay.Core\Adapters\CopilotResponseIntegrityChecker.cs`** — incomplete-output heuristics for fences, links, tables, dangling headings, unterminated list items, and unbalanced bold markers
 - **`src\ContextRelay.Core\Chat\ChatContextPayloadBuilder.cs`** — bounded `additionalContext` and `contextualResources.files` routing
 - **`src\ContextRelay.Core\Adapters\WorkIqAdapter.cs`** — A2A v1.0 envelope, `A2A-Version: 1.0`, retries, and location metadata
 - **`docs\tenant_admin_quickstart.md`** and **`docs\work_iq.md`** — tenant setup, permission scope, and protocol notes
@@ -118,7 +122,23 @@ Use the same separation ContextRelayVS adopted:
 
 This keeps requests auditable and avoids turning every attachment into an opaque prompt blob.
 
-### Pattern 3: Normalize the time zone before serialization
+### Pattern 3: Prefer streaming for long Copilot Chat generations
+
+The synchronous Copilot Chat response does not expose a reliable completion signal. It returns the latest conversation messages, so a long generated document can stop at a Markdown boundary that looks superficially valid.
+
+For document-style output:
+
+1. create or reuse the `conversationId`
+2. send the same request body to the streamed chat surface (`<COPILOT_CHAT_STREAM_ENDPOINT>`)
+3. parse all server-sent events and keep the latest non-empty assistant snapshot
+4. ignore prompt echo messages and empty intermediate events
+5. if streaming is unavailable or malformed, fall back to the synchronous chat surface (`<COPILOT_CHAT_ENDPOINT>`)
+6. run integrity checks after the final text is assembled
+7. provide a manual "continue" action that sends a continuation prompt in the same conversation when heuristics miss an incomplete response
+
+Do not append every streamed event as a separate answer. Streamed events are snapshots; later snapshots supersede earlier intermediate text.
+
+### Pattern 4: Normalize the time zone before serialization
 
 Recommended rule:
 
@@ -128,7 +148,7 @@ Recommended rule:
 
 This exact rule prevents the `IANA format` 400 error that ContextRelayVS hit.
 
-### Pattern 4: Work IQ A2A v1.0 request
+### Pattern 5: Work IQ A2A v1.0 request
 
 Minimum protocol requirements:
 
@@ -174,6 +194,7 @@ See:
 | JSON-RPC `-32601 Method not found` from Work IQ | Missing `A2A-Version: 1.0` header | Send `A2A-Version: 1.0` explicitly |
 | Empty or weak headless Work IQ response | Recent license assignment delay or an Office-hosted agent that does not work headlessly | Retry later or use a supported agent scenario |
 | Repeated context bloat or odd answers | Large prompt text mixed with file resources indiscriminately | Split context by type and enforce a text budget |
+| Long generated document stops after a heading or bullet | Sync Copilot Chat has no completion signal, and boundary-looking Markdown can evade simple truncation checks | Prefer streamed chat, then run integrity checks and offer manual continuation |
 
 ## Guardrails
 
@@ -182,6 +203,8 @@ See:
 - Do not treat **`WorkIQAgent.Ask`** as a Microsoft Graph permission; it is a separate resource permission.
 - Do not hide request IDs or status codes when surfacing failures.
 - Do not rebuild multi-turn state by replaying the full transcript if the service already gives you a conversation handle.
+- Do not assume a final Markdown heading or long bullet item means the document is complete.
+- Do not treat streamed events as deltas unless the API explicitly documents them as deltas; Copilot Chat stream events are best handled as conversation snapshots.
 - Do not mutate files or editor content implicitly just because Copilot returned text; keep edits explicit in the UX.
 
 ## Learn More

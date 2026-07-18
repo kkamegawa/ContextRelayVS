@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 
 namespace ContextRelay.Core.Adapters;
@@ -16,5 +16,10 @@ public interface ICopilotChatAdapter
         string conversationId,
         string message,
         CopilotChatSendOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    Task<string> ContinueAsync(
+        string accessToken,
+        string conversationId,
         CancellationToken cancellationToken = default);
 }

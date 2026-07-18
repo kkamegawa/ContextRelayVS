@@ -1,4 +1,4 @@
-using ContextRelay.Core.Adapters;
+﻿using ContextRelay.Core.Adapters;
 using Xunit;
 
 namespace ContextRelay.Core.Tests.Adapters;
@@ -70,7 +70,7 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
-    public void Evaluate_TreatsBulletListEndingWithoutPunctuationAsComplete()
+    public void Evaluate_TreatsShortBulletListEndingWithoutPunctuationAsComplete()
     {
         var text = new string('a', 220) + "\n\n- Final item";
 
@@ -80,13 +80,34 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
-    public void Evaluate_TreatsHeadingWithoutPunctuationAsComplete()
+    public void Evaluate_DetectsDanglingHeading()
     {
         var text = new string('a', 220) + "\n\n## Next steps";
 
         var result = CopilotResponseIntegrityChecker.Evaluate(text);
 
-        Assert.False(result.IsLikelyTruncated);
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("dangling-heading", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_DetectsLongUnterminatedListItem()
+    {
+        var text = new string('a', 220) + "\n\n- " + new string('b', 100);
+
+        var result = CopilotResponseIntegrityChecker.Evaluate(text);
+
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("missing-terminal-punctuation", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_DetectsUnbalancedBoldMarkerOnLastLine()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate($"{new string('a', 240)}\n\nThis ends with **partial emphasis");
+
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("unbalanced-bold-marker", result.Reason);
     }
 
     [Fact]

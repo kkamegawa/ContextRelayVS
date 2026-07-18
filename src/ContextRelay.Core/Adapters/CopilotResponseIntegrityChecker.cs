@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.RegularExpressions;
 
 namespace ContextRelay.Core.Adapters;
@@ -9,7 +9,8 @@ public static class CopilotResponseIntegrityChecker
     private const int MinimumTruncatedLineLength = 80;
     private static readonly Regex CodeFenceRegex = new(@"(^|\r?\n)```", RegexOptions.Compiled);
     private static readonly Regex IncompleteMarkdownLinkRegex = new(@"\[[^\]\r\n]+\]\([^)\r\n]*$", RegexOptions.Compiled);
-    private static readonly Regex StructuralLineRegex = new(@"^(#{1,6}\s|[-*+]\s|\d+[.)]\s)", RegexOptions.Compiled);
+    private static readonly Regex HeadingLineRegex = new(@"^#{1,6}\s+\S", RegexOptions.Compiled);
+    private static readonly Regex ListLineRegex = new(@"^([-*+]\s|\d+[.)]\s)", RegexOptions.Compiled);
     private static readonly char[] TerminalCharacters =
     {
         '.', '!', '?', ':', ';', ')', ']', '}', '"', '\'', '`', '>', '|',
@@ -42,6 +43,16 @@ public static class CopilotResponseIntegrityChecker
         if (HasIncompleteTableRow(trimmed))
         {
             return CopilotResponseIntegrityResult.Truncated("incomplete-markdown-table");
+        }
+
+        if (HasUnbalancedBoldMarkerOnLastLine(trimmed))
+        {
+            return CopilotResponseIntegrityResult.Truncated("unbalanced-bold-marker");
+        }
+
+        if (HeadingLineRegex.IsMatch(GetLastNonEmptyLine(trimmed)))
+        {
+            return CopilotResponseIntegrityResult.Truncated("dangling-heading");
         }
 
         if (LooksSoftTruncated(trimmed))
@@ -103,16 +114,10 @@ public static class CopilotResponseIntegrityChecker
             return false;
         }
 
-        // A response can legitimately end in a letter, digit, or hyphen when
-        // the final line is a heading, list item, or short standalone value
-        // (e.g. "## Next steps", "- Final item", "The count is 42"). Only
-        // treat this as a truncation signal when the final line reads like
-        // unfinished prose: not a structural markdown line, and long enough
-        // that a natural sentence would normally have ended in punctuation.
         var lastLine = GetLastNonEmptyLine(value);
-        if (StructuralLineRegex.IsMatch(lastLine))
+        if (ListLineRegex.IsMatch(lastLine))
         {
-            return false;
+            return lastLine.Length >= MinimumTruncatedLineLength;
         }
 
         return lastLine.Length >= MinimumTruncatedLineLength;
@@ -131,6 +136,12 @@ public static class CopilotResponseIntegrityChecker
         }
 
         return string.Empty;
+    }
+
+    private static bool HasUnbalancedBoldMarkerOnLastLine(string value)
+    {
+        var lastLine = GetLastNonEmptyLine(value);
+        return Regex.Matches(lastLine, @"(?<!\\)\*\*").Count % 2 != 0;
     }
 }
 

@@ -334,6 +334,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         await RunBusyAsync(() => host.ReplaceEditorWithAssistantTextAsync(text, ct)).ConfigureAwait(false);
     }
 
+    internal async Task ContinueAssistantResponseAsync(string itemId, string text, CancellationToken ct)
+    {
+        await RunBusyAsync(() => host.ContinueAssistantResponseAsync(itemId, text, ct)).ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         host.StateChanged -= OnHostStateChanged;

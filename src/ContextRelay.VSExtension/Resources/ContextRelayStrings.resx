@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -76,6 +76,9 @@
   <data name="CopyAssistantButtonText" xml:space="preserve"><value>Copy</value></data>
   <data name="AppendAssistantButtonText" xml:space="preserve"><value>Append</value></data>
   <data name="ReplaceAssistantButtonText" xml:space="preserve"><value>Replace</value></data>
+  <data name="ContinueAssistantButtonText" xml:space="preserve"><value>Fetch continuation</value></data>
+  <data name="AssistantResponseContinuedStatus" xml:space="preserve"><value>Copilot continuation appended to the response.</value></data>
+  <data name="AssistantContinuationUnavailableStatus" xml:space="preserve"><value>No active Copilot conversation is available for continuation.</value></data>
   <data name="ContextLabelsPrefixText" xml:space="preserve"><value>Context: </value></data>
   <data name="NoResultsFoundStatus" xml:space="preserve"><value>No results found.</value></data>
   <data name="ToolWindowInitializationFailed_NoDetail" xml:space="preserve"><value>ContextRelay window initialization failed.</value></data>

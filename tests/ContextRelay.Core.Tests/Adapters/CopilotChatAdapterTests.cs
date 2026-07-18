@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Adapters;
@@ -17,7 +18,7 @@ public sealed class CopilotChatAdapterTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = new HttpClient(new QueueHttpMessageHandler(
-            CreateResponse(HttpStatusCode.OK, """
+            CreateStreamResponse("""
                 {
                   "messages": [
                     { "text": "Second section.", "createdDateTime": "2026-07-06T00:02:00Z" },
@@ -40,7 +41,7 @@ public sealed class CopilotChatAdapterTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = new HttpClient(new QueueHttpMessageHandler(
-            CreateResponse(HttpStatusCode.OK, """
+            CreateStreamResponse("""
                 {
                   "messages": [
                     { "text": "Summarize." },
@@ -61,7 +62,7 @@ public sealed class CopilotChatAdapterTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
-            CreateResponse(HttpStatusCode.OK, """
+            CreateStreamResponse("""
                 {
                   "messages": [
                     { "text": "Create a fenced block." },
@@ -69,7 +70,7 @@ public sealed class CopilotChatAdapterTests
                   ]
                 }
                 """),
-            CreateResponse(HttpStatusCode.OK, """
+            CreateStreamResponse("""
                 {
                   "messages": [
                     { "text": "Continue exactly from where your previous message stopped. Do not repeat earlier content." },
@@ -98,16 +99,43 @@ public sealed class CopilotChatAdapterTests
             CreateUnclosedFenceResponse("part 0"),
             CreatePlainPartResponse("part 1"),
             CreatePlainPartResponse("part 2"),
-            CreatePlainPartResponse("part 3"));
+            CreatePlainPartResponse("part 3"),
+            CreatePlainPartResponse("part 4"),
+            CreatePlainPartResponse("part 5"));
         using var httpClient = new HttpClient(handler);
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
 
         var reply = await adapter.SendMessageAsync("token", "c", "Create a fenced block.", cancellationToken: cancellationToken);
 
-        Assert.Contains("part 3", reply, StringComparison.Ordinal);
-        Assert.Equal(4, handler.RequestBodies.Count);
+        Assert.Contains("part 5", reply, StringComparison.Ordinal);
+        Assert.Equal(6, handler.RequestBodies.Count);
         Assert.True(adapter.LastResponseDiagnostics.MayBeIncomplete);
-        Assert.Equal(3, adapter.LastResponseDiagnostics.ContinuationRounds);
+        Assert.Equal(5, adapter.LastResponseDiagnostics.ContinuationRounds);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsUnavailable()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingQueueHttpMessageHandler(
+            CreateResponse(HttpStatusCode.NotFound, """{ "error": { "code": "notFound" } }"""),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "messages": [
+                    { "text": "Summarize." },
+                    { "text": "Fallback reply." }
+                  ]
+                }
+                """));
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
+
+        Assert.Equal("Fallback reply.", reply);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
+        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -123,7 +151,7 @@ public sealed class CopilotChatAdapterTests
 
     private static HttpResponseMessage CreateUnclosedFenceResponse(string text)
     {
-        return CreateResponse(HttpStatusCode.OK, $$"""
+        return CreateStreamResponse($$"""
             {
               "messages": [
                 { "text": "```text\n{{text}}" }
@@ -134,7 +162,7 @@ public sealed class CopilotChatAdapterTests
 
     private static HttpResponseMessage CreatePlainPartResponse(string text)
     {
-        return CreateResponse(HttpStatusCode.OK, $$"""
+        return CreateStreamResponse($$"""
             {
               "messages": [
                 { "text": "{{text}}" }
@@ -149,6 +177,20 @@ public sealed class CopilotChatAdapterTests
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
+    }
+
+    private static HttpResponseMessage CreateStreamResponse(string json)
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent($"data: {CompressJson(json)}\n\n", Encoding.UTF8, "text/event-stream")
+        };
+    }
+
+    private static string CompressJson(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return JsonSerializer.Serialize(document.RootElement);
     }
 
     private sealed class QueueHttpMessageHandler : HttpMessageHandler
@@ -181,8 +223,11 @@ public sealed class CopilotChatAdapterTests
 
         public List<string> RequestBodies { get; } = new();
 
+        public List<string> RequestUris { get; } = new();
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            RequestUris.Add(request.RequestUri?.AbsolutePath ?? string.Empty);
             RequestBodies.Add(request.Content is null
                 ? string.Empty
                 : await request.Content.ReadAsStringAsync(cancellationToken));
