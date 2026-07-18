@@ -151,11 +151,10 @@ public static class CopilotResponseIntegrityChecker
     {
         var builder = new StringBuilder(value.Length);
         var insideFence = false;
-        var insideInlineCode = false;
 
         for (var index = 0; index < value.Length; index++)
         {
-            if (!insideInlineCode && IsFenceMarkerAt(value, index))
+            if (IsFenceMarkerAt(value, index))
             {
                 insideFence = !insideFence;
                 index += 2;
@@ -169,14 +168,16 @@ public static class CopilotResponseIntegrityChecker
 
             if (value[index] == '`')
             {
-                insideInlineCode = !insideInlineCode;
-                continue;
+                var delimiterLength = CountBacktickRun(value, index);
+                var closingIndex = FindMatchingBacktickRun(value, index + delimiterLength, delimiterLength);
+                if (closingIndex >= 0)
+                {
+                    index = closingIndex + delimiterLength - 1;
+                    continue;
+                }
             }
 
-            if (!insideInlineCode)
-            {
-                builder.Append(value[index]);
-            }
+            builder.Append(value[index]);
         }
 
         return builder.ToString();
@@ -189,6 +190,38 @@ public static class CopilotResponseIntegrityChecker
             value[index + 1] == '`' &&
             value[index + 2] == '`' &&
             (index == 0 || value[index - 1] == '\n' || value[index - 1] == '\r');
+    }
+
+    private static int CountBacktickRun(string value, int index)
+    {
+        var length = 0;
+        while (index + length < value.Length && value[index + length] == '`')
+        {
+            length++;
+        }
+
+        return length;
+    }
+
+    private static int FindMatchingBacktickRun(string value, int startIndex, int delimiterLength)
+    {
+        for (var index = startIndex; index < value.Length; index++)
+        {
+            if (value[index] != '`')
+            {
+                continue;
+            }
+
+            var candidateLength = CountBacktickRun(value, index);
+            if (candidateLength == delimiterLength)
+            {
+                return index;
+            }
+
+            index += candidateLength - 1;
+        }
+
+        return -1;
     }
 }
 

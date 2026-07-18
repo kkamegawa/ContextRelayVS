@@ -142,14 +142,20 @@
                                         <Run Text="{Binding ContextLabelsPrefixText}" />
                                         <Run Text="{Binding ContextLabelsJoinedDisplay}" />
                                     </TextBlock>
-                                    <StackPanel Margin="0,8,0,0" Orientation="Horizontal"
-                                                Visibility="{Binding IsActionableAssistant, Converter={StaticResource BoolToVisConverter}}">
+                                    <WrapPanel Margin="0,8,0,0"
+                                               Visibility="{Binding IsActionableAssistant, Converter={StaticResource BoolToVisConverter}}">
                                         <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding CopyAssistantButtonText}" Command="{Binding CopyAssistantCommand}" />
                                         <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding AppendAssistantButtonText}" Command="{Binding AppendAssistantCommand}" />
                                         <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding ReplaceAssistantButtonText}" Command="{Binding ReplaceAssistantCommand}" />
-                                        <Button Style="{StaticResource ThemedButtonStyle}" Padding="8,2" Content="{Binding ContinueAssistantButtonText}" Command="{Binding ContinueAssistantCommand}"
+                                        <Button Style="{StaticResource ThemedButtonStyle}"
+                                                Margin="0,0,8,4"
+                                                Padding="8,2"
+                                                Focusable="True"
+                                                IsTabStop="True"
+                                                Content="{Binding ContinueAssistantButtonText}"
+                                                Command="{Binding ContinueAssistantCommand}"
                                                 Visibility="{Binding IsLatestCopilotAssistant, Converter={StaticResource BoolToVisConverter}}" />
-                                    </StackPanel>
+                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

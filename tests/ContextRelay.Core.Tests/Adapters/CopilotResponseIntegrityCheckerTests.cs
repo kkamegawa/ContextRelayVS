@@ -151,6 +151,14 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
+    public void Evaluate_TreatsBoldMarkerInsideDoubleBacktickCodeSpanAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("The literal ``**`` marker is not emphasis.");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
     public void Evaluate_DetectsUnbalancedBoldMarkerAcrossCompleteResponse()
     {
         var result = CopilotResponseIntegrityChecker.Evaluate($"{new string('a', 240)}\n\nThis starts **partial emphasis\ncontinued");
