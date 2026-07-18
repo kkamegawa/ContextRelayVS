@@ -157,7 +157,8 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
                 graphClient.LogDiagnostic("! Copilot chat stream returned no assistant text; falling back to synchronous chat.");
             }
         }
-        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or TimeoutException or HttpRequestException)
+        catch (Exception ex) when (ex is not AcceptedStreamingResponseException &&
+            ex is JsonException or IOException or InvalidOperationException or TimeoutException or HttpRequestException)
         {
             graphClient.LogDiagnostic($"! Copilot chat stream failed; falling back to synchronous chat. {ex.GetType().Name}: {ex.Message}");
         }
@@ -189,11 +190,24 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
             throw new InvalidOperationException("Unexpected successful Graph error parsing path.");
         }
 
-        var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        var result = await ParseStreamWithTimeoutAsync(stream, message, cancellationToken).ConfigureAwait(false);
-        graphClient.LogDiagnostic(
-            $"Copilot chat stream diagnostics: events={result.StreamEventCount}, messageCount={result.MessageCount}, totalLength={result.Text.Length}");
-        return result;
+        try
+        {
+            var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var result = await ParseStreamWithTimeoutAsync(stream, message, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(result.Text))
+            {
+                throw new AcceptedStreamingResponseException("Copilot chat stream returned no assistant text after the request was accepted.");
+            }
+
+            graphClient.LogDiagnostic(
+                $"Copilot chat stream diagnostics: events={result.StreamEventCount}, messageCount={result.MessageCount}, totalLength={result.Text.Length}");
+            return result;
+        }
+        catch (Exception ex) when (ex is not AcceptedStreamingResponseException &&
+            ex is JsonException or IOException or InvalidOperationException or TimeoutException)
+        {
+            throw new AcceptedStreamingResponseException("Copilot chat stream failed after the request was accepted.", ex);
+        }
     }
 
     private async Task<CopilotChatTurnResult> ParseStreamWithTimeoutAsync(
@@ -493,6 +507,19 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         public IReadOnlyList<int> PartLengths { get; }
 
         public int StreamEventCount { get; }
+    }
+
+    private sealed class AcceptedStreamingResponseException : InvalidOperationException
+    {
+        public AcceptedStreamingResponseException(string message)
+            : base(message)
+        {
+        }
+
+        public AcceptedStreamingResponseException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 }
 

@@ -165,7 +165,7 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
-    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingBodyStalls()
+    public async Task SendMessageAsync_DoesNotRepostWhenAcceptedStreamingBodyStalls()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
@@ -181,12 +181,12 @@ public sealed class CopilotChatAdapterTests
         using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(100) };
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
 
-        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
+        var exception = await Assert.ThrowsAnyAsync<InvalidOperationException>(
+            () => adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken));
 
-        Assert.Equal("Fallback after stalled body.", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.Contains("accepted", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(handler.RequestBodies);
         Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
-        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }
 
     [Fact]
