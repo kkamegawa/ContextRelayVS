@@ -643,7 +643,7 @@ internal sealed class ContextRelayHost : IDisposable
                 .ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(continuation))
             {
-                throw new InvalidOperationException("Microsoft 365 Copilot returned an empty continuation response.");
+                throw new InvalidOperationException(ContextRelayLocalizedStrings.AssistantContinuationEmptyStatus);
             }
 
             var stitched = CopilotChatAdapter.StitchAssistantResponses(

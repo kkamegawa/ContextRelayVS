@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace ContextRelay.Core.Adapters;
@@ -140,7 +141,51 @@ public static class CopilotResponseIntegrityChecker
 
     private static bool HasUnbalancedBoldMarker(string value)
     {
-        return Regex.Matches(value, @"(?<!\\)\*\*").Count % 2 != 0;
+        return Regex.Matches(RemoveMarkdownCodeSections(value), @"(?<!\\)\*\*").Count % 2 != 0;
+    }
+
+    private static string RemoveMarkdownCodeSections(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var insideFence = false;
+        var insideInlineCode = false;
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (!insideInlineCode && IsFenceMarkerAt(value, index))
+            {
+                insideFence = !insideFence;
+                index += 2;
+                continue;
+            }
+
+            if (insideFence)
+            {
+                continue;
+            }
+
+            if (value[index] == '`')
+            {
+                insideInlineCode = !insideInlineCode;
+                continue;
+            }
+
+            if (!insideInlineCode)
+            {
+                builder.Append(value[index]);
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool IsFenceMarkerAt(string value, int index)
+    {
+        return index + 2 < value.Length &&
+            value[index] == '`' &&
+            value[index + 1] == '`' &&
+            value[index + 2] == '`' &&
+            (index == 0 || value[index - 1] == '\n' || value[index - 1] == '\r');
     }
 }
 
