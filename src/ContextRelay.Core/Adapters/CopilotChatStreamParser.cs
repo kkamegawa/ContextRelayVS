@@ -21,17 +21,16 @@ internal static class CopilotChatStreamParser
             throw new ArgumentNullException(nameof(stream));
         }
 
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: false);
+        using var reader = new TokenAwareLineReader(stream, Encoding.UTF8, bufferSize: 1024);
         var dataLines = new List<string>();
-        var bestText = string.Empty;
-        var bestPartLengths = Array.Empty<int>();
-        var bestMessageCount = 0;
+        var latestText = string.Empty;
+        var latestPartLengths = Array.Empty<int>();
+        var latestMessageCount = 0;
         var eventCount = 0;
 
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var line = await reader.ReadLineAsync().ConfigureAwait(false);
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
                 break;
@@ -39,7 +38,7 @@ internal static class CopilotChatStreamParser
 
             if (line.Length == 0)
             {
-                ConsumeEvent(dataLines, requestMessage, ref bestText, ref bestPartLengths, ref bestMessageCount, ref eventCount);
+                ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
                 dataLines.Clear();
                 continue;
             }
@@ -59,16 +58,16 @@ internal static class CopilotChatStreamParser
             }
         }
 
-        ConsumeEvent(dataLines, requestMessage, ref bestText, ref bestPartLengths, ref bestMessageCount, ref eventCount);
-        return new CopilotChatAdapter.CopilotChatTurnResult(bestText, bestMessageCount, bestPartLengths, eventCount);
+        ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
+        return new CopilotChatAdapter.CopilotChatTurnResult(latestText, latestMessageCount, latestPartLengths, eventCount);
     }
 
     private static void ConsumeEvent(
         IReadOnlyList<string> dataLines,
         string requestMessage,
-        ref string bestText,
-        ref int[] bestPartLengths,
-        ref int bestMessageCount,
+        ref string latestText,
+        ref int[] latestPartLengths,
+        ref int latestMessageCount,
         ref int eventCount)
     {
         if (dataLines.Count == 0)
@@ -98,12 +97,9 @@ internal static class CopilotChatStreamParser
         }
 
         var candidateText = CopilotChatAdapter.JoinResponseParts(parts);
-        if (candidateText.Length >= bestText.Length)
-        {
-            bestText = candidateText;
-            bestPartLengths = parts.Select(part => part.Length).ToArray();
-            bestMessageCount = messages.Length;
-        }
+        latestText = candidateText;
+        latestPartLengths = parts.Select(part => part.Length).ToArray();
+        latestMessageCount = messages.Length;
     }
 
     private static IReadOnlyList<string> ExtractAssistantParts(JsonElement[] messages, string requestMessage)
@@ -148,6 +144,105 @@ internal static class CopilotChatStreamParser
         return message.TryGetProperty("createdDateTime", out var createdDateElement) &&
             createdDateElement.ValueKind == JsonValueKind.String &&
             DateTimeOffset.TryParse(createdDateElement.GetString(), out createdDate);
+    }
+
+    private sealed class TokenAwareLineReader : IDisposable
+    {
+        private readonly Stream stream;
+        private readonly Decoder decoder;
+        private readonly byte[] byteBuffer;
+        private readonly char[] charBuffer;
+        private readonly StringBuilder lineBuilder = new();
+        private int charIndex;
+        private int charCount;
+        private bool endOfStream;
+        private bool hasSeenFirstCharacter;
+        private bool skipNextLineFeed;
+
+        public TokenAwareLineReader(Stream stream, Encoding encoding, int bufferSize)
+        {
+            this.stream = stream;
+            decoder = encoding.GetDecoder();
+            byteBuffer = new byte[bufferSize];
+            charBuffer = new char[encoding.GetMaxCharCount(bufferSize)];
+        }
+
+        public async Task<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            while (true)
+            {
+                if (charIndex >= charCount)
+                {
+                    if (endOfStream)
+                    {
+                        return lineBuilder.Length == 0 ? null : FlushLine();
+                    }
+
+                    await FillBufferAsync(cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                var value = charBuffer[charIndex++];
+                if (skipNextLineFeed)
+                {
+                    skipNextLineFeed = false;
+                    if (value == '\n')
+                    {
+                        continue;
+                    }
+                }
+
+                if (!hasSeenFirstCharacter)
+                {
+                    hasSeenFirstCharacter = true;
+                    if (value == '\uFEFF')
+                    {
+                        continue;
+                    }
+                }
+
+                if (value == '\r')
+                {
+                    skipNextLineFeed = true;
+                    return FlushLine();
+                }
+
+                if (value == '\n')
+                {
+                    return FlushLine();
+                }
+
+                lineBuilder.Append(value);
+            }
+        }
+
+        public void Dispose()
+        {
+            stream.Dispose();
+        }
+
+        private async Task FillBufferAsync(CancellationToken cancellationToken)
+        {
+            var bytesRead = await stream.ReadAsync(byteBuffer, 0, byteBuffer.Length, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            charIndex = 0;
+
+            if (bytesRead == 0)
+            {
+                charCount = decoder.GetChars(byteBuffer, 0, 0, charBuffer, 0, flush: true);
+                endOfStream = true;
+                return;
+            }
+
+            charCount = decoder.GetChars(byteBuffer, 0, bytesRead, charBuffer, 0, flush: false);
+        }
+
+        private string FlushLine()
+        {
+            var line = lineBuilder.ToString();
+            lineBuilder.Clear();
+            return line;
+        }
     }
 
     private sealed class IndexedStreamMessage

@@ -7,6 +7,8 @@ public interface ICopilotChatAdapter
 {
     CopilotChatResponseDiagnostics LastResponseDiagnostics { get; }
 
+    void SetLastResponseDiagnostics(CopilotChatResponseDiagnostics diagnostics);
+
     Task<string> AskAsync(string accessToken, string prompt, CancellationToken cancellationToken = default);
 
     Task<string> CreateConversationAsync(string accessToken, CancellationToken cancellationToken = default);

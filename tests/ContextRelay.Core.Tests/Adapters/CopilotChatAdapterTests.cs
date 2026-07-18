@@ -139,6 +139,56 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingTimesOut()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingQueueHttpMessageHandler(
+            new TaskCanceledException("Simulated stream timeout."),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "messages": [
+                    { "text": "Summarize." },
+                    { "text": "Fallback after timeout." }
+                  ]
+                }
+                """));
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
+
+        Assert.Equal("Fallback after timeout.", reply);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
+        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsThrottled()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingQueueHttpMessageHandler(
+            CreateResponse((HttpStatusCode)429, """{ "error": { "code": "tooManyRequests" } }"""),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "messages": [
+                    { "text": "Summarize." },
+                    { "text": "Fallback after throttle." }
+                  ]
+                }
+                """));
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
+
+        Assert.Equal("Fallback after throttle.", reply);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
+        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StitchAssistantResponses_RemovesOverlappingContinuation()
     {
         var existing = "The architecture has API, storage, and authentication layers.";
@@ -213,10 +263,10 @@ public sealed class CopilotChatAdapterTests
 
     private sealed class RecordingQueueHttpMessageHandler : HttpMessageHandler
     {
-        private readonly HttpResponseMessage[] responses;
+        private readonly object[] responses;
         private int index;
 
-        public RecordingQueueHttpMessageHandler(params HttpResponseMessage[] responses)
+        public RecordingQueueHttpMessageHandler(params object[] responses)
         {
             this.responses = responses;
         }
@@ -234,7 +284,12 @@ public sealed class CopilotChatAdapterTests
 
             var current = responses[Math.Min(index, responses.Length - 1)];
             index++;
-            return current;
+            if (current is Exception exception)
+            {
+                throw exception;
+            }
+
+            return (HttpResponseMessage)current;
         }
     }
 }

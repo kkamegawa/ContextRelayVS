@@ -8,7 +8,7 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [DataContract]
 internal sealed class ChatHistoryItemViewModel
 {
-    internal ChatHistoryItemViewModel(SharedChatHistoryItem item, ContextRelayWindowViewModel parent)
+    internal ChatHistoryItemViewModel(SharedChatHistoryItem item, ContextRelayWindowViewModel parent, bool isLatestCopilotAssistant)
     {
         Id = item.Id;
         Role = item.Role;
@@ -16,6 +16,7 @@ internal sealed class ChatHistoryItemViewModel
         Timestamp = item.Timestamp;
         IsActionableAssistant = item.IsActionableAssistant;
         IsCopilotAssistant = item.IsCopilotAssistant;
+        IsLatestCopilotAssistant = item.IsCopilotAssistant && isLatestCopilotAssistant;
         HasContextLabels = item.HasContextLabels;
         ContextLabelsJoinedDisplay = item.ContextLabelsJoinedDisplay;
         ContextLabelsPrefixText = ContextRelayLocalizedStrings.ContextLabelsPrefixText;
@@ -36,6 +37,7 @@ internal sealed class ChatHistoryItemViewModel
     [DataMember] public string Timestamp { get; private set; }
     [DataMember] public bool IsActionableAssistant { get; private set; }
     [DataMember] public bool IsCopilotAssistant { get; private set; }
+    [DataMember] public bool IsLatestCopilotAssistant { get; private set; }
     [DataMember] public bool HasContextLabels { get; private set; }
     [DataMember] public string ContextLabelsJoinedDisplay { get; private set; }
     [DataMember] public string ContextLabelsPrefixText { get; private set; }

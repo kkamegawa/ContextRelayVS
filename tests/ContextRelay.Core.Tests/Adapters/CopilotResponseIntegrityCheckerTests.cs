@@ -111,6 +111,23 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
+    public void Evaluate_TreatsMultilineBoldEmphasisAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("**bold text\ncontinued**");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_DetectsUnbalancedBoldMarkerAcrossCompleteResponse()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate($"{new string('a', 240)}\n\nThis starts **partial emphasis\ncontinued");
+
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("unbalanced-bold-marker", result.Reason);
+    }
+
+    [Fact]
     public void Evaluate_DetectsTrailingCommaRegardlessOfLineLength()
     {
         var text = new string('a', 240) + "\n\nshort,";

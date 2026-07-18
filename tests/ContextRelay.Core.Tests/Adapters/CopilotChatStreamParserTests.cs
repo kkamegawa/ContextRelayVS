@@ -1,5 +1,7 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Adapters;
 using Xunit;
@@ -12,20 +14,20 @@ public sealed class CopilotChatStreamParserTests
     public async Task ParseAsync_UsesLatestNonEmptyAssistantSnapshot()
     {
         var stream = ToStream("""
-            data: {"messages":[{"text":"Write a plan."},{"text":"First part"}]}
+            data: {"messages":[{"text":"Write a plan."},{"text":"First part. Second part."}]}
             id:1
 
             data: {"messages":[]}
             id:2
 
-            data: {"messages":[{"text":"Write a plan."},{"text":"First part. Second part."}]}
+            data: {"messages":[{"text":"Write a plan."},{"text":"Final."}]}
             id:3
 
             """);
 
         var result = await CopilotChatStreamParser.ParseAsync(stream, "Write a plan.", TestContext.Current.CancellationToken);
 
-        Assert.Equal("First part. Second part.", result.Text);
+        Assert.Equal("Final.", result.Text);
         Assert.Equal(3, result.StreamEventCount);
         Assert.Equal(2, result.MessageCount);
     }
@@ -62,8 +64,66 @@ public sealed class CopilotChatStreamParserTests
             () => CopilotChatStreamParser.ParseAsync(stream, "Prompt", TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task ParseAsync_ObservesCancellationWhileWaitingForLine()
+    {
+        using var stream = new StallingReadStream();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => CopilotChatStreamParser.ParseAsync(stream, "Prompt", cancellation.Token));
+    }
+
     private static Stream ToStream(string value)
     {
         return new MemoryStream(Encoding.UTF8.GetBytes(value.Replace("\r\n", "\n")));
+    }
+
+    private sealed class StallingReadStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return 0;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
     }
 }

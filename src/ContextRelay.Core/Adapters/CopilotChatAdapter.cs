@@ -31,6 +31,17 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
 
     public CopilotChatResponseDiagnostics LastResponseDiagnostics { get; private set; } = CopilotChatResponseDiagnostics.Empty;
 
+    public void SetLastResponseDiagnostics(CopilotChatResponseDiagnostics diagnostics)
+    {
+        if (diagnostics is null)
+        {
+            throw new ArgumentNullException(nameof(diagnostics));
+        }
+
+        LastResponseDiagnostics = diagnostics;
+        graphClient.LogDiagnostic(BuildResponseDiagnosticsLog(LastResponseDiagnostics));
+    }
+
     public async Task<string> AskAsync(string accessToken, string prompt, CancellationToken cancellationToken = default)
     {
         var conversationId = await CreateConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
@@ -113,16 +124,16 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         CancellationToken cancellationToken = default)
     {
         var continuation = await SendMessageWithStreamingFallbackAsync(accessToken, conversationId, ContinuationPrompt, options: null, cancellationToken).ConfigureAwait(false);
-        LastResponseDiagnostics = new CopilotChatResponseDiagnostics(
+        var integrity = CopilotResponseIntegrityChecker.Evaluate(continuation.Text);
+        SetLastResponseDiagnostics(new CopilotChatResponseDiagnostics(
             continuation.MessageCount,
             continuation.PartLengths,
             continuation.Text.Length,
             continuationRounds: 0,
-            truncationDetected: false,
-            mayBeIncomplete: false,
-            truncationReason: null,
-            continuation.StreamEventCount);
-        graphClient.LogDiagnostic(BuildResponseDiagnosticsLog(LastResponseDiagnostics));
+            truncationDetected: integrity.IsLikelyTruncated,
+            mayBeIncomplete: integrity.IsLikelyTruncated,
+            truncationReason: integrity.Reason,
+            continuation.StreamEventCount));
         return continuation.Text;
     }
 
@@ -146,7 +157,7 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
                 graphClient.LogDiagnostic("! Copilot chat stream returned no assistant text; falling back to synchronous chat.");
             }
         }
-        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException)
+        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or TimeoutException)
         {
             graphClient.LogDiagnostic($"! Copilot chat stream failed; falling back to synchronous chat. {ex.GetType().Name}: {ex.Message}");
         }
@@ -226,7 +237,8 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
 
     private static bool ShouldFallbackFromStreaming(System.Net.HttpStatusCode statusCode)
     {
-        return statusCode is System.Net.HttpStatusCode.NotFound or
+        return statusCode == (System.Net.HttpStatusCode)429 ||
+            statusCode is System.Net.HttpStatusCode.NotFound or
             System.Net.HttpStatusCode.MethodNotAllowed or
             System.Net.HttpStatusCode.NotImplemented or
             System.Net.HttpStatusCode.InternalServerError or

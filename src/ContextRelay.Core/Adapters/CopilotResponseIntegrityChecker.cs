@@ -45,7 +45,7 @@ public static class CopilotResponseIntegrityChecker
             return CopilotResponseIntegrityResult.Truncated("incomplete-markdown-table");
         }
 
-        if (HasUnbalancedBoldMarkerOnLastLine(trimmed))
+        if (HasUnbalancedBoldMarker(trimmed))
         {
             return CopilotResponseIntegrityResult.Truncated("unbalanced-bold-marker");
         }
@@ -138,10 +138,9 @@ public static class CopilotResponseIntegrityChecker
         return string.Empty;
     }
 
-    private static bool HasUnbalancedBoldMarkerOnLastLine(string value)
+    private static bool HasUnbalancedBoldMarker(string value)
     {
-        var lastLine = GetLastNonEmptyLine(value);
-        return Regex.Matches(lastLine, @"(?<!\\)\*\*").Count % 2 != 0;
+        return Regex.Matches(value, @"(?<!\\)\*\*").Count % 2 != 0;
     }
 }
 

@@ -630,7 +630,9 @@ internal sealed class ContextRelayHost : IDisposable
 
             var history = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
             var currentItem = history.FirstOrDefault(item => string.Equals(item.Id, itemId, StringComparison.Ordinal));
-            if (currentItem is null || !currentItem.IsCopilotAssistant)
+            if (currentItem is null ||
+                !currentItem.IsCopilotAssistant ||
+                !IsLatestCopilotAssistant(history, currentItem))
             {
                 await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationUnavailableStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
                 return;
@@ -647,6 +649,7 @@ internal sealed class ContextRelayHost : IDisposable
             var stitched = CopilotChatAdapter.StitchAssistantResponses(
                 string.IsNullOrWhiteSpace(currentItem.Text) ? existingText : currentItem.Text,
                 continuation);
+            RecordManualContinuationDiagnostics(stitched, copilotChatAdapter.LastResponseDiagnostics);
             var replacement = new SharedChatHistoryItem
             {
                 Id = currentItem.Id,
@@ -665,6 +668,11 @@ internal sealed class ContextRelayHost : IDisposable
         catch (ContextRelayAuthenticationException ex)
         {
             logger.LogError("Authentication failed while fetching Copilot continuation.", ex);
+            await RefreshStateCoreAsync(ex.Message, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError("Failed to fetch Copilot continuation.", ex);
             await RefreshStateCoreAsync(ex.Message, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -1061,6 +1069,26 @@ internal sealed class ContextRelayHost : IDisposable
             AddCopilotIntegrityWarningIfNeeded(chatStatus),
             originalInput,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsLatestCopilotAssistant(IReadOnlyList<SharedChatHistoryItem> history, SharedChatHistoryItem item)
+    {
+        var latestCopilotAssistantId = history.LastOrDefault(candidate => candidate.IsCopilotAssistant)?.Id;
+        return string.Equals(latestCopilotAssistantId, item.Id, StringComparison.Ordinal);
+    }
+
+    private void RecordManualContinuationDiagnostics(string stitchedResponse, CopilotChatResponseDiagnostics continuationDiagnostics)
+    {
+        var integrity = CopilotResponseIntegrityChecker.Evaluate(stitchedResponse);
+        copilotChatAdapter.SetLastResponseDiagnostics(new CopilotChatResponseDiagnostics(
+            continuationDiagnostics.MessageCount,
+            continuationDiagnostics.PartLengths,
+            stitchedResponse.Length,
+            continuationDiagnostics.ContinuationRounds,
+            continuationDiagnostics.TruncationDetected || integrity.IsLikelyTruncated,
+            integrity.IsLikelyTruncated,
+            integrity.Reason,
+            continuationDiagnostics.StreamEventCount));
     }
 
     private string AddCopilotIntegrityWarningIfNeeded(string status)
