@@ -73,7 +73,7 @@ public static class CopilotResponseIntegrityChecker
 
         for (var index = 0; index < value.Length; index++)
         {
-            if (!TryReadFenceMarker(value, index, out var marker, out var length))
+            if (!TryReadFenceMarker(value, index, out var marker, out var length, out var markerIndex))
             {
                 continue;
             }
@@ -84,7 +84,9 @@ public static class CopilotResponseIntegrityChecker
                 fenceMarker = marker;
                 fenceLength = length;
             }
-            else if (marker == fenceMarker && length >= fenceLength)
+            else if (marker == fenceMarker &&
+                length >= fenceLength &&
+                HasOnlyWhitespaceUntilLineEnd(value, markerIndex + length))
             {
                 insideFence = false;
                 fenceMarker = '\0';
@@ -198,7 +200,7 @@ public static class CopilotResponseIntegrityChecker
 
         for (var index = 0; index < value.Length; index++)
         {
-            if (TryReadFenceMarker(value, index, out var marker, out var length))
+            if (TryReadFenceMarker(value, index, out var marker, out var length, out var markerIndex))
             {
                 if (!insideFence)
                 {
@@ -209,7 +211,9 @@ public static class CopilotResponseIntegrityChecker
                     continue;
                 }
 
-                if (marker == fenceMarker && length >= fenceLength)
+                if (marker == fenceMarker &&
+                    length >= fenceLength &&
+                    HasOnlyWhitespaceUntilLineEnd(value, markerIndex + length))
                 {
                     insideFence = false;
                     fenceMarker = '\0';
@@ -244,7 +248,6 @@ public static class CopilotResponseIntegrityChecker
     private static bool HasUnbalancedStrongDelimiter(string value, char marker)
     {
         var openers = 0;
-        var unmatchedClosers = 0;
 
         for (var index = 0; index < value.Length; index++)
         {
@@ -272,12 +275,17 @@ public static class CopilotResponseIntegrityChecker
             var delimiterPairs = runLength / 2;
             var canOpen = CanOpenStrongDelimiter(previous, next, marker);
             var canClose = CanCloseStrongDelimiter(previous, next, marker);
+            if (canOpen && canClose && openers == 0 && IsPunctuation(previous) && IsPunctuation(next))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
             if (canClose)
             {
                 var matched = Math.Min(openers, delimiterPairs);
                 openers -= matched;
                 delimiterPairs -= matched;
-                unmatchedClosers += delimiterPairs;
             }
 
             if (canOpen)
@@ -288,7 +296,7 @@ public static class CopilotResponseIntegrityChecker
             index += runLength - 1;
         }
 
-        return openers > 0 || unmatchedClosers > 0;
+        return openers > 0;
     }
 
     private static bool CanOpenStrongDelimiter(char previous, char next, char marker)
@@ -345,10 +353,11 @@ public static class CopilotResponseIntegrityChecker
         return slashCount % 2 != 0;
     }
 
-    private static bool TryReadFenceMarker(string value, int index, out char marker, out int length)
+    private static bool TryReadFenceMarker(string value, int index, out char marker, out int length, out int markerIndex)
     {
         marker = '\0';
         length = 0;
+        markerIndex = -1;
         if (!IsLineStart(value, index))
         {
             return false;
@@ -368,8 +377,28 @@ public static class CopilotResponseIntegrityChecker
         }
 
         marker = value[cursor];
+        markerIndex = cursor;
         length = CountRun(value, cursor, marker);
         return length >= 3;
+    }
+
+    private static bool HasOnlyWhitespaceUntilLineEnd(string value, int index)
+    {
+        for (var cursor = index; cursor < value.Length; cursor++)
+        {
+            var current = value[cursor];
+            if (current == '\r' || current == '\n')
+            {
+                return true;
+            }
+
+            if (!char.IsWhiteSpace(current))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsLineStart(string value, int index)

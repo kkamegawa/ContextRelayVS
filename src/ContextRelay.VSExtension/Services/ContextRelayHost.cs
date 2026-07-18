@@ -317,6 +317,7 @@ internal sealed class ContextRelayHost : IDisposable
                 var contextPayload = ChatContextPayloadBuilder.Build(snippetsWithLocalFileContext);
                 LogChatPayloadDiagnostics("ask", filePrompt.Prompt, contextPayload);
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
+                copilotConversationAssistantItemId = null;
                 var reply = await copilotChatAdapter
                     .SendMessageAsync(token.AccessToken, conversationId, filePrompt.Prompt, contextPayload.SendOptions, cancellationToken)
                     .ConfigureAwait(false);
@@ -1064,6 +1065,7 @@ internal sealed class ContextRelayHost : IDisposable
             lastSearchSummary);
         LogChatPayloadDiagnostics("chat", message, contextPayload);
         var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
+        copilotConversationAssistantItemId = null;
         var reply = await copilotChatAdapter
             .SendMessageAsync(accessToken, conversationId, message, contextPayload.SendOptions, cancellationToken)
             .ConfigureAwait(false);

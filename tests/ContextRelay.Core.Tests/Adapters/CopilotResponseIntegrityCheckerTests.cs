@@ -143,6 +143,14 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
+    public void Evaluate_TreatsFenceContentLineThatStartsWithFenceMarkerAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("```text\n```not-a-close\nliteral ** marker\n```");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
     public void Evaluate_DetectsUnbalancedTildeCodeFence()
     {
         var result = CopilotResponseIntegrityChecker.Evaluate("~~~text\nliteral content");
@@ -203,6 +211,22 @@ public sealed class CopilotResponseIntegrityCheckerTests
     public void Evaluate_TreatsIntrawordUnderscoresAsComplete()
     {
         var result = CopilotResponseIntegrityChecker.Evaluate("The token is FOO__BAR.");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_TreatsClosingOnlyAsteriskRunAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("Use the glob src/**.");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
+    public void Evaluate_TreatsClosingOnlyUnderscoreRunAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("The generated suffix is name__.");
 
         Assert.False(result.IsLikelyTruncated);
     }
