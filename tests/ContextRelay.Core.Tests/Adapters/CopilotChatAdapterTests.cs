@@ -265,6 +265,26 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_ReturnsPartialResponseWhenContinuationStreamAcceptedButEmpty()
+    {
+        // First request returns a truncated response; continuation returns 200 with an empty
+        // SSE body (accepted stream, no assistant text). The initial valid response must still
+        // be returned with MayBeIncomplete set.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingQueueHttpMessageHandler(
+            CreateUnclosedFenceResponse("First line"),
+            CreateEmptyStreamResponse());
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Create a fenced block.", cancellationToken: cancellationToken);
+
+        Assert.Contains("First line", reply, StringComparison.Ordinal);
+        Assert.True(adapter.LastResponseDiagnostics.MayBeIncomplete);
+    }
+
+
+    [Fact]
     public void StitchAssistantResponses_RemovesOverlappingContinuation()
     {
         var existing = "The architecture has API, storage, and authentication layers.";
@@ -302,6 +322,14 @@ public sealed class CopilotChatAdapterTests
         return new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+    }
+
+    private static HttpResponseMessage CreateEmptyStreamResponse()
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(string.Empty, Encoding.UTF8, "text/event-stream")
         };
     }
 

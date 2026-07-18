@@ -90,7 +90,20 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
             graphClient.LogDiagnostic(
                 $"! Copilot response may be incomplete ({integrity.Reason}); requesting continuation {continuationRounds}/{MaxContinuationRounds}");
 
-            var continuation = await SendMessageWithStreamingFallbackAsync(accessToken, conversationId, ContinuationPrompt, options: null, cancellationToken).ConfigureAwait(false);
+            CopilotChatTurnResult continuation;
+            try
+            {
+                continuation = await SendMessageWithStreamingFallbackAsync(accessToken, conversationId, ContinuationPrompt, options: null, cancellationToken).ConfigureAwait(false);
+            }
+            catch (AcceptedStreamingResponseException)
+            {
+                // The continuation stream was accepted but then stalled or contained malformed SSE.
+                // fullReply still holds the usable initial response; surface it as incomplete so
+                // the user can read it and trigger manual continuation if needed.
+                graphClient.LogDiagnostic("! Continuation stream accepted but failed mid-transfer; returning partial response.");
+                break;
+            }
+
             messageCount += continuation.MessageCount;
             partLengths.AddRange(continuation.PartLengths);
             streamEventCount += continuation.StreamEventCount;
