@@ -30,7 +30,18 @@ internal static class CopilotChatStreamParser
 
         while (true)
         {
-            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            string? line;
+            try
+            {
+                line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException) when (latestText.Length > 0)
+            {
+                // Transport failure after a valid snapshot has been captured.
+                // Surface the snapshot rather than propagating the exception.
+                break;
+            }
+
             if (line is null)
             {
                 break;
@@ -38,8 +49,13 @@ internal static class CopilotChatStreamParser
 
             if (line.Length == 0)
             {
-                ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
+                var done = ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
                 dataLines.Clear();
+                if (done)
+                {
+                    break;
+                }
+
                 continue;
             }
 
@@ -56,7 +72,7 @@ internal static class CopilotChatStreamParser
         return new CopilotChatAdapter.CopilotChatTurnResult(latestText, latestMessageCount, latestPartLengths, eventCount);
     }
 
-    private static void ConsumeEvent(
+    private static bool ConsumeEvent(
         IReadOnlyList<string> dataLines,
         string requestMessage,
         ref string latestText,
@@ -66,14 +82,21 @@ internal static class CopilotChatStreamParser
     {
         if (dataLines.Count == 0)
         {
-            return;
+            return false;
         }
 
         eventCount++;
         var payload = string.Join("\n", dataLines).Trim();
-        if (payload.Length == 0 || string.Equals(payload, "[DONE]", StringComparison.OrdinalIgnoreCase))
+        if (payload.Length == 0)
         {
-            return;
+            return false;
+        }
+
+        if (string.Equals(payload, "[DONE]", StringComparison.OrdinalIgnoreCase))
+        {
+            // Completion sentinel: treat as terminal so the loop exits without
+            // waiting for the server to close the connection.
+            return true;
         }
 
         JsonDocument document;
@@ -84,7 +107,7 @@ internal static class CopilotChatStreamParser
         catch (JsonException)
         {
             // Malformed JSON in a later event must not discard an already-captured valid snapshot.
-            return;
+            return false;
         }
 
         using (document)
@@ -92,14 +115,14 @@ internal static class CopilotChatStreamParser
             if (!document.RootElement.TryGetProperty("messages", out var messagesElement) ||
                 messagesElement.ValueKind != JsonValueKind.Array)
             {
-                return;
+                return false;
             }
 
             var messages = messagesElement.EnumerateArray().ToArray();
             var parts = ExtractAssistantParts(messages, requestMessage);
             if (parts.Count == 0)
             {
-                return;
+                return false;
             }
 
             var candidateText = CopilotChatAdapter.JoinResponseParts(parts);
@@ -107,6 +130,8 @@ internal static class CopilotChatStreamParser
             latestPartLengths = parts.Select(part => part.Length).ToArray();
             latestMessageCount = messages.Length;
         }
+
+        return false;
     }
 
     private static IReadOnlyList<string> ExtractAssistantParts(JsonElement[] messages, string requestMessage)

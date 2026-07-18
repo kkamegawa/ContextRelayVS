@@ -115,9 +115,79 @@ public sealed class CopilotChatStreamParserTests
             () => CopilotChatStreamParser.ParseAsync(stream, "Prompt", cancellation.Token));
     }
 
+    [Fact]
+    public async Task ParseAsync_TreatesDoneEventAsTerminal()
+    {
+        // After [DONE], the parser must stop reading and return the last valid snapshot
+        // without waiting for the server to close the connection.
+        var stream = ToStream("""
+            data: {"messages":[{"text":"Prompt"},{"text":"Complete answer."}]}
+
+            data: [DONE]
+
+            """);
+
+        var result = await CopilotChatStreamParser.ParseAsync(stream, "Prompt", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Complete answer.", result.Text);
+    }
+
+    [Fact]
+    public async Task ParseAsync_PreservesSnapshotOnTransportFailureAfterValidEvent()
+    {
+        // An IOException raised after a valid snapshot has been captured must not
+        // discard that snapshot; the parser must return the last valid result.
+        var stream = new PartialThenThrowStream(
+            "data: {\"messages\":[{\"text\":\"Prompt\"},{\"text\":\"Valid answer.\"}]}\n\n");
+
+        var result = await CopilotChatStreamParser.ParseAsync(stream, "Prompt", TestContext.Current.CancellationToken);
+
+        Assert.Equal("Valid answer.", result.Text);
+    }
+
+
     private static Stream ToStream(string value)
     {
         return new MemoryStream(Encoding.UTF8.GetBytes(value.Replace("\r\n", "\n")));
+    }
+
+    /// <summary>
+    /// Streams initial bytes then throws <see cref="IOException"/> to simulate a mid-stream transport failure.
+    /// </summary>
+    private sealed class PartialThenThrowStream : Stream
+    {
+        private readonly byte[] initialBytes;
+        private int position;
+
+        public PartialThenThrowStream(string initialContent)
+        {
+            initialBytes = Encoding.UTF8.GetBytes(initialContent);
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            if (position < initialBytes.Length)
+            {
+                var toCopy = Math.Min(count, initialBytes.Length - position);
+                Array.Copy(initialBytes, position, buffer, offset, toCopy);
+                position += toCopy;
+                return Task.FromResult(toCopy);
+            }
+
+            throw new IOException("Simulated transport failure after valid SSE event.");
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private sealed class StallingReadStream : Stream
