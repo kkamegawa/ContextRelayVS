@@ -143,9 +143,26 @@ public sealed class CopilotResponseIntegrityCheckerTests
     }
 
     [Fact]
+    public void Evaluate_TreatsUnderscoreBoldMarkerInsideInlineCodeAsComplete()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate("The literal `__` marker is not emphasis.");
+
+        Assert.False(result.IsLikelyTruncated);
+    }
+
+    [Fact]
     public void Evaluate_DetectsUnbalancedBoldMarkerAcrossCompleteResponse()
     {
         var result = CopilotResponseIntegrityChecker.Evaluate($"{new string('a', 240)}\n\nThis starts **partial emphasis\ncontinued");
+
+        Assert.True(result.IsLikelyTruncated);
+        Assert.Equal("unbalanced-bold-marker", result.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_DetectsUnbalancedUnderscoreBoldMarkerAcrossCompleteResponse()
+    {
+        var result = CopilotResponseIntegrityChecker.Evaluate($"{new string('a', 240)}\n\nThis starts __partial emphasis\ncontinued");
 
         Assert.True(result.IsLikelyTruncated);
         Assert.Equal("unbalanced-bold-marker", result.Reason);

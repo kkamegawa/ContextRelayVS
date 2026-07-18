@@ -78,6 +78,7 @@
   <data name="AssistantResponseContinuedStatus" xml:space="preserve"><value>Copilot の続きを応答に追記しました。</value></data>
   <data name="AssistantContinuationUnavailableStatus" xml:space="preserve"><value>続きを取得できる有効な Copilot 会話がありません。</value></data>
   <data name="AssistantContinuationEmptyStatus" xml:space="preserve"><value>Microsoft 365 Copilot から空の続き応答が返されました。</value></data>
+  <data name="AssistantContinuationNoNewContentStatus" xml:space="preserve"><value>Copilot から新しい続きの内容は返されませんでした。</value></data>
   <data name="ContextLabelsPrefixText" xml:space="preserve"><value>コンテキスト: </value></data>
   <data name="NoResultsFoundStatus" xml:space="preserve"><value>結果が見つかりませんでした。</value></data>
   <data name="ToolWindowInitializationFailed_NoDetail" xml:space="preserve"><value>ContextRelay ウィンドウの初期化に失敗しました。</value></data>

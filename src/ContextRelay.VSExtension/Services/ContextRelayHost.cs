@@ -646,9 +646,14 @@ internal sealed class ContextRelayHost : IDisposable
                 throw new InvalidOperationException(ContextRelayLocalizedStrings.AssistantContinuationEmptyStatus);
             }
 
-            var stitched = CopilotChatAdapter.StitchAssistantResponses(
-                string.IsNullOrWhiteSpace(currentItem.Text) ? existingText : currentItem.Text,
-                continuation);
+            var baseText = string.IsNullOrWhiteSpace(currentItem.Text) ? existingText : currentItem.Text;
+            var stitched = CopilotChatAdapter.StitchAssistantResponses(baseText, continuation);
+            if (string.Equals(stitched, baseText, StringComparison.Ordinal))
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationNoNewContentStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             RecordManualContinuationDiagnostics(stitched, copilotChatAdapter.LastResponseDiagnostics);
             var replacement = new SharedChatHistoryItem
             {

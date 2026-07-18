@@ -113,6 +113,7 @@ internal static class ContextRelayLocalizedStrings
     public static string AssistantResponseContinuedStatus => GetString("AssistantResponseContinuedStatus");
     public static string AssistantContinuationUnavailableStatus => GetString("AssistantContinuationUnavailableStatus");
     public static string AssistantContinuationEmptyStatus => GetString("AssistantContinuationEmptyStatus");
+    public static string AssistantContinuationNoNewContentStatus => GetString("AssistantContinuationNoNewContentStatus");
     public static string ContextLabelsPrefixText => GetString("ContextLabelsPrefixText");
     public static string NoResultsFoundStatus => GetString("NoResultsFoundStatus");
     public static string SourceLabelMail => GetString("SourceLabel_mail");

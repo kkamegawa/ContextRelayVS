@@ -142,7 +142,9 @@ public static class CopilotResponseIntegrityChecker
 
     private static bool HasUnbalancedBoldMarker(string value)
     {
-        return Regex.Matches(RemoveMarkdownCodeSections(value), @"(?<!\\)\*\*").Count % 2 != 0;
+        var textWithoutCode = RemoveMarkdownCodeSections(value);
+        return Regex.Matches(textWithoutCode, @"(?<!\\)\*\*").Count % 2 != 0 ||
+            Regex.Matches(textWithoutCode, @"(?<![\\_])__(?!_)").Count % 2 != 0;
     }
 
     private static string RemoveMarkdownCodeSections(string value)

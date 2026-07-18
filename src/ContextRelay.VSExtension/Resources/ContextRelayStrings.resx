@@ -80,6 +80,7 @@
   <data name="AssistantResponseContinuedStatus" xml:space="preserve"><value>Copilot continuation appended to the response.</value></data>
   <data name="AssistantContinuationUnavailableStatus" xml:space="preserve"><value>No active Copilot conversation is available for continuation.</value></data>
   <data name="AssistantContinuationEmptyStatus" xml:space="preserve"><value>Microsoft 365 Copilot returned an empty continuation response.</value></data>
+  <data name="AssistantContinuationNoNewContentStatus" xml:space="preserve"><value>Copilot returned no new continuation content.</value></data>
   <data name="ContextLabelsPrefixText" xml:space="preserve"><value>Context: </value></data>
   <data name="NoResultsFoundStatus" xml:space="preserve"><value>No results found.</value></data>
   <data name="ToolWindowInitializationFailed_NoDetail" xml:space="preserve"><value>ContextRelay window initialization failed.</value></data>
