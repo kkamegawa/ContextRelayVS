@@ -1,0 +1,11 @@
+{
+  "name": "nuget-validate",
+  "source": "project",
+  "description": "Validate NuGet package versions for vulnerabilities, deprecation, and package freshness before package changes.",
+  "categories": [
+    "dotnet",
+    "nuget",
+    "security"
+  ],
+  "installedAt": "2026-05-12T13:25:58.414Z"
+}
