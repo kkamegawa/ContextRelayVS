@@ -157,7 +157,7 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
                 graphClient.LogDiagnostic("! Copilot chat stream returned no assistant text; falling back to synchronous chat.");
             }
         }
-        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or TimeoutException or HttpRequestException)
         {
             graphClient.LogDiagnostic($"! Copilot chat stream failed; falling back to synchronous chat. {ex.GetType().Name}: {ex.Message}");
         }

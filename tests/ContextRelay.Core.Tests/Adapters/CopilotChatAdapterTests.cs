@@ -190,6 +190,31 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingTransportFails()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingQueueHttpMessageHandler(
+            new HttpRequestException("stream reset"),
+            CreateResponse(HttpStatusCode.OK, """
+                {
+                  "messages": [
+                    { "text": "Summarize." },
+                    { "text": "Fallback after transport failure." }
+                  ]
+                }
+                """));
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
+
+        Assert.Equal("Fallback after transport failure.", reply);
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
+        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsThrottled()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

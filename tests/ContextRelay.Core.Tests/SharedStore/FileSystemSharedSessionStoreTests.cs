@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -85,6 +85,29 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
 
         Assert.Equal(new[] { "2", "3", "4" }, result.Select(item => item.Id).ToArray());
         Assert.Equal("second-updated", result[0].Text);
+    }
+
+    [Fact]
+    public async Task AppendChatHistoryAsync_ReplacesMatchingTimestampWithIncomingItem()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+
+        await store.AppendChatHistoryAsync(new[]
+        {
+            CreateChatItem("1", "2026-04-19T00:00:01Z", "first"),
+            CreateChatItem("2", "2026-04-19T00:00:02Z", "second"),
+            CreateChatItem("3", "2026-04-19T00:00:03Z", "third")
+        }, cancellationToken);
+
+        var result = await store.AppendChatHistoryAsync(new[]
+        {
+            CreateChatItem("2", "2026-04-19T00:00:02Z", "second-updated")
+        }, cancellationToken);
+
+        Assert.Equal(new[] { "1", "2", "3" }, result.Select(item => item.Id).ToArray());
+        Assert.Equal("second-updated", result[1].Text);
+        Assert.Equal("2026-04-19T00:00:02Z", result[1].Timestamp);
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -282,16 +282,35 @@ public sealed class FileSystemSharedSessionStore : ISharedSessionStore
 
     private IReadOnlyList<SharedChatHistoryItem> MergeChatHistory(IReadOnlyList<SharedChatHistoryItem> current, IEnumerable<SharedChatHistoryItem> incoming)
     {
-        var merged = current
-            .Concat(incoming)
-            .Where(item => !string.IsNullOrWhiteSpace(item.Id))
-            .GroupBy(item => item.Id, StringComparer.Ordinal)
-            .Select(group => group.OrderByDescending(GetChatTimestamp).First())
+        var currentItems = current.Select(item => new ChatHistoryMergeCandidate(item, incomingPriority: 0));
+        var incomingItems = incoming.Select(item => new ChatHistoryMergeCandidate(item, incomingPriority: 1));
+        var merged = currentItems
+            .Concat(incomingItems)
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Item.Id))
+            .GroupBy(candidate => candidate.Item.Id, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderByDescending(candidate => GetChatTimestamp(candidate.Item))
+                .ThenByDescending(candidate => candidate.IncomingPriority)
+                .First()
+                .Item)
             .OrderBy(GetChatTimestamp)
             .ToList();
 
         var skipCount = Math.Max(0, merged.Count - options.ChatHistoryRetentionCount);
         return merged.Skip(skipCount).ToList();
+    }
+
+    private sealed class ChatHistoryMergeCandidate
+    {
+        public ChatHistoryMergeCandidate(SharedChatHistoryItem item, int incomingPriority)
+        {
+            Item = item;
+            IncomingPriority = incomingPriority;
+        }
+
+        public SharedChatHistoryItem Item { get; }
+
+        public int IncomingPriority { get; }
     }
 
     private IReadOnlyList<SharedHandoffIndexItem> MergeHandoffIndex(IReadOnlyList<SharedHandoffIndexItem> current, IEnumerable<SharedHandoffIndexItem> incoming)

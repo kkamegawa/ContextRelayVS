@@ -655,7 +655,7 @@ internal sealed class ContextRelayHost : IDisposable
                 Id = currentItem.Id,
                 Role = currentItem.Role,
                 Text = stitched,
-                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                Timestamp = currentItem.Timestamp,
                 Metadata = currentItem.Metadata
             };
             await sharedStore.AppendChatHistoryAsync(new[] { replacement }, cancellationToken).ConfigureAwait(false);
