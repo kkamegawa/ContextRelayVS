@@ -661,7 +661,8 @@ internal sealed class ContextRelayHost : IDisposable
                 Role = currentItem.Role,
                 Text = stitched,
                 Timestamp = currentItem.Timestamp,
-                Metadata = currentItem.Metadata
+                Metadata = currentItem.Metadata,
+                ExtensionData = new Dictionary<string, JsonElement>(currentItem.ExtensionData)
             };
             await sharedStore.AppendChatHistoryAsync(new[] { replacement }, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Fetched and appended Microsoft 365 Copilot continuation.");
