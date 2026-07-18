@@ -642,6 +642,10 @@ internal sealed class ContextRelayHost : IDisposable
                 return;
             }
 
+            // Clear the target before sending so a failed upsert cannot leave the
+            // button active against an already-advanced server conversation.
+            copilotConversationAssistantItemId = null;
+
             var continuation = await copilotChatAdapter
                 .ContinueAsync(token.AccessToken, copilotConversationId!, cancellationToken)
                 .ConfigureAwait(false);
