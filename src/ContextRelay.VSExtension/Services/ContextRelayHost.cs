@@ -1093,14 +1093,20 @@ internal sealed class ContextRelayHost : IDisposable
     private void RecordManualContinuationDiagnostics(string stitchedResponse, CopilotChatResponseDiagnostics continuationDiagnostics)
     {
         var integrity = CopilotResponseIntegrityChecker.Evaluate(stitchedResponse);
+        // A stream that was interrupted (timed out or failed mid-transfer) after yielding a
+        // valid-looking snapshot still means the response may be incomplete, even when the
+        // stitched text itself passes the integrity check. Preserve that signal instead of
+        // overwriting it with the stitched-text heuristic alone.
+        var mayBeIncomplete = continuationDiagnostics.MayBeIncomplete || integrity.IsLikelyTruncated;
+        var reason = integrity.IsLikelyTruncated ? integrity.Reason : continuationDiagnostics.TruncationReason;
         copilotChatAdapter.SetLastResponseDiagnostics(new CopilotChatResponseDiagnostics(
             continuationDiagnostics.MessageCount,
             continuationDiagnostics.PartLengths,
             stitchedResponse.Length,
             continuationDiagnostics.ContinuationRounds,
-            continuationDiagnostics.TruncationDetected || integrity.IsLikelyTruncated,
-            integrity.IsLikelyTruncated,
-            integrity.Reason,
+            continuationDiagnostics.TruncationDetected || mayBeIncomplete,
+            mayBeIncomplete,
+            reason,
             continuationDiagnostics.StreamEventCount));
     }
 
