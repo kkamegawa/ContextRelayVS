@@ -334,6 +334,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         await RunBusyAsync(() => host.ReplaceEditorWithAssistantTextAsync(text, ct)).ConfigureAwait(false);
     }
 
+    internal async Task ContinueAssistantResponseAsync(string itemId, string text, CancellationToken ct)
+    {
+        await RunBusyAsync(() => host.ContinueAssistantResponseAsync(itemId, text, ct)).ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         host.StateChanged -= OnHostStateChanged;
@@ -373,7 +378,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             SearchSummary = state.SearchSummary;
             SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
-            ChatHistory = state.ChatHistory.Select(item => new ChatHistoryItemViewModel(item, this)).ToArray();
+            ChatHistory = state.ChatHistory
+                .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, state.ContinuableCopilotAssistantItemId, StringComparison.Ordinal)))
+                .ToArray();
             workspaceFiles = state.WorkspaceFiles;
             if (queryChanged)
             {

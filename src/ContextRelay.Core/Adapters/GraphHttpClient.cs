@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -80,6 +80,43 @@ public sealed class GraphHttpClient
         }
     }
 
+    public async Task<HttpResponseMessage> SendStreamingAsync(
+        string url,
+        string accessToken,
+        HttpMethod method,
+        string? jsonBody = null,
+        CancellationToken cancellationToken = default)
+    {
+        logger?.Log($"-> {method.Method} {url} (stream)");
+
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Accept.ParseAdd("text/event-stream");
+        if (jsonBody is not null)
+        {
+            request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+        }
+
+        try
+        {
+            var response = await httpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            logger?.Log($"<- {(int)response.StatusCode} {response.ReasonPhrase} {url} (stream)");
+            return response;
+        }
+        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger?.Log($"x Graph API streaming request timed out after {httpClient.Timeout.TotalSeconds:0}s {url}");
+            throw new TimeoutException("Graph API streaming request timed out before the response completed.", ex);
+        }
+        catch (HttpRequestException ex) when (ex.InnerException is IOException)
+        {
+            logger?.Log($"x Graph API streaming response was interrupted {url}");
+            throw new IOException("Graph API streaming response was interrupted before completion.", ex);
+        }
+    }
+
     public async Task<HttpResponseMessage> SendWithRetryAsync(
         string url,
         string accessToken,
@@ -123,7 +160,7 @@ public sealed class GraphHttpClient
             return result;
         }
 
-        var body = await SafeReadBodyAsync(response).ConfigureAwait(false);
+        var body = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
         var errorCode = TryGetErrorCode(body);
         var requestId = response.Headers.Contains("request-id")
             ? string.Join(",", response.Headers.GetValues("request-id"))
@@ -167,11 +204,42 @@ public sealed class GraphHttpClient
         return null;
     }
 
-    private static async Task<string> SafeReadBodyAsync(HttpResponseMessage response)
+    private async Task<string> SafeReadBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
+        using var timeoutSource = Timeout == System.Threading.Timeout.InfiniteTimeSpan
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (timeoutSource is not null)
+        {
+            timeoutSource.CancelAfter(Timeout);
+        }
+
+        var readToken = timeoutSource?.Token ?? cancellationToken;
         try
         {
-            return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using var buffer = new MemoryStream();
+            var bytes = new byte[8192];
+            while (true)
+            {
+                var read = await stream.ReadAsync(bytes, 0, bytes.Length, readToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                buffer.Write(bytes, 0, read);
+            }
+
+            return Encoding.UTF8.GetString(buffer.ToArray());
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && timeoutSource?.IsCancellationRequested == true)
+        {
+            throw new TimeoutException("Graph API error response body timed out before completion.", ex);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {

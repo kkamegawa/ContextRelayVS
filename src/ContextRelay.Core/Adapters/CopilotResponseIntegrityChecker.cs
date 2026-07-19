@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace ContextRelay.Core.Adapters;
@@ -7,9 +8,10 @@ public static class CopilotResponseIntegrityChecker
 {
     private const int MinimumSoftTruncationLength = 240;
     private const int MinimumTruncatedLineLength = 80;
-    private static readonly Regex CodeFenceRegex = new(@"(^|\r?\n)```", RegexOptions.Compiled);
     private static readonly Regex IncompleteMarkdownLinkRegex = new(@"\[[^\]\r\n]+\]\([^)\r\n]*$", RegexOptions.Compiled);
-    private static readonly Regex StructuralLineRegex = new(@"^(#{1,6}\s|[-*+]\s|\d+[.)]\s)", RegexOptions.Compiled);
+    private static readonly Regex HeadingLineRegex = new(@"^#{1,6}\s+\S", RegexOptions.Compiled);
+    private static readonly Regex ListLineRegex = new(@"^([-*+]\s|\d+[.)]\s)", RegexOptions.Compiled);
+    private static readonly Regex ThematicBreakLineRegex = new(@"^\s{0,3}((\*\s*){3,}|(_\s*){3,}|(-\s*){3,})\s*$", RegexOptions.Compiled);
     private static readonly char[] TerminalCharacters =
     {
         '.', '!', '?', ':', ';', ')', ']', '}', '"', '\'', '`', '>', '|',
@@ -44,6 +46,17 @@ public static class CopilotResponseIntegrityChecker
             return CopilotResponseIntegrityResult.Truncated("incomplete-markdown-table");
         }
 
+        if (HasUnbalancedBoldMarker(trimmed))
+        {
+            return CopilotResponseIntegrityResult.Truncated("unbalanced-bold-marker");
+        }
+
+        if (trimmed.Length >= MinimumSoftTruncationLength &&
+            HeadingLineRegex.IsMatch(GetLastNonEmptyLine(trimmed)))
+        {
+            return CopilotResponseIntegrityResult.Truncated("dangling-heading");
+        }
+
         if (LooksSoftTruncated(trimmed))
         {
             return CopilotResponseIntegrityResult.Truncated("missing-terminal-punctuation");
@@ -54,7 +67,36 @@ public static class CopilotResponseIntegrityChecker
 
     private static bool HasUnbalancedCodeFences(string value)
     {
-        return CodeFenceRegex.Matches(value).Count % 2 != 0;
+        var insideFence = false;
+        var fenceMarker = '\0';
+        var fenceLength = 0;
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (!TryReadFenceMarker(value, index, out var marker, out var length, out var markerIndex))
+            {
+                continue;
+            }
+
+            if (!insideFence)
+            {
+                insideFence = true;
+                fenceMarker = marker;
+                fenceLength = length;
+            }
+            else if (marker == fenceMarker &&
+                length >= fenceLength &&
+                HasOnlyWhitespaceUntilLineEnd(value, markerIndex + length))
+            {
+                insideFence = false;
+                fenceMarker = '\0';
+                fenceLength = 0;
+            }
+
+            index += length - 1;
+        }
+
+        return insideFence;
     }
 
     private static bool HasIncompleteTableRow(string value)
@@ -103,16 +145,10 @@ public static class CopilotResponseIntegrityChecker
             return false;
         }
 
-        // A response can legitimately end in a letter, digit, or hyphen when
-        // the final line is a heading, list item, or short standalone value
-        // (e.g. "## Next steps", "- Final item", "The count is 42"). Only
-        // treat this as a truncation signal when the final line reads like
-        // unfinished prose: not a structural markdown line, and long enough
-        // that a natural sentence would normally have ended in punctuation.
         var lastLine = GetLastNonEmptyLine(value);
-        if (StructuralLineRegex.IsMatch(lastLine))
+        if (ListLineRegex.IsMatch(lastLine))
         {
-            return false;
+            return lastLine.Length >= MinimumTruncatedLineLength;
         }
 
         return lastLine.Length >= MinimumTruncatedLineLength;
@@ -131,6 +167,297 @@ public static class CopilotResponseIntegrityChecker
         }
 
         return string.Empty;
+    }
+
+    private static bool HasUnbalancedBoldMarker(string value)
+    {
+        var textWithoutCode = RemoveThematicBreakLines(RemoveMarkdownCodeSections(value));
+        return HasUnbalancedStrongDelimiter(textWithoutCode, '*') ||
+            HasUnbalancedStrongDelimiter(textWithoutCode, '_');
+    }
+
+    private static string RemoveThematicBreakLines(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var lines = value.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        foreach (var line in lines)
+        {
+            if (!ThematicBreakLineRegex.IsMatch(line))
+            {
+                builder.AppendLine(line);
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static string RemoveMarkdownCodeSections(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var insideFence = false;
+        var fenceMarker = '\0';
+        var fenceLength = 0;
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (TryReadFenceMarker(value, index, out var marker, out var length, out var markerIndex))
+            {
+                if (!insideFence)
+                {
+                    insideFence = true;
+                    fenceMarker = marker;
+                    fenceLength = length;
+                    index += length - 1;
+                    continue;
+                }
+
+                if (marker == fenceMarker &&
+                    length >= fenceLength &&
+                    HasOnlyWhitespaceUntilLineEnd(value, markerIndex + length))
+                {
+                    insideFence = false;
+                    fenceMarker = '\0';
+                    fenceLength = 0;
+                    index += length - 1;
+                    continue;
+                }
+            }
+
+            if (insideFence)
+            {
+                continue;
+            }
+
+            if (value[index] == '`')
+            {
+                var delimiterLength = CountRun(value, index, '`');
+                var closingIndex = FindMatchingBacktickRun(value, index + delimiterLength, delimiterLength);
+                if (closingIndex >= 0)
+                {
+                    index = closingIndex + delimiterLength - 1;
+                    continue;
+                }
+            }
+
+            builder.Append(value[index]);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool HasUnbalancedStrongDelimiter(string value, char marker)
+    {
+        var openers = 0;
+
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (value[index] != marker || IsEscaped(value, index))
+            {
+                continue;
+            }
+
+            var runLength = CountRun(value, index, marker);
+            if (runLength < 2)
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            var previous = index == 0 ? '\0' : value[index - 1];
+            var nextIndex = index + runLength;
+            var next = nextIndex >= value.Length ? '\0' : value[nextIndex];
+
+            // Intraword underscores (e.g. FOO__BAR) are identifier characters, not emphasis.
+            if (marker == '_' && char.IsLetterOrDigit(previous) && char.IsLetterOrDigit(next))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            // A digit-digit run (e.g. 2**3) is an arithmetic operator, not emphasis. Letters
+            // around ** are not exempted: "word**partial emphasis" is a genuine unmatched opener.
+            if (marker == '*' && char.IsDigit(previous) && char.IsDigit(next))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            // Skip path glob patterns such as **/ or **\ (e.g. **/*.cs).
+            if (marker == '*' && runLength == 2 && (next == '/' || next == '\\'))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            var delimiterPairs = runLength / 2;
+            var canOpen = CanOpenStrongDelimiter(previous, next, marker);
+            var canClose = CanCloseStrongDelimiter(previous, next, marker);
+            if (canOpen && canClose && openers == 0 && IsPunctuation(previous) && IsPunctuation(next))
+            {
+                index += runLength - 1;
+                continue;
+            }
+
+            if (canClose)
+            {
+                var matched = Math.Min(openers, delimiterPairs);
+                openers -= matched;
+                delimiterPairs -= matched;
+            }
+
+            if (canOpen)
+            {
+                openers += delimiterPairs;
+            }
+
+            index += runLength - 1;
+        }
+
+        return openers > 0;
+    }
+
+    private static bool CanOpenStrongDelimiter(char previous, char next, char marker)
+    {
+        var leftFlanking = IsLeftFlanking(previous, next);
+        var rightFlanking = IsRightFlanking(previous, next);
+        if (marker == '_')
+        {
+            return leftFlanking && (!rightFlanking || IsPunctuation(previous));
+        }
+
+        return leftFlanking;
+    }
+
+    private static bool CanCloseStrongDelimiter(char previous, char next, char marker)
+    {
+        var leftFlanking = IsLeftFlanking(previous, next);
+        var rightFlanking = IsRightFlanking(previous, next);
+        if (marker == '_')
+        {
+            return rightFlanking && (!leftFlanking || IsPunctuation(next));
+        }
+
+        return rightFlanking;
+    }
+
+    private static bool IsLeftFlanking(char previous, char next)
+    {
+        return next != '\0' &&
+            !char.IsWhiteSpace(next) &&
+            (!IsPunctuation(next) || previous == '\0' || char.IsWhiteSpace(previous) || IsPunctuation(previous));
+    }
+
+    private static bool IsRightFlanking(char previous, char next)
+    {
+        return previous != '\0' &&
+            !char.IsWhiteSpace(previous) &&
+            (!IsPunctuation(previous) || next == '\0' || char.IsWhiteSpace(next) || IsPunctuation(next));
+    }
+
+    private static bool IsPunctuation(char value)
+    {
+        return value != '\0' && char.IsPunctuation(value);
+    }
+
+    private static bool IsEscaped(string value, int index)
+    {
+        var slashCount = 0;
+        for (var cursor = index - 1; cursor >= 0 && value[cursor] == '\\'; cursor--)
+        {
+            slashCount++;
+        }
+
+        return slashCount % 2 != 0;
+    }
+
+    private static bool TryReadFenceMarker(string value, int index, out char marker, out int length, out int markerIndex)
+    {
+        marker = '\0';
+        length = 0;
+        markerIndex = -1;
+        if (!IsLineStart(value, index))
+        {
+            return false;
+        }
+
+        var cursor = index;
+        var spaces = 0;
+        while (cursor < value.Length && value[cursor] == ' ' && spaces < 4)
+        {
+            cursor++;
+            spaces++;
+        }
+
+        if (spaces > 3 || cursor >= value.Length || (value[cursor] != '`' && value[cursor] != '~'))
+        {
+            return false;
+        }
+
+        marker = value[cursor];
+        markerIndex = cursor;
+        length = CountRun(value, cursor, marker);
+        return length >= 3;
+    }
+
+    private static bool HasOnlyWhitespaceUntilLineEnd(string value, int index)
+    {
+        for (var cursor = index; cursor < value.Length; cursor++)
+        {
+            var current = value[cursor];
+            if (current == '\r' || current == '\n')
+            {
+                return true;
+            }
+
+            if (!char.IsWhiteSpace(current))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsLineStart(string value, int index)
+    {
+        return index == 0 || value[index - 1] == '\n' || value[index - 1] == '\r';
+    }
+
+    private static int CountRun(string value, int index, char marker)
+    {
+        var length = 0;
+        while (index + length < value.Length && value[index + length] == marker)
+        {
+            length++;
+        }
+
+        return length;
+    }
+
+    private static int CountBacktickRun(string value, int index)
+    {
+        return CountRun(value, index, '`');
+    }
+
+    private static int FindMatchingBacktickRun(string value, int startIndex, int delimiterLength)
+    {
+        for (var index = startIndex; index < value.Length; index++)
+        {
+            if (value[index] != '`')
+            {
+                continue;
+            }
+
+            var candidateLength = CountBacktickRun(value, index);
+            if (candidateLength == delimiterLength)
+            {
+                return index;
+            }
+
+            index += candidateLength - 1;
+        }
+
+        return -1;
     }
 }
 

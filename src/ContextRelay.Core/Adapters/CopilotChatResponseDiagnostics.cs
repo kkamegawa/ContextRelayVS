@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ContextRelay.Core.Adapters;
@@ -21,7 +21,8 @@ public sealed class CopilotChatResponseDiagnostics
         int continuationRounds,
         bool truncationDetected,
         bool mayBeIncomplete,
-        string? truncationReason)
+        string? truncationReason,
+        int streamEventCount = 0)
     {
         MessageCount = messageCount;
         PartLengths = partLengths ?? throw new ArgumentNullException(nameof(partLengths));
@@ -30,6 +31,7 @@ public sealed class CopilotChatResponseDiagnostics
         TruncationDetected = truncationDetected;
         MayBeIncomplete = mayBeIncomplete;
         TruncationReason = truncationReason;
+        StreamEventCount = streamEventCount;
     }
 
     public int MessageCount { get; }
@@ -45,4 +47,6 @@ public sealed class CopilotChatResponseDiagnostics
     public bool MayBeIncomplete { get; }
 
     public string? TruncationReason { get; }
+
+    public int StreamEventCount { get; }
 }

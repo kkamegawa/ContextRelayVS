@@ -28,6 +28,11 @@
             <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
             <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
+            <!-- Pixel scrolling: with the default item-based scrolling, a single message taller
+                 than the viewport is one indivisible scroll unit and its bottom is unreachable. -->
+            <Setter Property="ScrollViewer.CanContentScroll" Value="False" />
+            <!-- Constrain measure width so TextWrapping works instead of growing horizontally. -->
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         </Style>
 
         <Style x:Key="ThemedTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Static styles:VsResourceKeys.TextBoxStyleKey}}">
@@ -57,6 +62,10 @@
         <Style x:Key="SuggestionListBoxItemStyle" TargetType="ListBoxItem">
             <Setter Property="Focusable" Value="False" />
             <Setter Property="IsTabStop" Value="False" />
+        </Style>
+
+        <Style x:Key="StretchListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
 
         <Style x:Key="ThemedTabItemStyle" TargetType="TabItem">
@@ -123,7 +132,7 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource SurfaceBorderStyle}" Margin="0,0,10,0">
-                <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemsSource="{Binding ChatHistory}" BorderThickness="0">
+                <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource StretchListBoxItemStyle}" ItemsSource="{Binding ChatHistory}" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Margin="8,8,8,0"
@@ -142,12 +151,20 @@
                                         <Run Text="{Binding ContextLabelsPrefixText}" />
                                         <Run Text="{Binding ContextLabelsJoinedDisplay}" />
                                     </TextBlock>
-                                    <StackPanel Margin="0,8,0,0" Orientation="Horizontal"
-                                                Visibility="{Binding IsActionableAssistant, Converter={StaticResource BoolToVisConverter}}">
+                                    <WrapPanel Margin="0,8,0,0"
+                                               Visibility="{Binding IsActionableAssistant, Converter={StaticResource BoolToVisConverter}}">
                                         <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding CopyAssistantButtonText}" Command="{Binding CopyAssistantCommand}" />
                                         <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding AppendAssistantButtonText}" Command="{Binding AppendAssistantCommand}" />
-                                        <Button Style="{StaticResource ThemedButtonStyle}" Padding="8,2" Content="{Binding ReplaceAssistantButtonText}" Command="{Binding ReplaceAssistantCommand}" />
-                                    </StackPanel>
+                                        <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,0" Padding="8,2" Content="{Binding ReplaceAssistantButtonText}" Command="{Binding ReplaceAssistantCommand}" />
+                                        <Button Style="{StaticResource ThemedButtonStyle}"
+                                                Margin="0,0,8,4"
+                                                Padding="8,2"
+                                                Focusable="True"
+                                                IsTabStop="True"
+                                                Content="{Binding ContinueAssistantButtonText}"
+                                                Command="{Binding ContinueAssistantCommand}"
+                                                Visibility="{Binding IsLatestCopilotAssistant, Converter={StaticResource BoolToVisConverter}}" />
+                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
@@ -181,7 +198,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <ListBox Grid.Row="1" Style="{StaticResource ThemedListBoxStyle}" ItemsSource="{Binding SearchResults}" BorderThickness="0">
+                            <ListBox Grid.Row="1" Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource StretchListBoxItemStyle}" ItemsSource="{Binding SearchResults}" BorderThickness="0">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
@@ -222,7 +239,7 @@
                     </TabItem>
 
                     <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding SnippetsHeaderText}">
-                        <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemsSource="{Binding Snippets}" BorderThickness="0">
+                        <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource StretchListBoxItemStyle}" ItemsSource="{Binding Snippets}" BorderThickness="0">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border Padding="8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">

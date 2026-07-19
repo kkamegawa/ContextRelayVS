@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -13,8 +14,8 @@ namespace ContextRelay.Core.Adapters;
 public sealed class CopilotChatAdapter : ICopilotChatAdapter
 {
     private const string DefaultIanaTimeZone = "Etc/UTC";
-    private const int MaxContinuationRounds = 3;
-    private const string ContinuePrompt = "Continue exactly from where your previous message stopped. Do not repeat earlier content.";
+    private const int MaxContinuationRounds = 5;
+    public const string ContinuationPrompt = "Continue exactly from where your previous message stopped. Do not repeat earlier content.";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -29,6 +30,17 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
     }
 
     public CopilotChatResponseDiagnostics LastResponseDiagnostics { get; private set; } = CopilotChatResponseDiagnostics.Empty;
+
+    public void SetLastResponseDiagnostics(CopilotChatResponseDiagnostics diagnostics)
+    {
+        if (diagnostics is null)
+        {
+            throw new ArgumentNullException(nameof(diagnostics));
+        }
+
+        LastResponseDiagnostics = diagnostics;
+        graphClient.LogDiagnostic(BuildResponseDiagnosticsLog(LastResponseDiagnostics));
+    }
 
     public async Task<string> AskAsync(string accessToken, string prompt, CancellationToken cancellationToken = default)
     {
@@ -63,30 +75,56 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         CopilotChatSendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var firstTurn = await SendSingleMessageAsync(accessToken, conversationId, message, options, cancellationToken).ConfigureAwait(false);
+        var firstTurn = await SendMessageWithStreamingFallbackAsync(accessToken, conversationId, message, options, cancellationToken).ConfigureAwait(false);
         var fullReply = firstTurn.Text;
         var messageCount = firstTurn.MessageCount;
         var partLengths = new List<int>(firstTurn.PartLengths);
+        var streamEventCount = firstTurn.StreamEventCount;
+        var interrupted = firstTurn.Interrupted;
         var integrity = CopilotResponseIntegrityChecker.Evaluate(fullReply);
-        var truncationDetected = integrity.IsLikelyTruncated;
+        var truncationDetected = integrity.IsLikelyTruncated || interrupted;
         var continuationRounds = 0;
 
-        while (integrity.IsLikelyTruncated && continuationRounds < MaxContinuationRounds)
+        while ((integrity.IsLikelyTruncated || interrupted) && continuationRounds < MaxContinuationRounds)
         {
             continuationRounds++;
             graphClient.LogDiagnostic(
-                $"! Copilot response may be incomplete ({integrity.Reason}); requesting continuation {continuationRounds}/{MaxContinuationRounds}");
+                $"! Copilot response may be incomplete ({integrity.Reason ?? "stream-interrupted"}); requesting continuation {continuationRounds}/{MaxContinuationRounds}");
 
-            var continuation = await SendSingleMessageAsync(accessToken, conversationId, ContinuePrompt, options: null, cancellationToken).ConfigureAwait(false);
+            CopilotChatTurnResult continuation;
+            try
+            {
+                continuation = await SendMessageWithStreamingFallbackAsync(accessToken, conversationId, ContinuationPrompt, options: null, cancellationToken).ConfigureAwait(false);
+            }
+            catch (AcceptedStreamingResponseException)
+            {
+                // The continuation stream was accepted but then stalled or contained malformed SSE.
+                // fullReply still holds the usable initial response; surface it as incomplete so
+                // the user can read it and trigger manual continuation if needed.
+                graphClient.LogDiagnostic("! Continuation stream accepted but failed mid-transfer; returning partial response.");
+                break;
+            }
+
             messageCount += continuation.MessageCount;
             partLengths.AddRange(continuation.PartLengths);
+            streamEventCount += continuation.StreamEventCount;
+            interrupted = continuation.Interrupted;
 
             if (string.IsNullOrWhiteSpace(continuation.Text))
             {
                 break;
             }
 
-            fullReply = StitchAssistantResponses(fullReply, continuation.Text);
+            var stitched = StitchAssistantResponses(fullReply, continuation.Text);
+            if (string.Equals(stitched, fullReply, StringComparison.Ordinal))
+            {
+                // The continuation repeated content already present; further rounds would
+                // just resend the same stateful request without adding anything new.
+                graphClient.LogDiagnostic("! Continuation added no new content; stopping automatic continuation.");
+                break;
+            }
+
+            fullReply = stitched;
             integrity = CopilotResponseIntegrityChecker.Evaluate(fullReply);
         }
 
@@ -96,11 +134,131 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
             fullReply.Length,
             continuationRounds,
             truncationDetected,
-            integrity.IsLikelyTruncated,
-            integrity.Reason);
+            integrity.IsLikelyTruncated || interrupted,
+            integrity.Reason,
+            streamEventCount);
         graphClient.LogDiagnostic(BuildResponseDiagnosticsLog(LastResponseDiagnostics));
 
         return fullReply;
+    }
+
+    public async Task<string> ContinueAsync(
+        string accessToken,
+        string conversationId,
+        CancellationToken cancellationToken = default)
+    {
+        var continuation = await SendMessageWithStreamingFallbackAsync(accessToken, conversationId, ContinuationPrompt, options: null, cancellationToken).ConfigureAwait(false);
+        var integrity = CopilotResponseIntegrityChecker.Evaluate(continuation.Text);
+        var mayBeIncomplete = integrity.IsLikelyTruncated || continuation.Interrupted;
+        SetLastResponseDiagnostics(new CopilotChatResponseDiagnostics(
+            continuation.MessageCount,
+            continuation.PartLengths,
+            continuation.Text.Length,
+            continuationRounds: 0,
+            truncationDetected: mayBeIncomplete,
+            mayBeIncomplete: mayBeIncomplete,
+            truncationReason: integrity.Reason,
+            continuation.StreamEventCount));
+        return continuation.Text;
+    }
+
+    private async Task<CopilotChatTurnResult> SendMessageWithStreamingFallbackAsync(
+        string accessToken,
+        string conversationId,
+        string message,
+        CopilotChatSendOptions? options,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var streamed = await SendSingleMessageOverStreamAsync(accessToken, conversationId, message, options, cancellationToken).ConfigureAwait(false);
+            if (streamed is not null && !string.IsNullOrWhiteSpace(streamed.Text))
+            {
+                return streamed;
+            }
+
+            if (streamed is not null)
+            {
+                graphClient.LogDiagnostic("! Copilot chat stream returned no assistant text; falling back to synchronous chat.");
+            }
+        }
+        catch (Exception ex) when (ex is not AcceptedStreamingResponseException &&
+            ex is JsonException or IOException or InvalidOperationException or TimeoutException or HttpRequestException)
+        {
+            graphClient.LogDiagnostic($"! Copilot chat stream failed; falling back to synchronous chat. {ex.GetType().Name}: {ex.Message}");
+        }
+
+        return await SendSingleMessageAsync(accessToken, conversationId, message, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CopilotChatTurnResult?> SendSingleMessageOverStreamAsync(
+        string accessToken,
+        string conversationId,
+        string message,
+        CopilotChatSendOptions? options,
+        CancellationToken cancellationToken)
+    {
+        var body = BuildRequestBody(message, options);
+        using var response = await graphClient
+            .SendStreamingAsync($"{graphClient.BaseUrl}/beta/copilot/conversations/{conversationId}/chatOverStream", accessToken, HttpMethod.Post, body, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            if (ShouldFallbackFromStreaming(response.StatusCode))
+            {
+                graphClient.LogDiagnostic($"! Copilot chatOverStream returned {(int)response.StatusCode}; falling back to synchronous chat.");
+                return null;
+            }
+
+            await graphClient.ReadJsonAsync<ChatResponse>(response, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("Unexpected successful Graph error parsing path.");
+        }
+
+        try
+        {
+            var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var result = await ParseStreamWithTimeoutAsync(stream, message, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(result.Text))
+            {
+                throw new AcceptedStreamingResponseException("Copilot chat stream returned no assistant text after the request was accepted.");
+            }
+
+            graphClient.LogDiagnostic(
+                $"Copilot chat stream diagnostics: events={result.StreamEventCount}, messageCount={result.MessageCount}, totalLength={result.Text.Length}");
+            return result;
+        }
+        catch (Exception ex) when (ex is not AcceptedStreamingResponseException &&
+            ex is JsonException or IOException or InvalidOperationException or TimeoutException)
+        {
+            throw new AcceptedStreamingResponseException("Copilot chat stream failed after the request was accepted.", ex);
+        }
+    }
+
+    private async Task<CopilotChatTurnResult> ParseStreamWithTimeoutAsync(
+        Stream stream,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var timeout = graphClient.Timeout;
+        if (timeout == Timeout.InfiniteTimeSpan)
+        {
+            return await CopilotChatStreamParser.ParseAsync(stream, message, cancellationToken, cancellationToken).ConfigureAwait(false);
+        }
+
+        using var streamTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        streamTimeout.CancelAfter(timeout);
+        try
+        {
+            // The linked token enforces the bounded body-read timeout; the original caller
+            // token is passed separately so the parser can preserve a captured snapshot when
+            // only the internal timeout fires, while still propagating real caller cancellation.
+            return await CopilotChatStreamParser.ParseAsync(stream, message, streamTimeout.Token, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && streamTimeout.IsCancellationRequested)
+        {
+            throw new TimeoutException("Copilot chat stream timed out before the response body completed.", ex);
+        }
     }
 
     private async Task<CopilotChatTurnResult> SendSingleMessageAsync(
@@ -109,6 +267,18 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         string message,
         CopilotChatSendOptions? options,
         CancellationToken cancellationToken)
+    {
+        var body = BuildRequestBody(message, options);
+
+        using var response = await graphClient
+            .SendWithRetryAsync($"{graphClient.BaseUrl}/beta/copilot/conversations/{conversationId}/chat", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        var data = await graphClient.ReadJsonAsync<ChatResponse>(response, cancellationToken).ConfigureAwait(false);
+
+        return ExtractAssistantReply(data, message);
+    }
+
+    private static string BuildRequestBody(string message, CopilotChatSendOptions? options)
     {
         var request = new CopilotChatRequest
         {
@@ -127,14 +297,19 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
             request.ContextualResources = contextualResources;
         }
 
-        var body = JsonSerializer.Serialize(request, SerializerOptions);
+        return JsonSerializer.Serialize(request, SerializerOptions);
+    }
 
-        using var response = await graphClient
-            .SendWithRetryAsync($"{graphClient.BaseUrl}/beta/copilot/conversations/{conversationId}/chat", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        var data = await graphClient.ReadJsonAsync<ChatResponse>(response, cancellationToken).ConfigureAwait(false);
-
-        return ExtractAssistantReply(data, message);
+    private static bool ShouldFallbackFromStreaming(System.Net.HttpStatusCode statusCode)
+    {
+        return statusCode == (System.Net.HttpStatusCode)429 ||
+            statusCode is System.Net.HttpStatusCode.NotFound or
+            System.Net.HttpStatusCode.MethodNotAllowed or
+            System.Net.HttpStatusCode.NotImplemented or
+            System.Net.HttpStatusCode.InternalServerError or
+            System.Net.HttpStatusCode.BadGateway or
+            System.Net.HttpStatusCode.ServiceUnavailable or
+            System.Net.HttpStatusCode.GatewayTimeout;
     }
 
     private static CopilotChatTurnResult ExtractAssistantReply(ChatResponse data, string requestMessage)
@@ -167,10 +342,11 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         return new CopilotChatTurnResult(
             JoinResponseParts(parts),
             messages.Length,
-            partLengths);
+            partLengths,
+            streamEventCount: 0);
     }
 
-    internal static string StitchAssistantResponses(string existing, string continuation)
+    public static string StitchAssistantResponses(string existing, string continuation)
     {
         if (string.IsNullOrWhiteSpace(existing))
         {
@@ -193,7 +369,7 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         return AppendWithNaturalBoundary(left, right);
     }
 
-    private static string JoinResponseParts(IReadOnlyList<string> parts)
+    internal static string JoinResponseParts(IReadOnlyList<string> parts)
     {
         if (parts.Count == 0)
         {
@@ -259,7 +435,8 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
             $"continuationRounds={diagnostics.ContinuationRounds}, " +
             $"truncationDetected={diagnostics.TruncationDetected}, " +
             $"mayBeIncomplete={diagnostics.MayBeIncomplete}, " +
-            $"reason={diagnostics.TruncationReason ?? "none"}";
+            $"reason={diagnostics.TruncationReason ?? "none"}, " +
+            $"streamEventCount={diagnostics.StreamEventCount}";
     }
 
     private static string ResolveTimeZone()
@@ -341,13 +518,15 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         public int Index { get; }
     }
 
-    private sealed class CopilotChatTurnResult
+    internal sealed class CopilotChatTurnResult
     {
-        public CopilotChatTurnResult(string text, int messageCount, IReadOnlyList<int> partLengths)
+        public CopilotChatTurnResult(string text, int messageCount, IReadOnlyList<int> partLengths, int streamEventCount, bool interrupted = false)
         {
             Text = text;
             MessageCount = messageCount;
             PartLengths = partLengths;
+            StreamEventCount = streamEventCount;
+            Interrupted = interrupted;
         }
 
         public string Text { get; }
@@ -355,6 +534,27 @@ public sealed class CopilotChatAdapter : ICopilotChatAdapter
         public int MessageCount { get; }
 
         public IReadOnlyList<int> PartLengths { get; }
+
+        public int StreamEventCount { get; }
+
+        /// <summary>
+        /// True when a transport failure or internal timeout cut the stream short after a
+        /// valid snapshot was captured, so <see cref="Text"/> may not be the final response.
+        /// </summary>
+        public bool Interrupted { get; }
+    }
+
+    private sealed class AcceptedStreamingResponseException : InvalidOperationException
+    {
+        public AcceptedStreamingResponseException(string message)
+            : base(message)
+        {
+        }
+
+        public AcceptedStreamingResponseException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 }
 
