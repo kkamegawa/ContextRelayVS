@@ -103,6 +103,34 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void EmbeddedXaml_DefinesFluentVisualAndThemeContract()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        using var stream = assembly.GetManifestResourceStream("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowContent.xaml");
+
+        Assert.NotNull(stream);
+
+        using var reader = new StreamReader(stream!);
+        var xaml = reader.ReadToEnd();
+
+        Assert.Contains("x:Key=\"PanelSurfaceBorderStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"CardBorderStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ThemedButtonStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"PrimaryButtonStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"FluentListBoxItemStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ThemedTextBoxStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Focusable\" Value=\"True\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"IsTabStop\" Value=\"True\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionTextBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}", xaml, StringComparison.Ordinal);
+        Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"1\" Grid.Column=\"2\" Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"ScrollViewer.CanContentScroll\" Value=\"False\" />", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("StretchListBoxItemStyle", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Background=\"#", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ViewModel_DoesNotExposePanelOnlyDebugLogMembers()
     {
         var assembly = LoadBuiltExtensionAssembly();
