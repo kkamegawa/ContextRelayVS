@@ -6,50 +6,243 @@
     <DataTemplate.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisConverter" />
 
+        <!-- Fluent geometry stays local to this Remote UI template. Colors remain dynamic
+             Visual Studio resources so the UI follows theme changes without a custom palette. -->
         <Style x:Key="SurfaceBorderStyle" TargetType="Border">
             <Setter Property="CornerRadius" Value="8" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowContentGridBrushKey}}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+
+        <Style x:Key="PanelSurfaceBorderStyle" TargetType="Border" BasedOn="{StaticResource SurfaceBorderStyle}">
             <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+        </Style>
+
+        <Style x:Key="CardBorderStyle" TargetType="Border" BasedOn="{StaticResource SurfaceBorderStyle}">
+            <Setter Property="Margin" Value="8,8,8,0" />
+            <Setter Property="Padding" Value="12" />
+        </Style>
+
+        <Style x:Key="CardContentBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="CardTitleTextStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="BodyTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="CardBodyTextStyle" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
 
         <Style x:Key="MutedTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
             <Setter Property="Opacity" Value="0.78" />
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
 
-        <Style x:Key="ThemedButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Static styles:VsResourceKeys.ButtonStyleKey}}">
-            <Setter Property="Padding" Value="8,2" />
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="IsTabStop" Value="False" />
+        <Style x:Key="CardMutedTextStyle" TargetType="TextBlock">
+            <Setter Property="Opacity" Value="0.78" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="ThemedButtonStyle" TargetType="Button">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="MinWidth" Value="44" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowContentGridBrushKey}}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="IsTabStop" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="FocusBorder" BorderBrush="Transparent" BorderThickness="2" CornerRadius="6" SnapsToDevicePixels="True">
+                            <Border x:Name="ButtonChrome" Margin="1" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" />
+                            </Border>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarHoverBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextHoverBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusBorder" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextInactiveBrushKey}}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ThemedButtonStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="FocusBorder" BorderBrush="Transparent" BorderThickness="2" CornerRadius="6" SnapsToDevicePixels="True">
+                            <Border x:Name="ButtonChrome" Margin="1" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" />
+                            </Border>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarHoverOverSelectedBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextHoverOverSelectedBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusBorder" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextInactiveBrushKey}}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="ThemedListBoxStyle" TargetType="ListBox">
-            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
             <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
-            <!-- Pixel scrolling: with the default item-based scrolling, a single message taller
-                 than the viewport is one indivisible scroll unit and its bottom is unreachable. -->
+            <!-- Pixel scrolling keeps the bottom of a message taller than the viewport reachable. -->
             <Setter Property="ScrollViewer.CanContentScroll" Value="False" />
-            <!-- Constrain measure width so TextWrapping works instead of growing horizontally. -->
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
         </Style>
 
-        <Style x:Key="ThemedTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Static styles:VsResourceKeys.TextBoxStyleKey}}">
-            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+        <Style x:Key="FluentListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="8,8,8,0" />
+            <Setter Property="Padding" Value="12" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowContentGridBrushKey}}" />
             <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
-            <Setter Property="CaretBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemChrome" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarHoverBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextHoverBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}" />
+                                <Setter TargetName="ItemChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="ItemChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                                <Setter TargetName="ItemChrome" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextInactiveBrushKey}}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style x:Key="SuggestionButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="0" />
+        <Style x:Key="ThemedTextBoxStyle" TargetType="TextBox">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowContentGridBrushKey}}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CaretBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}" />
+            <Setter Property="SelectionTextBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}" />
+            <Setter Property="SelectionOpacity" Value="1" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Hidden" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Hidden" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="FocusBorder" BorderBrush="Transparent" BorderThickness="2" CornerRadius="6" SnapsToDevicePixels="True">
+                            <Border x:Name="TextBoxChrome" Margin="1" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                                <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                            </Border>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TextBoxChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="FocusBorder" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsReadOnly" Value="True">
+                                <Setter TargetName="TextBoxChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="TextBoxChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextInactiveBrushKey}}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SuggestionButtonStyle" TargetType="Button" BasedOn="{StaticResource ThemedButtonStyle}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="10,6" />
             <Setter Property="Margin" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Focusable" Value="False" />
             <Setter Property="IsTabStop" Value="False" />
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
@@ -59,13 +252,13 @@
             <Setter Property="IsTabStop" Value="False" />
         </Style>
 
-        <Style x:Key="SuggestionListBoxItemStyle" TargetType="ListBoxItem">
+        <Style x:Key="SuggestionListBoxItemStyle" TargetType="ListBoxItem" BasedOn="{StaticResource FluentListBoxItemStyle}">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Focusable" Value="False" />
             <Setter Property="IsTabStop" Value="False" />
-        </Style>
-
-        <Style x:Key="StretchListBoxItemStyle" TargetType="ListBoxItem">
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
 
         <Style x:Key="ThemedTabItemStyle" TargetType="TabItem">
@@ -300,20 +493,20 @@
                          </ListBox.ItemTemplate>
                      </ListBox>
                 </StackPanel>
+                    Padding="12,8"
             </Border>
 
             <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="1" Grid.Column="0"
                     Margin="0,0,8,0"
-                    Padding="12,8"
                     Content="{Binding AddFilesButtonText}"
                     ToolTip="{Binding AddFilesToolTipText}"
                     Command="{Binding AddFilesCommand}"
                     IsEnabled="{Binding IsNotBusy}" />
+                      Padding="10,8"
 
             <TextBox x:Name="QueryTextBox"
                      Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="1" Grid.Column="1"
                       Margin="0,0,8,0"
-                      Padding="10,8"
                       Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
                       ToolTip="{Binding SearchToolTipText}">
                 <TextBox.InputBindings>
