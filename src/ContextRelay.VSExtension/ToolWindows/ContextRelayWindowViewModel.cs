@@ -283,6 +283,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             }
 
             selectedCommandSuggestion = value;
+
+            // IsSelected is baked into fresh display clones by BuildVisibleWindow, not toggled here —
+            // every caller of this setter is immediately followed by a call that rebuilds
+            // VisibleCommandSuggestions from new instances (Remote UI does not re-serialize in-place
+            // mutations on objects it already knows by identity).
             RaiseNotifyPropertyChangedEvent(nameof(SelectedCommandSuggestion));
             if (!isApplyingState && IsCommandPopupOpen)
             {
@@ -567,18 +572,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             return;
         }
 
-        var nextWindowStart = CalculateVisibleWindowStart(
+        commandSuggestionWindowStart = CalculateVisibleWindowStart(
             totalCount: commandSuggestions.Count,
             selectedIndex: index,
             currentWindowStart: commandSuggestionWindowStart,
             maxVisibleCount: MaxVisibleCommandSuggestions);
-        if (nextWindowStart != commandSuggestionWindowStart)
-        {
-            commandSuggestionWindowStart = nextWindowStart;
-            UpdateVisibleCommandSuggestions();
-        }
 
         SelectedCommandSuggestion = commandSuggestions[index];
+
+        // Always rebuild VisibleCommandSuggestions from fresh display clones, even when the scroll
+        // window didn't move: Remote UI de-duplicates already-transmitted item objects by identity,
+        // so reassigning the collection with the same instances would not repaint the highlight.
+        UpdateVisibleCommandSuggestions();
     }
 
     private void UpdateVisibleCommandSuggestions()
@@ -592,9 +597,43 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         var maxStartIndex = Math.Max(0, commandSuggestions.Count - MaxVisibleCommandSuggestions);
         commandSuggestionWindowStart = Math.Clamp(commandSuggestionWindowStart, 0, maxStartIndex);
-        VisibleCommandSuggestions = commandSuggestions
-            .Skip(commandSuggestionWindowStart)
-            .Take(MaxVisibleCommandSuggestions)
+        var window = BuildVisibleWindow(
+            commandSuggestions,
+            commandSuggestionWindowStart,
+            MaxVisibleCommandSuggestions,
+            selectedCommandSuggestion);
+        for (var i = 0; i < window.Length; i++)
+        {
+            // Target the master suggestion so selection bookkeeping (IndexOf over
+            // commandSuggestions) keeps working on the canonical instances.
+            var master = commandSuggestions[commandSuggestionWindowStart + i];
+            window[i].ApplyCommand = new AsyncCommand((_, _) =>
+            {
+                ApplyCommandSuggestion(master);
+                return Task.CompletedTask;
+            });
+        }
+
+        VisibleCommandSuggestions = window;
+    }
+
+    /// <summary>
+    /// Builds the visible popup window as brand-new <see cref="SlashCommandSuggestion"/> display
+    /// clones with <see cref="SlashCommandSuggestion.IsSelected"/> baked in at construction.
+    /// Fresh instances are required on every selection change because Remote UI tracks
+    /// already-transmitted objects by identity and does not re-serialize in-place property
+    /// mutations on them; the master items in <paramref name="suggestions"/> are never mutated.
+    /// </summary>
+    internal static SlashCommandSuggestion[] BuildVisibleWindow(
+        IReadOnlyList<SlashCommandSuggestion> suggestions,
+        int windowStart,
+        int maxVisibleCount,
+        SlashCommandSuggestion? selected)
+    {
+        return suggestions
+            .Skip(windowStart)
+            .Take(maxVisibleCount)
+            .Select(master => SlashCommandSuggestion.CreateDisplayClone(master, ReferenceEquals(master, selected)))
             .ToArray();
     }
 

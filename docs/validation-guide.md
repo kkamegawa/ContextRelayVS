@@ -107,6 +107,42 @@ Look for:
 2. Restart Visual Studio to apply UI language changes
 3. Check ActivityLog for language initialization errors
 
+### Issue: Install fails with "strong name validation failed (0x8013141A)"
+Double-clicking the VSIX fails during initialization with:
+
+```
+System.TypeInitializationException: 'Microsoft.VisualStudio.ExtensionManager.Utilities' ...
+ ---> System.IO.FileLoadException: Could not load 'Microsoft.VisualStudio.Interop, Version=18.0.0.0, ... PublicKeyToken=b03f5f7f11d50a3a' ... strong name validation failed. (0x8013141A)
+```
+
+**Cause**: This is **not** a problem with this VSIX. Some VS 2026 Canary builds ship a
+**delay-signed** `Microsoft.VisualStudio.Interop.dll` inside the standalone
+`VSIXInstaller.exe` component. The failure happens in the SKU-compatibility check
+(`IsExtensionIncompatibleWithSku`) *before* the VSIX payload is examined, so any VSIX
+fails the same way on that build. The IDE's own copy of the same assembly is correctly
+signed; only the installer-side copy is affected.
+
+**Confirm the cause** (read-only):
+```powershell
+$sn = 'C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.2 Tools\sn.exe'
+$installerInterop = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\resources\app\ServiceHub\Services\Microsoft.VisualStudio.Setup.Service\VsixInstaller\Microsoft.VisualStudio.Interop.dll'
+& $sn -vf $installerInterop   # "delay-signed or test-signed" => this issue
+```
+
+**Solution** (in order of preference):
+1. **Update or Repair VS 2026 Canary** via the Visual Studio Installer so the installer
+   component re-lays a properly signed `Microsoft.VisualStudio.Interop.dll`. This is the
+   clean fix.
+2. **Install from inside the IDE** instead of double-clicking: **Extensions** >
+   **Manage Extensions** > **Install from VSIX**. The IDE uses its own (valid) copy of
+   the assembly, so this path often succeeds.
+3. Report the build defect to https://developercommunity.visualstudio.com (include the
+   VS build number and the `sn -vf` output).
+
+Do not manually replace files under the Visual Studio Installer directory; that is an
+unsupported modification that can leave the installer inconsistent with its component
+catalog and may be reverted or broken by servicing.
+
 ## Additional Documentation
 - [Microsoft Learn: Create Extensions](https://learn.microsoft.com/en-us/visualstudio/extensibility/creating-an-extension-with-a-vspackage)
 - [VSSDK: ProvideOptionPage attribute](https://learn.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.provideoptionpageattribute)
