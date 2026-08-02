@@ -83,6 +83,8 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("Command=\"{Binding ApplyCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding ConfirmQueryInputCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding VisibleCommandSuggestions}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedIndex=\"{Binding SelectedVisibleCommandSuggestionIndex, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem=\"{Binding SelectedCommandSuggestion", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource SuggestionPopupListBoxStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemContainerStyle=\"{StaticResource SuggestionListBoxItemStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("FocusManager.IsFocusScope=\"True\"", xaml, StringComparison.Ordinal);
@@ -121,7 +123,12 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("x:Key=\"ThemedTextBoxStyle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<Setter Property=\"Focusable\" Value=\"True\" />", xaml, StringComparison.Ordinal);
         Assert.Contains("<Setter Property=\"IsTabStop\" Value=\"True\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Background\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Foreground\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("Background\" Value=\"{Binding Background, RelativeSource={RelativeSource AncestorType=ListBoxItem}}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Foreground\" Value=\"{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentPresenter Foreground=", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionTextBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
@@ -157,6 +164,30 @@ public sealed class SlashCommandSuggestionInteractionTests
         var result = (int)method!.Invoke(obj: null, new object[] { totalCount, selectedIndex, currentWindowStart, maxVisibleCount })!;
 
         Assert.Equal(expectedStart, result);
+    }
+
+    [Theory]
+    [InlineData(6, 0, 0, 4, 0)]
+    [InlineData(6, 3, 0, 4, 3)]
+    [InlineData(6, 4, 1, 4, 3)]
+    [InlineData(6, 5, 2, 4, 3)]
+    [InlineData(6, 0, 1, 4, -1)]
+    [InlineData(0, -1, 0, 0, -1)]
+    public void CalculateVisibleSelectionIndex_MapsKeyboardSelectionToListBoxIndex(
+        int totalCount,
+        int selectedIndex,
+        int windowStart,
+        int visibleItemCount,
+        int expectedIndex)
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+        var method = viewModelType!.GetMethod("CalculateVisibleSelectionIndex", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var result = (int)method!.Invoke(obj: null, new object[] { totalCount, selectedIndex, windowStart, visibleItemCount })!;
+
+        Assert.Equal(expectedIndex, result);
     }
 
     [Fact]

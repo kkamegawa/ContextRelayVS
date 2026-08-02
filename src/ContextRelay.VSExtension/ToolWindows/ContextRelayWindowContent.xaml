@@ -170,10 +170,12 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarHoverBrushKey}}" />
+                                <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarHoverBrushKey}}" />
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextHoverBrushKey}}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}" />
+                                <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}" />
                                 <Setter TargetName="ItemChrome" Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBorderBrushKey}}" />
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}" />
                             </Trigger>
@@ -183,6 +185,7 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                                <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
                                 <Setter Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextInactiveBrushKey}}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -240,7 +243,7 @@
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="Margin" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Background" Value="{Binding Background, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
             <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
             <Setter Property="Focusable" Value="False" />
             <Setter Property="IsTabStop" Value="False" />
@@ -463,7 +466,7 @@
                     <TextBlock Margin="8,4,8,6" FontWeight="SemiBold" Text="{Binding CommandPopupHeaderText}" Style="{StaticResource MutedTextStyle}" />
                      <ListBox Style="{StaticResource SuggestionPopupListBoxStyle}" MaxHeight="220" BorderThickness="0"
                               ItemsSource="{Binding VisibleCommandSuggestions}"
-                              SelectedItem="{Binding SelectedCommandSuggestion, Mode=TwoWay}"
+                              SelectedIndex="{Binding SelectedVisibleCommandSuggestionIndex, Mode=OneWay}"
                               ItemContainerStyle="{StaticResource SuggestionListBoxItemStyle}">
                          <ListBox.ItemTemplate>
                              <DataTemplate>
@@ -473,7 +476,10 @@
                                              <TextBlock Text="{Binding Icon}" Margin="0,0,6,0" />
                                              <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
                                          </StackPanel>
-                                         <TextBlock Margin="0,3,0,0" Text="{Binding Description}" Style="{StaticResource CardMutedTextStyle}" />
+                                         <TextBlock Margin="0,3,0,0"
+                                                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                    Text="{Binding Description}"
+                                                    Style="{StaticResource CardMutedTextStyle}" />
                                      </StackPanel>
                                  </Button>
                              </DataTemplate>

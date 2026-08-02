@@ -257,6 +257,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             commandSuggestions = value;
             RaiseNotifyPropertyChangedEvent(nameof(CommandSuggestions));
+            RaiseNotifyPropertyChangedEvent(nameof(SelectedVisibleCommandSuggestionIndex));
         }
     }
 
@@ -268,6 +269,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             visibleCommandSuggestions = value;
             RaiseNotifyPropertyChangedEvent(nameof(VisibleCommandSuggestions));
+            RaiseNotifyPropertyChangedEvent(nameof(SelectedVisibleCommandSuggestionIndex));
         }
     }
 
@@ -284,10 +286,27 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
             selectedCommandSuggestion = value;
             RaiseNotifyPropertyChangedEvent(nameof(SelectedCommandSuggestion));
+            RaiseNotifyPropertyChangedEvent(nameof(SelectedVisibleCommandSuggestionIndex));
             if (!isApplyingState && IsCommandPopupOpen)
             {
                 UpdateTransientHelpText();
             }
+        }
+    }
+
+    [DataMember]
+    public int SelectedVisibleCommandSuggestionIndex
+    {
+        get
+        {
+            var selectedIndex = selectedCommandSuggestion is null
+                ? -1
+                : IndexOf(commandSuggestions, selectedCommandSuggestion);
+            return CalculateVisibleSelectionIndex(
+                commandSuggestions.Count,
+                selectedIndex,
+                commandSuggestionWindowStart,
+                visibleCommandSuggestions.Count);
         }
     }
 
@@ -647,6 +666,21 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         var maxWindowStart = Math.Max(0, totalCount - maxVisibleCount);
         return Math.Clamp(nextWindowStart, 0, maxWindowStart);
+    }
+
+    internal static int CalculateVisibleSelectionIndex(int totalCount, int selectedIndex, int windowStart, int visibleItemCount)
+    {
+        if (totalCount <= 0 || visibleItemCount <= 0 || selectedIndex < 0 || selectedIndex >= totalCount)
+        {
+            return -1;
+        }
+
+        if (windowStart < 0 || selectedIndex < windowStart || selectedIndex >= windowStart + visibleItemCount)
+        {
+            return -1;
+        }
+
+        return selectedIndex - windowStart;
     }
 
     private static int IndexOf<T>(IReadOnlyList<T> list, T item)

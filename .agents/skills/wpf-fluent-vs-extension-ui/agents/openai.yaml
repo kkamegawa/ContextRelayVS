@@ -1,0 +1,4 @@
+interface:
+  display_name: "WPF Fluent UI Design"
+  short_description: "Design theme-safe WPF controls for Visual Studio"
+  default_prompt: "Use $wpf-fluent-vs-extension-ui to create a design-only specification for Fluent-inspired WPF buttons and multiline text input in a Visual Studio extension."
