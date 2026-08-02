@@ -136,12 +136,12 @@ $installerInterop = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\re
 2. **Install from inside the IDE** instead of double-clicking: **Extensions** >
    **Manage Extensions** > **Install from VSIX**. The IDE uses its own (valid) copy of
    the assembly, so this path often succeeds.
-3. **Replace the installer's bad assembly** (admin; back up first): overwrite the
-   delay-signed installer copy with the IDE's valid copy
-   (`...\18\Canary\Common7\IDE\PublicAssemblies\Microsoft.VisualStudio.Interop.dll`).
-   The assembly version is identical (18.0.0.0). A VS update may revert it.
-4. Report the build defect to https://developercommunity.visualstudio.com (include the
+3. Report the build defect to https://developercommunity.visualstudio.com (include the
    VS build number and the `sn -vf` output).
+
+Do not manually replace files under the Visual Studio Installer directory; that is an
+unsupported modification that can leave the installer inconsistent with its component
+catalog and may be reverted or broken by servicing.
 
 ## Additional Documentation
 - [Microsoft Learn: Create Extensions](https://learn.microsoft.com/en-us/visualstudio/extensibility/creating-an-extension-with-a-vspackage)
