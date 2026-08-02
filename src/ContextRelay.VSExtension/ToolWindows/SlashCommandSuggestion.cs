@@ -29,6 +29,10 @@ public sealed class SlashCommandSuggestion : NotifyPropertyChangedObject
     /// The popup highlight is driven by this serialized per-item state instead of the WPF
     /// <c>Selector</c> selection, because Remote UI cannot guarantee that a scalar selection
     /// index survives the item collection being replaced on every keystroke.
+    /// The flag is stamped at construction time on per-window display clones (see
+    /// <see cref="CreateDisplayClone"/>); it must never be mutated on an instance that has
+    /// already been transmitted over the Remote UI boundary, because such in-place changes
+    /// are not re-serialized for objects the channel already knows by identity.
     /// </summary>
     [DataMember]
     public bool IsSelected
@@ -44,6 +48,31 @@ public sealed class SlashCommandSuggestion : NotifyPropertyChangedObject
             isSelected = value;
             RaiseNotifyPropertyChangedEvent(nameof(IsSelected));
         }
+    }
+
+    /// <summary>
+    /// Creates a brand-new display item from <paramref name="source"/> with the selection state
+    /// baked in at construction. Remote UI de-duplicates already-transmitted objects by identity,
+    /// so the visible window must be rebuilt from fresh instances on every selection change for
+    /// the highlight to repaint; <paramref name="source"/> is never mutated.
+    /// <see cref="ApplyCommand"/> is intentionally left <see langword="null"/> — the view model
+    /// wires it after cloning so the command can target the master suggestion.
+    /// </summary>
+    /// <param name="source">The master suggestion to copy display data from.</param>
+    /// <param name="isSelected">Whether the clone represents the keyboard-selected row.</param>
+    /// <returns>A fresh <see cref="SlashCommandSuggestion"/> ready to be transmitted.</returns>
+    internal static SlashCommandSuggestion CreateDisplayClone(SlashCommandSuggestion source, bool isSelected)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        return new SlashCommandSuggestion
+        {
+            Icon = source.Icon,
+            Name = source.Name,
+            Description = source.Description,
+            CommittedQuery = source.CommittedQuery,
+            IsSelected = isSelected
+        };
     }
 
     /// <summary>

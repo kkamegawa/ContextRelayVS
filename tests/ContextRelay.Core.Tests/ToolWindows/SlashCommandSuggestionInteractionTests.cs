@@ -195,37 +195,89 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
-    public void ApplySelectionFlag_MarksOnlyTheSelectedItemAndClearsTheRest()
+    public void BuildVisibleWindow_ReturnsFreshInstancesWithSelectionStamped()
     {
         var assembly = LoadBuiltExtensionAssembly();
         var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
         var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
-        var method = viewModelType!.GetMethod("ApplySelectionFlag", BindingFlags.Static | BindingFlags.NonPublic);
+        var method = viewModelType!.GetMethod("BuildVisibleWindow", BindingFlags.Static | BindingFlags.NonPublic);
+        var isSelectedProperty = suggestionType!.GetProperty("IsSelected");
+        var nameProperty = suggestionType.GetProperty("Name");
+        var iconProperty = suggestionType.GetProperty("Icon");
+        var descriptionProperty = suggestionType.GetProperty("Description");
+        var committedQueryProperty = suggestionType.GetProperty("CommittedQuery");
+        Assert.NotNull(method);
+        Assert.NotNull(isSelectedProperty);
+
+        var masters = Array.CreateInstance(suggestionType, 6);
+        for (var i = 0; i < masters.Length; i++)
+        {
+            var master = Activator.CreateInstance(suggestionType);
+            nameProperty!.SetValue(master, $"/command{i}");
+            iconProperty!.SetValue(master, $"icon{i}");
+            descriptionProperty!.SetValue(master, $"description{i}");
+            committedQueryProperty!.SetValue(master, $"/command{i} ");
+            masters.SetValue(master, i);
+        }
+
+        var selected = masters.GetValue(2);
+        var window = (Array)method!.Invoke(obj: null, parameters: new object?[] { masters, 1, 4, selected })!;
+
+        Assert.Equal(4, window.Length);
+        for (var i = 0; i < window.Length; i++)
+        {
+            var clone = window.GetValue(i)!;
+            var master = masters.GetValue(1 + i)!;
+
+            // Remote UI de-duplicates transmitted objects by identity, so every visible item
+            // must be a brand-new instance — never a reused master.
+            foreach (var m in masters)
+            {
+                Assert.False(ReferenceEquals(clone, m));
+            }
+
+            Assert.Equal(nameProperty!.GetValue(master), nameProperty.GetValue(clone));
+            Assert.Equal(iconProperty!.GetValue(master), iconProperty.GetValue(clone));
+            Assert.Equal(descriptionProperty!.GetValue(master), descriptionProperty.GetValue(clone));
+            Assert.Equal(committedQueryProperty!.GetValue(master), committedQueryProperty.GetValue(clone));
+            Assert.Equal(ReferenceEquals(master, selected), (bool)isSelectedProperty!.GetValue(clone)!);
+        }
+
+        // Masters are never mutated: selection state lives only on the display clones.
+        foreach (var master in masters)
+        {
+            Assert.False((bool)isSelectedProperty!.GetValue(master)!);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BuildVisibleWindow_WhenSelectionIsNullOrOutsideWindow_MarksNothing(bool useOutsideSelection)
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+        var method = viewModelType!.GetMethod("BuildVisibleWindow", BindingFlags.Static | BindingFlags.NonPublic);
         var isSelectedProperty = suggestionType!.GetProperty("IsSelected");
         Assert.NotNull(method);
         Assert.NotNull(isSelectedProperty);
 
-        var first = Activator.CreateInstance(suggestionType);
-        var second = Activator.CreateInstance(suggestionType);
-        var third = Activator.CreateInstance(suggestionType);
+        var masters = Array.CreateInstance(suggestionType, 6);
+        for (var i = 0; i < masters.Length; i++)
+        {
+            masters.SetValue(Activator.CreateInstance(suggestionType), i);
+        }
 
-        var window = Array.CreateInstance(suggestionType, 3);
-        window.SetValue(first, 0);
-        window.SetValue(second, 1);
-        window.SetValue(third, 2);
+        // masters[0] sits before windowStart 1, so it is outside the visible window.
+        var selected = useOutsideSelection ? masters.GetValue(0) : null;
+        var window = (Array)method!.Invoke(obj: null, parameters: new object?[] { masters, 1, 4, selected })!;
 
-        method!.Invoke(obj: null, parameters: new object?[] { window, second });
-
-        Assert.False((bool)isSelectedProperty!.GetValue(first)!);
-        Assert.True((bool)isSelectedProperty.GetValue(second)!);
-        Assert.False((bool)isSelectedProperty.GetValue(third)!);
-
-        // Selecting nothing (null) must clear every item's flag, e.g. when the popup is closing.
-        method.Invoke(obj: null, parameters: new object?[] { window, null });
-
-        Assert.False((bool)isSelectedProperty.GetValue(first)!);
-        Assert.False((bool)isSelectedProperty.GetValue(second)!);
-        Assert.False((bool)isSelectedProperty.GetValue(third)!);
+        Assert.Equal(4, window.Length);
+        foreach (var clone in window)
+        {
+            Assert.False((bool)isSelectedProperty!.GetValue(clone)!);
+        }
     }
 
     [Fact]
