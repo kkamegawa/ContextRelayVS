@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using ContextRelay.Core.Models;
@@ -9,6 +10,29 @@ namespace ContextRelay.Core.Tests.ToolWindows;
 
 public sealed class SlashCommandSuggestionInteractionTests
 {
+    [Fact]
+    public void SlashCommandSuggestion_IsSelected_RaisesPropertyChangedOnlyWhenValueChanges()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
+        var suggestion = Activator.CreateInstance(suggestionType!);
+        var isSelectedProperty = suggestionType!.GetProperty("IsSelected");
+        Assert.NotNull(isSelectedProperty);
+
+        var notifyPropertyChanged = Assert.IsAssignableFrom<INotifyPropertyChanged>(suggestion);
+        var raisedProperties = new System.Collections.Generic.List<string?>();
+        notifyPropertyChanged.PropertyChanged += (_, e) => raisedProperties.Add(e.PropertyName);
+
+        Assert.False((bool)isSelectedProperty!.GetValue(suggestion)!);
+
+        isSelectedProperty.SetValue(suggestion, true);
+        isSelectedProperty.SetValue(suggestion, true);
+        isSelectedProperty.SetValue(suggestion, false);
+
+        Assert.True((bool)isSelectedProperty.GetValue(suggestion)! == false);
+        Assert.Equal(new[] { "IsSelected", "IsSelected" }, raisedProperties);
+    }
+
     [Fact]
     public void TryBuildCommittedQuery_WhenPopupIsOpen_AppendsTrailingSpace()
     {
@@ -83,6 +107,12 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("Command=\"{Binding ApplyCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding ConfirmQueryInputCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding VisibleCommandSuggestions}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedIndex=\"{Binding SelectedVisibleCommandSuggestionIndex", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedItem=\"{Binding SelectedCommandSuggestion", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SuggestionRow\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DataTrigger Binding=\"{Binding IsSelected}\" Value=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter TargetName=\"SuggestionRow\" Property=\"Background\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter TargetName=\"SuggestionRow\" Property=\"Foreground\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource SuggestionPopupListBoxStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemContainerStyle=\"{StaticResource SuggestionListBoxItemStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("FocusManager.IsFocusScope=\"True\"", xaml, StringComparison.Ordinal);
@@ -100,6 +130,40 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.DoesNotContain("CallMethodAction", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("xmlns:i=\"http://schemas.microsoft.com/xaml/behaviors\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("mc:Ignorable=\"i\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmbeddedXaml_DefinesFluentVisualAndThemeContract()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        using var stream = assembly.GetManifestResourceStream("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowContent.xaml");
+
+        Assert.NotNull(stream);
+
+        using var reader = new StreamReader(stream!);
+        var xaml = reader.ReadToEnd();
+
+        Assert.Contains("x:Key=\"PanelSurfaceBorderStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"CardBorderStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ThemedButtonStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"PrimaryButtonStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"FluentListBoxItemStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ThemedTextBoxStyle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Focusable\" Value=\"True\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"IsTabStop\" Value=\"True\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Background\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Foreground\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("Background\" Value=\"{Binding Background, RelativeSource={RelativeSource AncestorType=ListBoxItem}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground\" Value=\"{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentPresenter Foreground=", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionTextBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}", xaml, StringComparison.Ordinal);
+        Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"1\" Grid.Column=\"2\" Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"ScrollViewer.CanContentScroll\" Value=\"False\" />", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("StretchListBoxItemStyle", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Background=\"#", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -128,6 +192,92 @@ public sealed class SlashCommandSuggestionInteractionTests
         var result = (int)method!.Invoke(obj: null, new object[] { totalCount, selectedIndex, currentWindowStart, maxVisibleCount })!;
 
         Assert.Equal(expectedStart, result);
+    }
+
+    [Fact]
+    public void BuildVisibleWindow_ReturnsFreshInstancesWithSelectionStamped()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+        var method = viewModelType!.GetMethod("BuildVisibleWindow", BindingFlags.Static | BindingFlags.NonPublic);
+        var isSelectedProperty = suggestionType!.GetProperty("IsSelected");
+        var nameProperty = suggestionType.GetProperty("Name");
+        var iconProperty = suggestionType.GetProperty("Icon");
+        var descriptionProperty = suggestionType.GetProperty("Description");
+        var committedQueryProperty = suggestionType.GetProperty("CommittedQuery");
+        Assert.NotNull(method);
+        Assert.NotNull(isSelectedProperty);
+
+        var masters = Array.CreateInstance(suggestionType, 6);
+        for (var i = 0; i < masters.Length; i++)
+        {
+            var master = Activator.CreateInstance(suggestionType);
+            nameProperty!.SetValue(master, $"/command{i}");
+            iconProperty!.SetValue(master, $"icon{i}");
+            descriptionProperty!.SetValue(master, $"description{i}");
+            committedQueryProperty!.SetValue(master, $"/command{i} ");
+            masters.SetValue(master, i);
+        }
+
+        var selected = masters.GetValue(2);
+        var window = (Array)method!.Invoke(obj: null, parameters: new object?[] { masters, 1, 4, selected })!;
+
+        Assert.Equal(4, window.Length);
+        for (var i = 0; i < window.Length; i++)
+        {
+            var clone = window.GetValue(i)!;
+            var master = masters.GetValue(1 + i)!;
+
+            // Remote UI de-duplicates transmitted objects by identity, so every visible item
+            // must be a brand-new instance — never a reused master.
+            foreach (var m in masters)
+            {
+                Assert.False(ReferenceEquals(clone, m));
+            }
+
+            Assert.Equal(nameProperty!.GetValue(master), nameProperty.GetValue(clone));
+            Assert.Equal(iconProperty!.GetValue(master), iconProperty.GetValue(clone));
+            Assert.Equal(descriptionProperty!.GetValue(master), descriptionProperty.GetValue(clone));
+            Assert.Equal(committedQueryProperty!.GetValue(master), committedQueryProperty.GetValue(clone));
+            Assert.Equal(ReferenceEquals(master, selected), (bool)isSelectedProperty!.GetValue(clone)!);
+        }
+
+        // Masters are never mutated: selection state lives only on the display clones.
+        foreach (var master in masters)
+        {
+            Assert.False((bool)isSelectedProperty!.GetValue(master)!);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BuildVisibleWindow_WhenSelectionIsNullOrOutsideWindow_MarksNothing(bool useOutsideSelection)
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
+        var method = viewModelType!.GetMethod("BuildVisibleWindow", BindingFlags.Static | BindingFlags.NonPublic);
+        var isSelectedProperty = suggestionType!.GetProperty("IsSelected");
+        Assert.NotNull(method);
+        Assert.NotNull(isSelectedProperty);
+
+        var masters = Array.CreateInstance(suggestionType, 6);
+        for (var i = 0; i < masters.Length; i++)
+        {
+            masters.SetValue(Activator.CreateInstance(suggestionType), i);
+        }
+
+        // masters[0] sits before windowStart 1, so it is outside the visible window.
+        var selected = useOutsideSelection ? masters.GetValue(0) : null;
+        var window = (Array)method!.Invoke(obj: null, parameters: new object?[] { masters, 1, 4, selected })!;
+
+        Assert.Equal(4, window.Length);
+        foreach (var clone in window)
+        {
+            Assert.False((bool)isSelectedProperty!.GetValue(clone)!);
+        }
     }
 
     [Fact]

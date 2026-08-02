@@ -25,10 +25,16 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 
 ## Theme and visual consistency
 
-1. Switch Visual Studio themes (Light, Dark, Blue).
-2. Confirm ContextRelay buttons use the same visual style as native Visual Studio buttons, including hover, pressed, and disabled states.
-3. Confirm list controls, text box, tab headers, and border lines use Visual Studio theme colors and do not fall back to default WPF white backgrounds in Dark theme.
-4. Confirm no custom button/background color appears, and no button surface visually merges into the tool window background.
+1. Repeat this section on Visual Studio 2022 and Visual Studio 2026 / Insider with the Light, Dark, Blue, and High Contrast themes.
+2. Confirm the tool window background, panel surfaces, cards, list items, text, and borders use Visual Studio theme resources without default WPF white or black surfaces.
+3. Confirm neutral buttons show distinct rest, pointer-over, pressed, keyboard-focus, and disabled states while the Search button is the only primary action.
+4. Use Tab and Shift+Tab to reach each regular action button, then activate it with Enter and Space. Confirm slash-command suggestion items remain outside the Tab order and continue to follow the query input keyboard behavior.
+5. Confirm every focus indicator is visible in Light, Dark, Blue, and High Contrast themes and is not communicated by color alone.
+6. Select query text by mouse drag, Shift+Arrow, and Ctrl+A. Confirm the selection foreground and background remain readable, and confirm the caret stays visible when the selection is collapsed.
+7. Hover and select chat, search-result, snippet, and suggestion rows. For slash-command suggestions, move the pointer outside the popup and press `Up` and `Down` repeatedly. Confirm the active row has a visible full-row highlight, its foreground remains readable, and the highlight follows the selected item when a list contains more items than the visible viewport.
+8. Change the Visual Studio theme while the tool window remains open. Confirm every surface and interaction state updates without reopening the window.
+9. Narrow the tool window until action rows wrap. Confirm buttons keep consistent height and spacing and no content overlaps or clips.
+10. Populate a long chat history and scroll through it. Confirm pixel scrolling remains smooth and existing chat rendering behavior is unchanged.
 
 ## Search and shared state
 
