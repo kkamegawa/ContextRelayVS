@@ -466,11 +466,10 @@
                     <TextBlock Margin="8,4,8,6" FontWeight="SemiBold" Text="{Binding CommandPopupHeaderText}" Style="{StaticResource MutedTextStyle}" />
                      <ListBox Style="{StaticResource SuggestionPopupListBoxStyle}" MaxHeight="220" BorderThickness="0"
                               ItemsSource="{Binding VisibleCommandSuggestions}"
-                              SelectedIndex="{Binding SelectedVisibleCommandSuggestionIndex, Mode=OneWay}"
                               ItemContainerStyle="{StaticResource SuggestionListBoxItemStyle}">
                          <ListBox.ItemTemplate>
                              <DataTemplate>
-                                 <Button Style="{StaticResource SuggestionButtonStyle}" Command="{Binding ApplyCommand}">
+                                 <Button x:Name="SuggestionRow" Style="{StaticResource SuggestionButtonStyle}" Command="{Binding ApplyCommand}">
                                      <StackPanel>
                                          <StackPanel Orientation="Horizontal">
                                              <TextBlock Text="{Binding Icon}" Margin="0,0,6,0" />
@@ -482,6 +481,12 @@
                                                     Style="{StaticResource CardMutedTextStyle}" />
                                      </StackPanel>
                                  </Button>
+                                 <DataTemplate.Triggers>
+                                     <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                         <Setter TargetName="SuggestionRow" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}" />
+                                         <Setter TargetName="SuggestionRow" Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}" />
+                                     </DataTrigger>
+                                 </DataTemplate.Triggers>
                              </DataTemplate>
                          </ListBox.ItemTemplate>
                      </ListBox>

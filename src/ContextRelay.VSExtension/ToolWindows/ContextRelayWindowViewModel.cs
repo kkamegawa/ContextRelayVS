@@ -257,7 +257,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             commandSuggestions = value;
             RaiseNotifyPropertyChangedEvent(nameof(CommandSuggestions));
-            RaiseNotifyPropertyChangedEvent(nameof(SelectedVisibleCommandSuggestionIndex));
         }
     }
 
@@ -269,7 +268,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             visibleCommandSuggestions = value;
             RaiseNotifyPropertyChangedEvent(nameof(VisibleCommandSuggestions));
-            RaiseNotifyPropertyChangedEvent(nameof(SelectedVisibleCommandSuggestionIndex));
         }
     }
 
@@ -285,28 +283,15 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             }
 
             selectedCommandSuggestion = value;
+
+            // IsSelected on individual suggestion items is stamped by ApplySelectionFlag right before
+            // VisibleCommandSuggestions is reassigned, not here — every caller of this setter is
+            // immediately followed by a call that reassigns VisibleCommandSuggestions.
             RaiseNotifyPropertyChangedEvent(nameof(SelectedCommandSuggestion));
-            RaiseNotifyPropertyChangedEvent(nameof(SelectedVisibleCommandSuggestionIndex));
             if (!isApplyingState && IsCommandPopupOpen)
             {
                 UpdateTransientHelpText();
             }
-        }
-    }
-
-    [DataMember]
-    public int SelectedVisibleCommandSuggestionIndex
-    {
-        get
-        {
-            var selectedIndex = selectedCommandSuggestion is null
-                ? -1
-                : IndexOf(commandSuggestions, selectedCommandSuggestion);
-            return CalculateVisibleSelectionIndex(
-                commandSuggestions.Count,
-                selectedIndex,
-                commandSuggestionWindowStart,
-                visibleCommandSuggestions.Count);
         }
     }
 
@@ -586,18 +571,17 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             return;
         }
 
-        var nextWindowStart = CalculateVisibleWindowStart(
+        commandSuggestionWindowStart = CalculateVisibleWindowStart(
             totalCount: commandSuggestions.Count,
             selectedIndex: index,
             currentWindowStart: commandSuggestionWindowStart,
             maxVisibleCount: MaxVisibleCommandSuggestions);
-        if (nextWindowStart != commandSuggestionWindowStart)
-        {
-            commandSuggestionWindowStart = nextWindowStart;
-            UpdateVisibleCommandSuggestions();
-        }
 
         SelectedCommandSuggestion = commandSuggestions[index];
+
+        // Always reassign VisibleCommandSuggestions, even when the scroll window didn't move, so the
+        // popup row highlight updates reliably. See ApplySelectionFlag for why.
+        UpdateVisibleCommandSuggestions();
     }
 
     private void UpdateVisibleCommandSuggestions()
@@ -611,10 +595,28 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         var maxStartIndex = Math.Max(0, commandSuggestions.Count - MaxVisibleCommandSuggestions);
         commandSuggestionWindowStart = Math.Clamp(commandSuggestionWindowStart, 0, maxStartIndex);
-        VisibleCommandSuggestions = commandSuggestions
+        var window = commandSuggestions
             .Skip(commandSuggestionWindowStart)
             .Take(MaxVisibleCommandSuggestions)
             .ToArray();
+        ApplySelectionFlag(window, selectedCommandSuggestion);
+        VisibleCommandSuggestions = window;
+    }
+
+    /// <summary>
+    /// Stamps <see cref="SlashCommandSuggestion.IsSelected"/> on every item in <paramref name="window"/>
+    /// immediately before it is assigned to <see cref="VisibleCommandSuggestions"/>. The whole collection is
+    /// always reassigned (and notified) when selection moves, even when the visible scroll window doesn't
+    /// change, because Remote UI's propagation of an in-place property mutation on an item that was already
+    /// part of a previously sent collection is unproven; reassigning the collection uses the same
+    /// whole-array-replacement pattern already relied on elsewhere in this view model.
+    /// </summary>
+    internal static void ApplySelectionFlag(IReadOnlyList<SlashCommandSuggestion> window, SlashCommandSuggestion? selected)
+    {
+        foreach (var suggestion in window)
+        {
+            suggestion.IsSelected = ReferenceEquals(suggestion, selected);
+        }
     }
 
     private SlashCommandSuggestion CreateInteractiveSuggestion(SlashCommandSuggestion suggestion)
@@ -666,21 +668,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         var maxWindowStart = Math.Max(0, totalCount - maxVisibleCount);
         return Math.Clamp(nextWindowStart, 0, maxWindowStart);
-    }
-
-    internal static int CalculateVisibleSelectionIndex(int totalCount, int selectedIndex, int windowStart, int visibleItemCount)
-    {
-        if (totalCount <= 0 || visibleItemCount <= 0 || selectedIndex < 0 || selectedIndex >= totalCount)
-        {
-            return -1;
-        }
-
-        if (windowStart < 0 || selectedIndex < windowStart || selectedIndex >= windowStart + visibleItemCount)
-        {
-            return -1;
-        }
-
-        return selectedIndex - windowStart;
     }
 
     private static int IndexOf<T>(IReadOnlyList<T> list, T item)

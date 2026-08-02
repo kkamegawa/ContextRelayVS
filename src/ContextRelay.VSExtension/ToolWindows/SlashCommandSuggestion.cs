@@ -5,8 +5,10 @@ using Microsoft.VisualStudio.Extensibility.UI;
 namespace ContextRelay.VSExtension.ToolWindows;
 
 [DataContract]
-public sealed class SlashCommandSuggestion
+public sealed class SlashCommandSuggestion : NotifyPropertyChangedObject
 {
+    private bool isSelected;
+
     [DataMember]
     public string Icon { get; set; } = string.Empty;
 
@@ -21,6 +23,28 @@ public sealed class SlashCommandSuggestion
 
     [DataMember]
     public AsyncCommand? ApplyCommand { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this suggestion is the keyboard-selected row.
+    /// The popup highlight is driven by this serialized per-item state instead of the WPF
+    /// <c>Selector</c> selection, because Remote UI cannot guarantee that a scalar selection
+    /// index survives the item collection being replaced on every keystroke.
+    /// </summary>
+    [DataMember]
+    public bool IsSelected
+    {
+        get => isSelected;
+        set
+        {
+            if (isSelected == value)
+            {
+                return;
+            }
+
+            isSelected = value;
+            RaiseNotifyPropertyChangedEvent(nameof(IsSelected));
+        }
+    }
 
     /// <summary>
     /// Builds the exact query text that should be committed when a popup suggestion is accepted.

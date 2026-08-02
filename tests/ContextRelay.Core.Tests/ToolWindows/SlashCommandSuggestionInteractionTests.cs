@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using ContextRelay.Core.Models;
@@ -9,6 +10,29 @@ namespace ContextRelay.Core.Tests.ToolWindows;
 
 public sealed class SlashCommandSuggestionInteractionTests
 {
+    [Fact]
+    public void SlashCommandSuggestion_IsSelected_RaisesPropertyChangedOnlyWhenValueChanges()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
+        var suggestion = Activator.CreateInstance(suggestionType!);
+        var isSelectedProperty = suggestionType!.GetProperty("IsSelected");
+        Assert.NotNull(isSelectedProperty);
+
+        var notifyPropertyChanged = Assert.IsAssignableFrom<INotifyPropertyChanged>(suggestion);
+        var raisedProperties = new System.Collections.Generic.List<string?>();
+        notifyPropertyChanged.PropertyChanged += (_, e) => raisedProperties.Add(e.PropertyName);
+
+        Assert.False((bool)isSelectedProperty!.GetValue(suggestion)!);
+
+        isSelectedProperty.SetValue(suggestion, true);
+        isSelectedProperty.SetValue(suggestion, true);
+        isSelectedProperty.SetValue(suggestion, false);
+
+        Assert.True((bool)isSelectedProperty.GetValue(suggestion)! == false);
+        Assert.Equal(new[] { "IsSelected", "IsSelected" }, raisedProperties);
+    }
+
     [Fact]
     public void TryBuildCommittedQuery_WhenPopupIsOpen_AppendsTrailingSpace()
     {
@@ -83,8 +107,12 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("Command=\"{Binding ApplyCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding ConfirmQueryInputCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding VisibleCommandSuggestions}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedIndex=\"{Binding SelectedVisibleCommandSuggestionIndex, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedIndex=\"{Binding SelectedVisibleCommandSuggestionIndex", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectedItem=\"{Binding SelectedCommandSuggestion", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SuggestionRow\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DataTrigger Binding=\"{Binding IsSelected}\" Value=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter TargetName=\"SuggestionRow\" Property=\"Background\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter TargetName=\"SuggestionRow\" Property=\"Foreground\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}\" />", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource SuggestionPopupListBoxStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemContainerStyle=\"{StaticResource SuggestionListBoxItemStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("FocusManager.IsFocusScope=\"True\"", xaml, StringComparison.Ordinal);
@@ -166,28 +194,38 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Equal(expectedStart, result);
     }
 
-    [Theory]
-    [InlineData(6, 0, 0, 4, 0)]
-    [InlineData(6, 3, 0, 4, 3)]
-    [InlineData(6, 4, 1, 4, 3)]
-    [InlineData(6, 5, 2, 4, 3)]
-    [InlineData(6, 0, 1, 4, -1)]
-    [InlineData(0, -1, 0, 0, -1)]
-    public void CalculateVisibleSelectionIndex_MapsKeyboardSelectionToListBoxIndex(
-        int totalCount,
-        int selectedIndex,
-        int windowStart,
-        int visibleItemCount,
-        int expectedIndex)
+    [Fact]
+    public void ApplySelectionFlag_MarksOnlyTheSelectedItemAndClearsTheRest()
     {
         var assembly = LoadBuiltExtensionAssembly();
+        var suggestionType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.SlashCommandSuggestion", throwOnError: true);
         var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true);
-        var method = viewModelType!.GetMethod("CalculateVisibleSelectionIndex", BindingFlags.Static | BindingFlags.NonPublic);
+        var method = viewModelType!.GetMethod("ApplySelectionFlag", BindingFlags.Static | BindingFlags.NonPublic);
+        var isSelectedProperty = suggestionType!.GetProperty("IsSelected");
         Assert.NotNull(method);
+        Assert.NotNull(isSelectedProperty);
 
-        var result = (int)method!.Invoke(obj: null, new object[] { totalCount, selectedIndex, windowStart, visibleItemCount })!;
+        var first = Activator.CreateInstance(suggestionType);
+        var second = Activator.CreateInstance(suggestionType);
+        var third = Activator.CreateInstance(suggestionType);
 
-        Assert.Equal(expectedIndex, result);
+        var window = Array.CreateInstance(suggestionType, 3);
+        window.SetValue(first, 0);
+        window.SetValue(second, 1);
+        window.SetValue(third, 2);
+
+        method!.Invoke(obj: null, parameters: new object?[] { window, second });
+
+        Assert.False((bool)isSelectedProperty!.GetValue(first)!);
+        Assert.True((bool)isSelectedProperty.GetValue(second)!);
+        Assert.False((bool)isSelectedProperty.GetValue(third)!);
+
+        // Selecting nothing (null) must clear every item's flag, e.g. when the popup is closing.
+        method.Invoke(obj: null, parameters: new object?[] { window, null });
+
+        Assert.False((bool)isSelectedProperty.GetValue(first)!);
+        Assert.False((bool)isSelectedProperty.GetValue(second)!);
+        Assert.False((bool)isSelectedProperty.GetValue(third)!);
     }
 
     [Fact]
