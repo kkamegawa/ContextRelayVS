@@ -133,6 +133,61 @@ public sealed class WorkspaceFileAttachmentResolverTests
     }
 
     [Fact]
+    public async Task ReadTextAsync_RejectsAttachmentRetargetedToUnsupportedFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var supportedPath = Path.Combine(root, "file.md");
+            var unsupportedPath = Path.Combine(root, "file.bin");
+            File.WriteAllText(supportedPath, "supported");
+            File.WriteAllText(unsupportedPath, "should not be sent");
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(supportedPath, new[] { root }, out var attachment));
+
+            attachment!.AbsolutePath = unsupportedPath;
+
+            Assert.Null(await WorkspaceFileAttachmentResolver.ReadTextAsync(
+                attachment,
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_RejectsSupportedSymlinkNameWithUnsupportedTarget()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var unsupportedPath = Path.Combine(root, "payload.bin");
+            var supportedAlias = Path.Combine(root, "notes.md");
+            File.WriteAllText(unsupportedPath, "should not be sent");
+            try
+            {
+                File.CreateSymbolicLink(supportedAlias, unsupportedPath);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                Assert.Skip($"Creating a symbolic link is unavailable: {ex.Message}");
+            }
+
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(supportedAlias, new[] { root }, out var attachment));
+            Assert.Null(await WorkspaceFileAttachmentResolver.ReadTextAsync(
+                attachment!,
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ReadTextAsync_ReadsOnlySelectedLines()
     {
         var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));

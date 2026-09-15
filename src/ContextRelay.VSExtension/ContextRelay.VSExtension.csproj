@@ -104,11 +104,10 @@
   </ItemGroup>
 
   <!--
-    VisualStudio.Extensibility requires metadata strings to be authored as
-    %string-resources.json% keys, but VS 18 Insiders currently shows those keys
-    literally for menu metadata. Patch only the generated extension.json payload
-    so source still satisfies the SDK analyzer while Visual Studio receives
-    stable display text.
+    VisualStudio.Extensibility resolves command metadata through the localized
+    .vsextension/string-resources.json files. Legacy menu metadata is still
+    patched to stable display text, while the Attach File command intentionally
+    remains a resource token so Visual Studio can select the UI language.
   -->
   <UsingTask TaskName="PatchContextRelayMenuMetadata" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
@@ -136,7 +135,8 @@
                     patched = true;
                 }
 
-                if (replaced.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
+                string unresolved = replaced.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
+                if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
                 {
                     Log.LogError("Generated extension.json still contains unresolved ContextRelay display token: {0}", ExtensionJsonPath);
                 }
@@ -174,7 +174,8 @@
                         patched = true;
                     }
 
-                    if (replaced.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
+                    string unresolved = replaced.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
+                    if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
                     {
                         Log.LogError("VSIX .vsextension/extension.json still contains unresolved ContextRelay display token: {0}", VsixPath);
                     }
@@ -199,7 +200,6 @@
             return text
                 .Replace("%ContextRelay.Menu.DisplayName%", "ContextRelay")
                 .Replace("%ContextRelay.Menu.Language.DisplayName%", "Language")
-                .Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", "Attach File to Chat")
                 .Replace("%ContextRelay.Command.ClearCache.DisplayName%", "Clear Cache")
                 .Replace("%ContextRelay.Command.ClearChat.DisplayName%", "Clear Chat")
                 .Replace("%ContextRelay.Command.ClearSnippets.DisplayName%", "Clear Snippets")
@@ -360,7 +360,8 @@
                     extensionJsonText = reader.ReadToEnd();
                 }
 
-                if (extensionJsonText.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
+                string unresolved = extensionJsonText.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
+                if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
                 {
                     Log.LogError(".vsextension/extension.json in produced VSIX contains unresolved ContextRelay display token.");
                 }

@@ -27,6 +27,8 @@ public sealed class InProcPackageVsixPackagingTests
 
         AssertEntryPresent(archive, "extension.vsixmanifest");
         AssertEntryPresent(archive, ".vsextension/extension.json");
+        AssertEntryPresent(archive, ".vsextension/string-resources.json");
+        AssertEntryPresent(archive, ".vsextension/ja/string-resources.json");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.dll");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.pkgdef");
         AssertEntryPresent(archive, "Community.VisualStudio.Toolkit.dll");
@@ -41,7 +43,12 @@ public sealed class InProcPackageVsixPackagingTests
             extensionJson = reader.ReadToEnd();
         }
 
-        Assert.DoesNotContain("%ContextRelay.", extensionJson, StringComparison.Ordinal);
+        const string attachFileDisplayToken = "%ContextRelay.Command.AttachFileToChat.DisplayName%";
+        Assert.Contains(attachFileDisplayToken, extensionJson, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "%ContextRelay.",
+            extensionJson.Replace(attachFileDisplayToken, string.Empty, StringComparison.Ordinal),
+            StringComparison.Ordinal);
 
         var manifestEntry = archive.GetEntry("extension.vsixmanifest");
         Assert.NotNull(manifestEntry);

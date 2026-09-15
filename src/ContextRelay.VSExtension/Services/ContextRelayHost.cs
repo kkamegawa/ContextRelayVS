@@ -625,6 +625,11 @@ internal sealed class ContextRelayHost : IDisposable
                 return state;
             }
 
+            if (workspaceRoots.Count == 0)
+            {
+                workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             var addedCount = 0;
             var skippedCount = 0;
             lock (pendingAttachmentsSync)
@@ -1098,12 +1103,21 @@ internal sealed class ContextRelayHost : IDisposable
         }
 
         ResolvedAttachment? activeAttachment = null;
+        IReadOnlyList<string> workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        if (workspaceRoots.Count == 0)
+        {
+            workspaceRoots = mentions.Select(item => item.WorkspaceRoot)
+                .Concat(pendingSnapshot.Select(item => item.WorkspaceRoot))
+                .Where(root => !string.IsNullOrWhiteSpace(root))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        var canonicalMentions = CanonicalizeMentions(mentions, workspaceRoots);
         if (settings.ChatAttachActiveEditor && clientContext is not null)
         {
             var snapshot = await packageServices.GetActiveEditorSnapshotAsync(clientContext, cancellationToken).ConfigureAwait(false);
             if (snapshot is not null)
             {
-                var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
                 if (WorkspaceFileAttachmentResolver.TryResolve(snapshot.FilePath, workspaceRoots, out activeAttachment) &&
                     activeAttachment is not null)
                 {
@@ -1113,7 +1127,32 @@ internal sealed class ContextRelayHost : IDisposable
             }
         }
 
-        return SelectSendAttachments(mentions, pendingSnapshot, activeAttachment, maxAttachments);
+        return SelectSendAttachments(canonicalMentions, pendingSnapshot, activeAttachment, maxAttachments);
+    }
+
+    private static IReadOnlyList<ResolvedFileMention> CanonicalizeMentions(
+        IReadOnlyList<ResolvedFileMention> mentions,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var canonicalMentions = new List<ResolvedFileMention>(mentions.Count);
+        foreach (var mention in mentions)
+        {
+            if (!WorkspaceFileAttachmentResolver.TryResolve(mention.AbsolutePath, workspaceRoots, out var resolved) ||
+                resolved is null)
+            {
+                continue;
+            }
+
+            canonicalMentions.Add(new ResolvedFileMention
+            {
+                AbsolutePath = resolved.AbsolutePath,
+                WorkspaceRoot = resolved.WorkspaceRoot,
+                RelativePath = resolved.RelativePath,
+                Uri = new Uri(resolved.AbsolutePath).AbsoluteUri
+            });
+        }
+
+        return canonicalMentions;
     }
 
     private static SendAttachmentSelection SelectSendAttachments(

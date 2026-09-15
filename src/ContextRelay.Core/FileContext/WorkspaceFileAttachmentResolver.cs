@@ -103,7 +103,8 @@ public static class WorkspaceFileAttachmentResolver
             using var stream = new FileStream(attachment.AbsolutePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             if (!TryGetFinalPath(stream.SafeFileHandle, out var finalPath) ||
                 !TryGetCanonicalPath(attachment.WorkspaceRoot, directory: true, out var canonicalRoot) ||
-                !IsUnderRoot(finalPath, canonicalRoot))
+                !IsUnderRoot(finalPath, canonicalRoot) ||
+                !CopilotSupportedFilePolicy.IsSupported(finalPath))
             {
                 return null;
             }
