@@ -1104,15 +1104,8 @@ internal sealed class ContextRelayHost : IDisposable
 
         ResolvedAttachment? activeAttachment = null;
         IReadOnlyList<string> workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
-        if (workspaceRoots.Count == 0)
-        {
-            workspaceRoots = mentions.Select(item => item.WorkspaceRoot)
-                .Concat(pendingSnapshot.Select(item => item.WorkspaceRoot))
-                .Where(root => !string.IsNullOrWhiteSpace(root))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
         var canonicalMentions = CanonicalizeMentions(mentions, workspaceRoots);
+        var canonicalPending = CanonicalizePendingAttachments(pendingSnapshot, workspaceRoots);
         if (settings.ChatAttachActiveEditor && clientContext is not null)
         {
             var snapshot = await packageServices.GetActiveEditorSnapshotAsync(clientContext, cancellationToken).ConfigureAwait(false);
@@ -1127,7 +1120,30 @@ internal sealed class ContextRelayHost : IDisposable
             }
         }
 
-        return SelectSendAttachments(canonicalMentions, pendingSnapshot, activeAttachment, maxAttachments);
+        return SelectSendAttachments(canonicalMentions, canonicalPending, activeAttachment, maxAttachments);
+    }
+
+    private static IReadOnlyList<ResolvedAttachment> CanonicalizePendingAttachments(
+        IReadOnlyList<ResolvedAttachment> pending,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var canonicalPending = new List<ResolvedAttachment>(pending.Count);
+        foreach (var attachment in pending)
+        {
+            if (!WorkspaceFileAttachmentResolver.TryResolve(attachment.AbsolutePath, workspaceRoots, out var resolved) ||
+                resolved is null)
+            {
+                continue;
+            }
+
+            resolved.Id = attachment.Id;
+            resolved.DisplayName = attachment.DisplayName;
+            resolved.SelectionStartLine = attachment.SelectionStartLine;
+            resolved.SelectionEndLine = attachment.SelectionEndLine;
+            canonicalPending.Add(resolved);
+        }
+
+        return canonicalPending;
     }
 
     private static IReadOnlyList<ResolvedFileMention> CanonicalizeMentions(

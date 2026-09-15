@@ -69,6 +69,47 @@ public sealed class FilePickerMentionFormattingTests
     }
 
     [Fact]
+    public void CanonicalizePendingAttachments_DropsAttachmentsFromPreviousSolution()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var canonicalize = hostType.GetMethod("CanonicalizePendingAttachments", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(canonicalize);
+
+        var workspaceA = CreateTemporaryWorkspace();
+        var workspaceB = CreateTemporaryWorkspace();
+        try
+        {
+            var pathA = Path.Combine(workspaceA, "from-a.md");
+            var pathB = Path.Combine(workspaceB, "from-b.md");
+            File.WriteAllText(pathA, "a");
+            File.WriteAllText(pathB, "b");
+
+            var pending = new[] { Attachment("a-id", "from-a.md", pathA, workspaceA) };
+            var afterSwitch = Assert.IsAssignableFrom<IReadOnlyList<ResolvedAttachment>>(
+                canonicalize!.Invoke(null, new object[] { pending, new[] { workspaceB } }));
+            Assert.Empty(afterSwitch);
+
+            var withoutCurrentRoots = Assert.IsAssignableFrom<IReadOnlyList<ResolvedAttachment>>(
+                canonicalize.Invoke(null, new object[] { pending, Array.Empty<string>() }));
+            Assert.Empty(withoutCurrentRoots);
+
+            var currentPending = new[] { Attachment("b-id", "from-b.md", pathB, workspaceB) };
+            var canonical = Assert.IsAssignableFrom<IReadOnlyList<ResolvedAttachment>>(
+                canonicalize.Invoke(null, new object[] { currentPending, new[] { workspaceB } }));
+            var attachment = Assert.Single(canonical);
+            Assert.Equal("b-id", attachment.Id);
+            Assert.Equal(Path.GetFileName(pathB), Path.GetFileName(attachment.AbsolutePath));
+            Assert.Equal("from-b.md", attachment.RelativePath);
+        }
+        finally
+        {
+            TryDeleteDirectory(workspaceA);
+            TryDeleteDirectory(workspaceB);
+        }
+    }
+
+    [Fact]
     public void ChatRoutes_ApplyIncludedPendingFilter()
     {
         var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "ContextRelay.VSExtension", "Services", "ContextRelayHost.cs"));
