@@ -15,7 +15,8 @@ internal static class CopilotChatStreamParser
         Stream stream,
         string requestMessage,
         CancellationToken cancellationToken = default,
-        CancellationToken callerCancellationToken = default)
+        CancellationToken callerCancellationToken = default,
+        IProgress<string>? progress = null)
     {
         if (stream is null)
         {
@@ -60,7 +61,7 @@ internal static class CopilotChatStreamParser
 
             if (line.Length == 0)
             {
-                var done = ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
+                var done = ConsumeEvent(dataLines, requestMessage, progress, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
                 dataLines.Clear();
                 if (done)
                 {
@@ -94,7 +95,7 @@ internal static class CopilotChatStreamParser
             // A genuine SSE field (id, event, retry, or an unrecognized extension field).
         }
 
-        ConsumeEvent(dataLines, requestMessage, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
+        ConsumeEvent(dataLines, requestMessage, progress, ref latestText, ref latestPartLengths, ref latestMessageCount, ref eventCount);
         return new CopilotChatAdapter.CopilotChatTurnResult(latestText, latestMessageCount, latestPartLengths, eventCount, interrupted);
     }
 
@@ -112,6 +113,7 @@ internal static class CopilotChatStreamParser
     private static bool ConsumeEvent(
         IReadOnlyList<string> dataLines,
         string requestMessage,
+        IProgress<string>? progress,
         ref string latestText,
         ref int[] latestPartLengths,
         ref int latestMessageCount,
@@ -164,6 +166,7 @@ internal static class CopilotChatStreamParser
 
             var candidateText = CopilotChatAdapter.JoinResponseParts(parts);
             latestText = candidateText;
+            progress?.Report(latestText);
             latestPartLengths = parts.Select(part => part.Length).ToArray();
             latestMessageCount = messages.Length;
         }

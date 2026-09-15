@@ -68,7 +68,17 @@ public static class FileMentionResolver
     /// the resulting prompt still carries a concrete file reference signal.
     /// </returns>
     public static FileMentionResolutionResult Resolve(string input, IReadOnlyList<string> workspaceRoots)
+        => Resolve(input, workspaceRoots, MaxFileMentions);
+
+    /// <summary>
+    /// Resolves file mention tokens using a caller-provided attachment limit.
+    /// </summary>
+    public static FileMentionResolutionResult Resolve(
+        string input,
+        IReadOnlyList<string> workspaceRoots,
+        int maxFileMentions)
     {
+        maxFileMentions = Math.Max(0, maxFileMentions);
         var candidates = ExtractCandidates(input ?? string.Empty);
         if (candidates.Count == 0)
         {
@@ -89,12 +99,12 @@ public static class FileMentionResolver
             };
         }
 
-        if (candidates.Count > MaxFileMentions)
+        if (candidates.Count > maxFileMentions)
         {
             return new FileMentionResolutionResult
             {
                 CleanedPrompt = cleanedPrompt,
-                Errors = new[] { CreateError(FileMentionErrorCode.MentionLimitReached, MaxFileMentions.ToString(System.Globalization.CultureInfo.InvariantCulture)) }
+                Errors = new[] { CreateError(FileMentionErrorCode.MentionLimitReached, maxFileMentions.ToString(System.Globalization.CultureInfo.InvariantCulture)) }
             };
         }
 

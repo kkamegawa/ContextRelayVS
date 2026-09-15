@@ -29,6 +29,7 @@ internal static class ContextRelayMenuDefinitions
             MenuChild.Command<CopyHandoffPromptCommand>(),
             MenuChild.Command<OpenCopilotChatCommand>(),
             MenuChild.Command<OpenHandoffDocCommand>(),
+            MenuChild.Command<AttachFileToChatCommand>(),
             MenuChild.Menu(LanguageMenu),
 
             // Separator

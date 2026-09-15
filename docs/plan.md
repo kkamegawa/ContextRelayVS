@@ -107,6 +107,11 @@ Registered by an in-proc VSSDK `AsyncPackage` and persisted to the shared JSON s
 - **Integrated page**: one `ContextRelay > General` property grid that contains General, Authentication, Diagnostics, Caching, and Feature toggles.
 - **Shared persistence**: the in-proc Options page writes to the same JSON file consumed by the out-of-proc extension.
 - **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value.
+- **Chat settings**: the `Chat` category exposes `ChatMaxAttachedFiles` (default `5`, non-negative; `0` disables attachments), `ChatAttachActiveEditor` (default `false`), and `ChatStreamResponses` (default `true`). These values are persisted in the same JSON object and missing properties retain these defaults for existing settings files.
+
+## 8.1 `/ask` parity settings (Issue #184)
+
+The Visual Studio implementation uses the same explicit-context behavior as the VS Code extension. `/ask` accepts pinned snippets, pending local attachments, and the eligible saved active editor when enabled; it is rejected when no usable explicit context is available. Plain chat continues to work without explicit context. Response streaming is controlled by `ChatStreamResponses`, and the attachment count is bounded by `ChatMaxAttachedFiles`.
 
 ## 9. Handoff docs
 
@@ -182,7 +187,7 @@ Initial todos are seeded in the session SQL store. Update this plan whenever hig
 ## 18. Current implementation status
 
 - **Implemented end-to-end in-repo**: shared session store, schema docs, MSAL auth core, slash-command router, shared snippet repository, handoff document generator, TTL + LRU cache, Graph/retrieval/chat adapters, localized WPF tool window UI, slash-command popup, result-card context actions, dedicated `/connectors` routing, `/ask` editor previews, VS commands, options pages, logging panes, and installable VSIX packaging.
-- **Parity follow-up against the VS Code extension**: result pinning now toggles/unpins instead of only warning on duplicates, mail/SharePoint/OneDrive pinning hydrates fuller content for handoff use, `/ask` now requires pinned snippets and uses capped context plus output-format detection, and the soft handoff command now tries to open GitHub Copilot Chat after copying the prompt.
+- **Parity follow-up against the VS Code extension**: result pinning now toggles/unpins instead of only warning on duplicates, mail/SharePoint/OneDrive pinning hydrates fuller content for handoff use, `/ask` now uses the shared explicit-context and attachment rules described in [Issue #184](https://github.com/kkamegawa/ContextRelayVS/issues/184), and the soft handoff command now tries to open GitHub Copilot Chat after copying the prompt.
 - **Shared-store behavior covered**: schema emission, unknown-field preservation, handoff path normalization, tombstone-aware snippet merge, retry on Windows atomic replace failures.
 - **Repository readiness improved**: README / README_ja now reflect implementation status, `docs/e2e_checklist.md` and `docs/marketplace_release.md` exist, CI audits vulnerable/deprecated packages, and release assets include a Marketplace publish manifest plus a release workflow.
 - **Still missing for release readiness**: `/rootsuffix Exp` validation on supported VS versions and the out-of-repo VS Code shared-store migration PR.

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -28,6 +28,8 @@ internal partial class OptionsProvider
 /// </summary>
 public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptionsModel>
 {
+    private int chatMaxAttachedFiles = 5;
+
     /// <summary>
     /// Gets or sets the maximum number of results returned for each ContextRelay search.
     /// </summary>
@@ -54,6 +56,37 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     [Description("Enables preview chat features such as /ask and Copilot chat integration.")]
     [DefaultValue(true)]
     public bool EnableChatPreview { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum number of files that can be attached to a chat request.
+    /// </summary>
+    [Category("Chat")]
+    [DisplayName("Maximum attached files")]
+    [Description("Specifies the maximum number of files that can be attached to each chat request. Use 0 to disable file attachments.")]
+    [DefaultValue(5)]
+    public int ChatMaxAttachedFiles
+    {
+        get => chatMaxAttachedFiles;
+        set => chatMaxAttachedFiles = Math.Max(0, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the active editor is attached to chat requests.
+    /// </summary>
+    [Category("Chat")]
+    [DisplayName("Attach active editor")]
+    [Description("Automatically attaches the saved active editor file to each chat request when it is eligible.")]
+    [DefaultValue(false)]
+    public bool ChatAttachActiveEditor { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether chat responses are streamed as they arrive.
+    /// </summary>
+    [Category("Chat")]
+    [DisplayName("Stream chat responses")]
+    [Description("Displays chat response content incrementally while it is being received.")]
+    [DefaultValue(true)]
+    public bool ChatStreamResponses { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the preferred ContextRelay UI language.
@@ -287,6 +320,9 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
         MaxResults = settings.MaxResults;
         OutputDirectory = settings.OutputDirectory;
         EnableChatPreview = settings.EnableChatPreview;
+        ChatMaxAttachedFiles = settings.ChatMaxAttachedFiles;
+        ChatAttachActiveEditor = settings.ChatAttachActiveEditor;
+        ChatStreamResponses = settings.ChatStreamResponses;
         UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage);
         EnableGraphDebugLogging = settings.EnableGraphDebugLogging;
         EnableWorkIqDebugLogging = settings.EnableWorkIqDebugLogging;
@@ -321,6 +357,9 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
             MaxResults = MaxResults,
             OutputDirectory = OutputDirectory ?? string.Empty,
             EnableChatPreview = EnableChatPreview,
+            ChatMaxAttachedFiles = ChatMaxAttachedFiles,
+            ChatAttachActiveEditor = ChatAttachActiveEditor,
+            ChatStreamResponses = ChatStreamResponses,
             UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(UiLanguage),
             EnableGraphDebugLogging = EnableGraphDebugLogging,
             EnableWorkIqDebugLogging = EnableWorkIqDebugLogging,

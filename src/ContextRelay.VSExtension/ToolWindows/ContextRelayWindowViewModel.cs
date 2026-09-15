@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
 using ContextRelay.VSExtension.Services;
+using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.UI;
 
 namespace ContextRelay.VSExtension.ToolWindows;
@@ -34,6 +35,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private IReadOnlyList<string> workspaceFiles = Array.Empty<string>();
     private bool isApplyingState;
     private string windowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+    private bool isStreaming;
+    private string streamingResponseText = string.Empty;
+    private IReadOnlyList<PendingAttachmentViewModel> pendingAttachments = Array.Empty<PendingAttachmentViewModel>();
 
     public ContextRelayWindowViewModel(ContextRelayHost host)
     {
@@ -42,7 +46,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         RefreshLocalizedUiTexts();
 
-        SearchCommand = new AsyncCommand(async (_, ct) => await SubmitAsync(ct).ConfigureAwait(false));
+        SearchCommand = new AsyncCommand(async (_, context, ct) => await SubmitAsync(context, ct).ConfigureAwait(false));
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
         CopyPromptCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.CopyHandoffPromptAsync(ct)).ConfigureAwait(false));
         OpenHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.OpenHandoffDocumentAsync(ct)).ConfigureAwait(false));
@@ -50,11 +54,16 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ClearChatCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearChatAsync(ct)).ConfigureAwait(false));
         ClearSnippetsCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearSnippetsAsync(ct)).ConfigureAwait(false));
         ClearCacheCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearCacheAsync(ct)).ConfigureAwait(false));
-        AddFilesCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.AddFilesToQueryAsync(ct)).ConfigureAwait(false));
+        AddFilesCommand = new AsyncCommand(async (_, ct) => await host.AddFilesToQueryAsync(ct).ConfigureAwait(false));
+        StopGenerationCommand = new AsyncCommand((_, _) =>
+        {
+            host.StopGeneration();
+            return Task.CompletedTask;
+        });
         MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
-        ConfirmQueryInputCommand = new AsyncCommand(async (_, ct) => await ConfirmQueryInputAsync(ct).ConfigureAwait(false));
+        ConfirmQueryInputCommand = new AsyncCommand(async (_, context, ct) => await ConfirmQueryInputAsync(context, ct).ConfigureAwait(false));
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
     }
 
@@ -80,6 +89,22 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public string CommandPopupHeaderText { get; private set; } = string.Empty;
     [DataMember] public string AddFilesButtonText { get; private set; } = string.Empty;
     [DataMember] public string AddFilesToolTipText { get; private set; } = string.Empty;
+    [DataMember] public string StopGenerationButtonText { get; private set; } = string.Empty;
+    [DataMember] public IReadOnlyList<PendingAttachmentViewModel> PendingAttachments { get => pendingAttachments; private set { pendingAttachments = value; RaiseNotifyPropertyChangedEvent(nameof(PendingAttachments)); } }
+
+    [DataMember]
+    public bool IsStreaming
+    {
+        get => isStreaming;
+        private set { if (isStreaming != value) { isStreaming = value; RaiseNotifyPropertyChangedEvent(nameof(IsStreaming)); } }
+    }
+
+    [DataMember]
+    public string StreamingResponseText
+    {
+        get => streamingResponseText;
+        private set { if (streamingResponseText != value) { streamingResponseText = value; RaiseNotifyPropertyChangedEvent(nameof(StreamingResponseText)); } }
+    }
 
     [DataMember]
     public string WindowTitleText
@@ -104,6 +129,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand ClearSnippetsCommand { get; }
     [DataMember] public AsyncCommand ClearCacheCommand { get; }
     [DataMember] public AsyncCommand AddFilesCommand { get; }
+    [DataMember] public AsyncCommand StopGenerationCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionDownCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
@@ -344,6 +370,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         await RunBusyAsync(() => host.ContinueAssistantResponseAsync(itemId, text, ct)).ConfigureAwait(false);
     }
 
+    internal async Task RemovePendingAttachmentAsync(string attachmentId, CancellationToken ct)
+    {
+        await host.RemovePendingAttachmentAsync(attachmentId, ct).ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         host.StateChanged -= OnHostStateChanged;
@@ -381,6 +412,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 ? ContextRelayLocalizedStrings.SignedOutText
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
             SearchSummary = state.SearchSummary;
+            IsStreaming = state.IsStreaming;
+            StreamingResponseText = state.StreamingResponseText;
+            PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();
             SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
             ChatHistory = state.ChatHistory
@@ -407,15 +441,15 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
     }
 
-    private async Task SubmitAsync(CancellationToken ct)
+    private async Task SubmitAsync(IClientContext clientContext, CancellationToken ct)
     {
         var query = QueryText;
         host.LogUiDiagnostic($"SubmitAsync invoked queryLength={query.Length} startsWithSlash={query.StartsWith("/", StringComparison.Ordinal)}");
         CloseCommandPopup();
-        await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, ct).ConfigureAwait(false); }).ConfigureAwait(false);
+        await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, clientContext, ct).ConfigureAwait(false); }).ConfigureAwait(false);
     }
 
-    private async Task ConfirmQueryInputAsync(CancellationToken ct)
+    private async Task ConfirmQueryInputAsync(IClientContext clientContext, CancellationToken ct)
     {
         host.LogUiDiagnostic($"ConfirmQueryInput invoked popupOpen={IsCommandPopupOpen} suggestionCount={commandSuggestions.Count}");
         if (ApplySelectedCommandSuggestion())
@@ -423,7 +457,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             return;
         }
 
-        await SubmitAsync(ct).ConfigureAwait(false);
+        await SubmitAsync(clientContext, ct).ConfigureAwait(false);
     }
 
     private async Task RunBusyAsync(Func<Task> action)
@@ -548,6 +582,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(AddFilesButtonText));
         AddFilesToolTipText = ContextRelayLocalizedStrings.AddFilesToolTip;
         RaiseNotifyPropertyChangedEvent(nameof(AddFilesToolTipText));
+        StopGenerationButtonText = ContextRelayLocalizedStrings.StopGenerationButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(StopGenerationButtonText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
     }
 

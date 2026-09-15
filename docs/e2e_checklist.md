@@ -38,6 +38,16 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 
 ## Search and shared state
 
+### Chat options and `/ask` parity (Issue #184)
+
+1. Open **Tools > Options > ContextRelay > General** and confirm the `Chat` category contains **Maximum attached files** (default `5`), **Attach active editor** (default disabled), and **Stream chat responses** (default enabled).
+2. Set the maximum to `0`, reload the Options page, and confirm the value remains non-negative and file attachments are disabled. Restore it to `5`.
+3. Enable **Attach active editor** with a saved supported file open, then send `/ask` with no pinned snippet. Confirm the active editor is used as explicit context; with no eligible active editor, confirm `/ask` is rejected without an API request.
+4. Add pending local files and pinned snippets, send `/ask`, and confirm the request uses the bounded attachment set and the response displays the context labels.
+5. Toggle **Stream chat responses** and confirm both settings persist in `%AppData%\ContextRelay\settings.json`; verify an existing JSON file with none of the three properties loads with defaults `5`, disabled, and enabled.
+
+### Core chat and shared state
+
 1. Sign in with a valid Entra ID work/school account.
 2. Run plain text such as `Summarize my current planning context`, then run `/mail test`, `/teams test`, `/sharepoint test`, `/onedrive test`, `/all test`, `/ask summarize`, `/workiq What meetings do I have today?`, and `/clear`.
 3. Verify plain text produces a Microsoft 365 Copilot chat reply without source-search result cards.

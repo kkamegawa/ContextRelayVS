@@ -1,4 +1,11 @@
-# Architecture Decision Records
+﻿# Architecture Decision Records
+
+## 2026-09-15 — Issue #184: Align Visual Studio `/ask` settings with VS Code
+
+- Context: The Visual Studio extension must apply the same explicit-context rules as the VS Code extension while retaining one shared settings file for all hosts.
+- Decision: Persist `ChatMaxAttachedFiles` (default `5`, clamped to a non-negative value), `ChatAttachActiveEditor` (default `false`), and `ChatStreamResponses` (default `true`) in the existing settings object. `/ask` uses bounded pinned, pending-file, and optionally saved active-editor context and is rejected when no usable explicit context exists; plain chat remains context-optional.
+- Reason: A single additive JSON contract lets existing settings files continue to load while making the `/ask` behavior and user controls consistent across editors.
+- Consequence: The Options page exposes the three Chat settings, and callers must honor the persisted attachment limit and streaming preference when constructing `/ask` requests.
 
 ## 2026-08-02 — Issue #164: Synchronize Remote UI suggestion selection by index
 

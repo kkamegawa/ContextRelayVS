@@ -18,11 +18,12 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 - **Timestamped handoff documents** — generate `PLAN.md`, `TASKS.md`, `TEST_PLAN.md`, and optional `HANDOFF.md` for GitHub Copilot handoff.
 - **Soft Copilot handoff** — copy a generated prompt to the clipboard, append selected results to `HANDOFF.md`, and open GitHub Copilot Chat in Visual Studio when the command is available.
 - **Copilot reply actions** — Copilot answers remain visible in the tool window with explicit Copy, Append to active editor, and Replace selection/document actions.
-- **`/ask` context chat** — requires pinned snippets, caps the forwarded context, sends it to Microsoft 365 Copilot, and saves the reply to shared chat history without automatically editing or opening a document.
+- **`/ask` context chat** — follows the explicit-context and attachment rules in [Issue #184](https://github.com/kkamegawa/ContextRelayVS/issues/184): pinned snippets, pending local attachments, and the eligible saved active editor (when enabled) are bounded and sent as context; the command is rejected when no usable context is available.
 - **`/workiq` natural language work intelligence** — sends A2A v1.0 queries to the Work IQ Gateway with a dedicated token audience, keeps a separate Work IQ conversation context, and resets that context on `/clear`.
 - **Local `#file` context** — mention workspace files such as `#README.md` or `#"docs/design notes.md"` in plain chat, `/ask`, or `/workiq` prompts. Copilot chat receives explicit file context; Work IQ receives bounded file text only when the Work IQ local-file opt-in is enabled.
 - **Localized WPF tool window UI** — English/Japanese labels, status/help text, result-card context actions, and debug-log access.
 - **JSON-backed settings persistence** — ContextRelay reads and writes its shared settings from `%AppData%\ContextRelay\settings.json`.
+- **Chat settings** — Tools > Options > ContextRelay > General exposes a non-negative maximum attached-file count (default `5`), active-editor attachment (default off), and streamed responses (default on). Existing settings files remain valid because missing properties use these defaults.
 - **MSAL.NET + WAM authentication** with DPAPI-backed token cache.
 - **TTL + LRU cache** with workspace persistence.
 - **Cross-editor session sharing** — snippets, chat history, and handoff pointers are shared with the VS Code extension via `%LocalAppData%\ContextRelay\shared\`. See [docs/shared-session-schema.md](docs/shared-session-schema.md).
@@ -51,7 +52,7 @@ Summarize #README.md
 /workiq #docs/plan.md find related workplace context
 ```
 
-File mentions are resolved only inside the opened Visual Studio workspace, limited to five files per prompt, and restricted to Copilot-supported text/code file types. Work IQ local file context is disabled by default; enable **Allow local file context for Work IQ** in Tools > Options > ContextRelay before sending local file text to Work IQ.
+File mentions are resolved only inside the opened Visual Studio workspace, limited by **Maximum attached files** (default five) and restricted to Copilot-supported text/code file types. Work IQ local file context is disabled by default; enable **Allow local file context for Work IQ** in Tools > Options > ContextRelay before sending local file text to Work IQ.
 
 ## Authentication and delegated permissions
 

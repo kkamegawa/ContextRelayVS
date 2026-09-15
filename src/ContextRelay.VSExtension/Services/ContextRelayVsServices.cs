@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
+using Microsoft.VisualStudio.Extensibility.Editor;
 using Microsoft.VisualStudio.Extensibility.Shell.FileDialog;
 using Microsoft.VisualStudio.ProjectSystem.Query;
 
@@ -231,6 +232,29 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     {
         // Editor API stub — requires checking exact VS Extensibility SDK 17.14 editor API signatures
         return Task.FromResult(false);
+    }
+
+    public async Task<ActiveEditorSnapshot?> GetActiveEditorSnapshotAsync(
+        IClientContext clientContext,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clientContext);
+        var textView = await clientContext.GetActiveTextViewAsync(cancellationToken).ConfigureAwait(false);
+        if (textView is null || string.IsNullOrWhiteSpace(textView.FilePath))
+        {
+            return null;
+        }
+
+        var selection = textView.Selection;
+        int? startLine = null;
+        int? endLine = null;
+        if (!selection.IsEmpty)
+        {
+            startLine = textView.Document.GetLineNumberFromPosition(selection.Start.Offset) + 1;
+            endLine = textView.Document.GetLineNumberFromPosition(selection.End.Offset) + 1;
+        }
+
+        return new ActiveEditorSnapshot(textView.FilePath, startLine, endLine);
     }
 
     public Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default)

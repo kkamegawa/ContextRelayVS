@@ -199,6 +199,7 @@
             return text
                 .Replace("%ContextRelay.Menu.DisplayName%", "ContextRelay")
                 .Replace("%ContextRelay.Menu.Language.DisplayName%", "Language")
+                .Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", "Attach File to Chat")
                 .Replace("%ContextRelay.Command.ClearCache.DisplayName%", "Clear Cache")
                 .Replace("%ContextRelay.Command.ClearChat.DisplayName%", "Clear Chat")
                 .Replace("%ContextRelay.Command.ClearSnippets.DisplayName%", "Clear Snippets")

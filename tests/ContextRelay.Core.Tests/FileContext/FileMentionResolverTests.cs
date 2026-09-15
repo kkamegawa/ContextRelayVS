@@ -139,6 +139,23 @@ public sealed class FileMentionResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_UsesConfiguredMentionLimit()
+    {
+        WriteFile("first.md", "first");
+        WriteFile("second.md", "second");
+
+        var result = FileMentionResolver.Resolve(
+            "Read #first.md #second.md",
+            new[] { root },
+            maxFileMentions: 1);
+
+        Assert.Empty(result.Files);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(FileMentionErrorCode.MentionLimitReached, error.Code);
+        Assert.Equal("1", error.Detail);
+    }
+
+    [Fact]
     public async Task BuildWorkIqPromptAsync_AppendsBoundedLocalFileSections()
     {
         var path = WriteFile("notes.md", new string('x', FileContextPromptBuilder.MaxWorkIqFileChars + 100));

@@ -1,4 +1,4 @@
-# ContextRelay for Visual Studio (日本語)
+﻿# ContextRelay for Visual Studio (日本語)
 
 ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsoft 365 (Exchange Mail、Microsoft Teams、SharePoint、OneDrive) のコンテキストをツールウィンドウに表示する拡張機能です。VS Code 版 [ContextRelay](https://github.com/kkamegawa/ContextRelay) の機能仕様をそのまま Visual Studio に移植し、同一マシン上の VS Code 版とスニペット・チャット履歴・ハンドオフ文書パスを共有できます。
 
@@ -13,10 +13,10 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 - VS Code 版と共有されるチャット/検索履歴
 - タイムスタンプ付きハンドオフ文書 (`PLAN.md` / `TASKS.md` / `TEST_PLAN.md` / 任意で `HANDOFF.md`) の生成
 - Copilot for Visual Studio へ渡すためのソフトハンドオフ (プロンプトのクリップボード転送、選択結果の `HANDOFF.md` 追記、利用可能な場合の GitHub Copilot Chat 自動オープン)
-- `/ask` ではピン留め済みスニペットを必須コンテキストとして送り、サイズ上限を掛けたうえで Microsoft 365 Copilot の応答を共有チャット履歴へ保存し、内容に応じた形式のエディタータブで表示
+- `/ask` では [Issue #184](https://github.com/kkamegawa/ContextRelayVS/issues/184) に定めた明示的コンテキストと添付の規則を適用し、ピン留めスニペット、保留中のローカル添付、有効化した保存済みアクティブ エディターを上限内で送信する。利用可能なコンテキストがない場合は実行しない
 - `/workiq` では Work IQ Gateway に A2A v1.0 で自然言語クエリを送り、専用トークン audience と会話 `contextId` を使って Microsoft 365 のワークインテリジェンスを問い合わせ
 - 英語/日本語の UI 文言、結果カードのコンテキストアクション、ステータス/ヘルプ文言を備えた WPF ツールウィンドウ UI
-- General / Authentication / Cache / Adapters の Options ページ
+- General / Chat / Authentication / Cache / Adapters の Options ページ。Chat には添付ファイル上限 (既定値 5、0 で無効)、アクティブ エディター自動添付 (既定値オフ)、応答ストリーミング (既定値オン) を含む
 - MSAL.NET + WAM 認証と DPAPI ベースのトークンキャッシュ
 - TTL + LRU キャッシュとワークスペース永続化
 - VS Code 版との **クロスエディタセッション共有** — `%LocalAppData%\ContextRelay\shared\` を介してスニペット/チャット履歴/ハンドオフ文書インデックスを同期。詳細は [docs/shared-session-schema.md](docs/shared-session-schema.md)
