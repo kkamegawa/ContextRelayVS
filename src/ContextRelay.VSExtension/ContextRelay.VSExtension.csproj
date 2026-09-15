@@ -30,6 +30,7 @@
     <InProcPackageBinDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'bin', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageBinDir>
     <InProcPackageObjDir>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '..', 'ContextRelay.VSExtension.Package', 'obj', '$(Configuration)', '$(InProcPackageTargetFramework)'))</InProcPackageObjDir>
     <InProcPackageDllPath>$([System.IO.Path]::Combine('$(InProcPackageBinDir)', 'ContextRelay.VSExtension.Package.dll'))</InProcPackageDllPath>
+    <InProcPackageJapaneseResourcesPath>$([System.IO.Path]::Combine('$(InProcPackageBinDir)', 'ja', 'ContextRelay.VSExtension.Package.resources.dll'))</InProcPackageJapaneseResourcesPath>
     <InProcPackagePkgdefPath>$([System.IO.Path]::Combine('$(InProcPackageObjDir)', 'ContextRelay.VSExtension.Package.pkgdef'))</InProcPackagePkgdefPath>
     <InProcToolkitAssemblyPath>$([System.IO.Path]::Combine('$(InProcPackageBinDir)', 'Community.VisualStudio.Toolkit.dll'))</InProcToolkitAssemblyPath>
     <SourceVsixManifestPath>$(MSBuildProjectDirectory)\source.extension.vsixmanifest</SourceVsixManifestPath>
@@ -249,6 +250,8 @@
            Text="In-proc package pkgdef not found at $(InProcPackagePkgdefPath). Ensure GeneratePkgDef ran during the package project build." />
     <Error Condition="!Exists('$(InProcToolkitAssemblyPath)')"
            Text="Community.VisualStudio.Toolkit.dll not found at $(InProcToolkitAssemblyPath); the in-proc options package will fail to load without it." />
+    <Error Condition="!Exists('$(InProcPackageJapaneseResourcesPath)')"
+           Text="Japanese options resource assembly not found at $(InProcPackageJapaneseResourcesPath)." />
     <Error Condition="!Exists('$(SourceVsixManifestPath)')"
            Text="Source manifest not found at $(SourceVsixManifestPath)." />
     <PatchVsixForInProcPackage
@@ -256,7 +259,7 @@
       SourceManifestPath="$(SourceVsixManifestPath)"
       PackageDllPath="$(InProcPackageDllPath)"
       PackagePkgdefPath="$(InProcPackagePkgdefPath)"
-      SupportingAssemblies="$(InProcToolkitAssemblyPath)" />
+      SupportingAssemblies="$(InProcToolkitAssemblyPath);$(InProcPackageJapaneseResourcesPath)|ja/ContextRelay.VSExtension.Package.resources.dll" />
     <Message Importance="High" Text="Patched VSIX $(TargetVsixContainer) with in-proc package payload and hybrid manifest." />
   </Target>
 
@@ -503,7 +506,7 @@
           Condition="Exists('$(TargetVsixContainer)')">
     <AssertVsixContents
       VsixPath="$(TargetVsixContainer)"
-      RequiredEntries="extension.vsixmanifest;.vsextension/extension.json;ContextRelay.VSExtension.Package.dll;ContextRelay.VSExtension.Package.pkgdef;Community.VisualStudio.Toolkit.dll"
+      RequiredEntries="extension.vsixmanifest;.vsextension/extension.json;ContextRelay.VSExtension.Package.dll;ContextRelay.VSExtension.Package.pkgdef;Community.VisualStudio.Toolkit.dll;ja/ContextRelay.VSExtension.Package.resources.dll"
       RequiredManifestSubstrings="Publisher=&quot;kkamegawa&quot;|Microsoft.VisualStudio.VsPackage|ContextRelay.VSExtension.Package.pkgdef|Microsoft.VisualStudio.Assembly|ContextRelay.VSExtension.Package.dll|Community.VisualStudio.Toolkit.dll|Microsoft.VisualStudio.Community|Microsoft.VisualStudio.Pro|Microsoft.VisualStudio.Enterprise|VSSDK+VisualStudio.Extensibility" />
   </Target>
 </Project>

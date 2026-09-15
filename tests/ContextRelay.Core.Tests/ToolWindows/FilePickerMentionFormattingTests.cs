@@ -138,11 +138,56 @@ public sealed class FilePickerMentionFormattingTests
     }
 
     [Fact]
+    public void PrunePendingAttachments_RemovesStaleEntriesAndCanonicalizesRetainedEntries()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var prune = hostType.GetMethod("PrunePendingAttachments", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(prune);
+
+        var workspaceA = CreateTemporaryWorkspace();
+        var workspaceB = CreateTemporaryWorkspace();
+        try
+        {
+            var pathA = Path.Combine(workspaceA, "from-a.md");
+            var pathB = Path.Combine(workspaceB, "from-b.md");
+            File.WriteAllText(pathA, "a");
+            File.WriteAllText(pathB, "b");
+            var pending = new List<ResolvedAttachment>
+            {
+                Attachment("a-id", "from-a.md", pathA, workspaceA),
+                Attachment("b-id", "from-b.md", pathB, workspaceB)
+            };
+
+            var pruned = Assert.IsAssignableFrom<IReadOnlyList<string>>(
+                prune!.Invoke(null, new object[] { pending, new[] { workspaceB } }));
+
+            Assert.Equal(new[] { "a-id" }, pruned);
+            var retained = Assert.Single(pending);
+            Assert.Equal("b-id", retained.Id);
+            Assert.Equal("from-b.md", retained.RelativePath);
+        }
+        finally
+        {
+            TryDeleteDirectory(workspaceA);
+            TryDeleteDirectory(workspaceB);
+        }
+    }
+
+    [Fact]
     public void ChatRoutes_ApplyIncludedPendingFilter()
     {
         var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "ContextRelay.VSExtension", "Services", "ContextRelayHost.cs"));
         Assert.Equal(2, source.Split("GetIncludedPendingAttachmentIds(attachmentSelection, contextPayload)", StringSplitOptions.None).Length - 1);
         Assert.Contains("var includedAttachmentCount = contextPayload.IncludedAttachmentIds.Count;", source, StringComparison.Ordinal);
+        var addFilesStart = source.IndexOf("public async Task<ContextRelayHostState> AddFilesToQueryAsync", StringComparison.Ordinal);
+        var nextMethodStart = source.IndexOf("public async Task<ContextRelayHostState> GenerateHandoffAsync", addFilesStart, StringComparison.Ordinal);
+        var addFilesBody = source.Substring(addFilesStart, nextMethodStart - addFilesStart);
+        var pruneIndex = addFilesBody.IndexOf("PrunePendingAttachmentsFromCurrentWorkspace(workspaceRoots);", StringComparison.Ordinal);
+        var limitIndex = addFilesBody.IndexOf("pendingAttachments.Count >= settings.ChatMaxAttachedFiles", StringComparison.Ordinal);
+        Assert.True(
+            pruneIndex >= 0 && limitIndex >= 0 && pruneIndex < limitIndex,
+            "Stale attachments must be pruned before enforcing the picker limit.");
     }
 
     [Fact]

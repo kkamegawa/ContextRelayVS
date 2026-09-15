@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0</value></resheader>
+  <data name="ChatCategory" xml:space="preserve"><value>Chat</value></data>
+  <data name="ChatMaxAttachedFiles.DisplayName" xml:space="preserve"><value>Maximum attached files</value></data>
+  <data name="ChatMaxAttachedFiles.Description" xml:space="preserve"><value>Specifies the maximum number of files that can be attached to each chat request. Use 0 to disable file attachments.</value></data>
+  <data name="ChatAttachActiveEditor.DisplayName" xml:space="preserve"><value>Attach active editor</value></data>
+  <data name="ChatAttachActiveEditor.Description" xml:space="preserve"><value>Automatically attaches the saved active editor file to each chat request when it is eligible.</value></data>
+  <data name="ChatStreamResponses.DisplayName" xml:space="preserve"><value>Stream chat responses</value></data>
+  <data name="ChatStreamResponses.Description" xml:space="preserve"><value>Displays chat response content incrementally while it is being received.</value></data>
+</root>

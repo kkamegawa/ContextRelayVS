@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0</value></resheader>
+  <data name="ChatCategory" xml:space="preserve"><value>チャット</value></data>
+  <data name="ChatMaxAttachedFiles.DisplayName" xml:space="preserve"><value>添付ファイルの最大数</value></data>
+  <data name="ChatMaxAttachedFiles.Description" xml:space="preserve"><value>各チャット要求に添付できるファイルの最大数を指定します。0を指定するとファイル添付を無効にします。</value></data>
+  <data name="ChatAttachActiveEditor.DisplayName" xml:space="preserve"><value>アクティブなエディターを添付</value></data>
+  <data name="ChatAttachActiveEditor.Description" xml:space="preserve"><value>対象となる保存済みのアクティブエディターファイルを各チャット要求に自動添付します。</value></data>
+  <data name="ChatStreamResponses.DisplayName" xml:space="preserve"><value>チャット応答をストリーミング</value></data>
+  <data name="ChatStreamResponses.Description" xml:space="preserve"><value>受信中のチャット応答を段階的に表示します。</value></data>
+</root>

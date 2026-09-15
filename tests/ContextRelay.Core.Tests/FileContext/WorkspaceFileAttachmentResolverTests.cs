@@ -88,7 +88,7 @@ public sealed class WorkspaceFileAttachmentResolverTests
             {
                 File.CreateSymbolicLink(path, outsidePath);
             }
-            catch (IOException ex) when (OperatingSystem.IsWindows())
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
             {
                 Assert.Skip($"Creating a symbolic link requires Windows Developer Mode or SeCreateSymbolicLinkPrivilege: {ex.Message}");
             }

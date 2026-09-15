@@ -60,9 +60,9 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     /// <summary>
     /// Gets or sets the maximum number of files that can be attached to a chat request.
     /// </summary>
-    [Category("Chat")]
-    [DisplayName("Maximum attached files")]
-    [Description("Specifies the maximum number of files that can be attached to each chat request. Use 0 to disable file attachments.")]
+    [LocalizedCategory("ChatCategory")]
+    [LocalizedDisplayName("ChatMaxAttachedFiles.DisplayName")]
+    [LocalizedDescription("ChatMaxAttachedFiles.Description")]
     [DefaultValue(5)]
     public int ChatMaxAttachedFiles
     {
@@ -73,18 +73,18 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     /// <summary>
     /// Gets or sets a value indicating whether the active editor is attached to chat requests.
     /// </summary>
-    [Category("Chat")]
-    [DisplayName("Attach active editor")]
-    [Description("Automatically attaches the saved active editor file to each chat request when it is eligible.")]
+    [LocalizedCategory("ChatCategory")]
+    [LocalizedDisplayName("ChatAttachActiveEditor.DisplayName")]
+    [LocalizedDescription("ChatAttachActiveEditor.Description")]
     [DefaultValue(false)]
     public bool ChatAttachActiveEditor { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether chat responses are streamed as they arrive.
     /// </summary>
-    [Category("Chat")]
-    [DisplayName("Stream chat responses")]
-    [Description("Displays chat response content incrementally while it is being received.")]
+    [LocalizedCategory("ChatCategory")]
+    [LocalizedDisplayName("ChatStreamResponses.DisplayName")]
+    [LocalizedDescription("ChatStreamResponses.Description")]
     [DefaultValue(true)]
     public bool ChatStreamResponses { get; set; } = true;
 

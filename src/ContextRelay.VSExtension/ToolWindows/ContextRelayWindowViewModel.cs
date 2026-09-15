@@ -5,8 +5,10 @@ using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.SharedStore;
 using ContextRelay.VSExtension.Services;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.UI;
@@ -22,6 +24,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private bool isCommandPopupOpen;
     private int commandSuggestionWindowStart;
     private string queryText = string.Empty;
+    private bool? collectionsUseJapanese;
     private string helpText = ContextRelayLocalizedStrings.GenericHelpText;
     private string statusMessage = ContextRelayLocalizedStrings.ReadyStatus;
     private string signedInUserText = ContextRelayLocalizedStrings.SignedOutText;
@@ -408,18 +411,32 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             HelpText = state.HelpText;
             StatusMessage = state.StatusMessage;
             RefreshLocalizedUiTexts();
+            var collectionLanguageChanged = collectionsUseJapanese != ContextRelayLocalizedStrings.UseJapanese;
+            collectionsUseJapanese = ContextRelayLocalizedStrings.UseJapanese;
             SignedInUserText = string.IsNullOrWhiteSpace(state.SignedInUser)
                 ? ContextRelayLocalizedStrings.SignedOutText
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
             SearchSummary = state.SearchSummary;
             IsStreaming = state.IsStreaming;
             StreamingResponseText = state.StreamingResponseText;
-            PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();
-            SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
-            Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
-            ChatHistory = state.ChatHistory
-                .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, state.ContinuableCopilotAssistantItemId, StringComparison.Ordinal)))
-                .ToArray();
+            if (collectionLanguageChanged || !PendingAttachmentsEqual(state.PendingAttachments))
+            {
+                PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();
+            }
+            if (collectionLanguageChanged || !SearchResultsEqual(state.SearchResults))
+            {
+                SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
+            }
+            if (collectionLanguageChanged || !SnippetsEqual(state.Snippets))
+            {
+                Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
+            }
+            if (collectionLanguageChanged || !ChatHistoryEqual(state.ChatHistory, state.ContinuableCopilotAssistantItemId))
+            {
+                ChatHistory = state.ChatHistory
+                    .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, state.ContinuableCopilotAssistantItemId, StringComparison.Ordinal)))
+                    .ToArray();
+            }
             workspaceFiles = state.WorkspaceFiles;
             if (queryChanged)
             {
@@ -448,6 +465,39 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         CloseCommandPopup();
         await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, clientContext, ct).ConfigureAwait(false); }).ConfigureAwait(false);
     }
+
+    private bool PendingAttachmentsEqual(IReadOnlyList<ResolvedAttachment> items) =>
+        PendingAttachments.Count == items.Count && PendingAttachments.Zip(items, (current, next) =>
+            string.Equals(current.Id, next.Id, StringComparison.Ordinal) &&
+            string.Equals(current.Label, next.Label, StringComparison.Ordinal)).All(value => value);
+
+    private bool SearchResultsEqual(IReadOnlyList<ContextItem> items) =>
+        SearchResults.Count == items.Count && SearchResults.Zip(items, (current, next) =>
+            string.Equals(current.Title, next.Title, StringComparison.Ordinal) &&
+            string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
+            string.Equals(current.Source, next.Source.ToString(), StringComparison.Ordinal) &&
+            string.Equals(current.Timestamp, next.Timestamp ?? string.Empty, StringComparison.Ordinal) &&
+            string.Equals(current.Url, next.Url ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+
+    private bool SnippetsEqual(IReadOnlyList<SharedSnippetItem> items) =>
+        Snippets.Count == items.Count && Snippets.Zip(items, (current, next) =>
+            string.Equals(current.Id, next.Id, StringComparison.Ordinal) &&
+            string.Equals(current.Name, next.Name, StringComparison.Ordinal) &&
+            string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
+            string.Equals(current.Source, next.Source, StringComparison.Ordinal) &&
+            string.Equals(current.SourceUrl, next.SourceUrl ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+
+    private bool ChatHistoryEqual(IReadOnlyList<SharedChatHistoryItem> items, string? continuableId) =>
+        ChatHistory.Count == items.Count && ChatHistory.Zip(items, (current, next) =>
+            string.Equals(current.Id, next.Id, StringComparison.Ordinal) &&
+            string.Equals(current.Role, next.Role, StringComparison.Ordinal) &&
+            string.Equals(current.Text, next.Text, StringComparison.Ordinal) &&
+            string.Equals(current.Timestamp, next.Timestamp, StringComparison.Ordinal) &&
+            current.IsActionableAssistant == next.IsActionableAssistant &&
+            current.IsCopilotAssistant == next.IsCopilotAssistant &&
+            current.IsLatestCopilotAssistant == (next.IsCopilotAssistant && string.Equals(next.Id, continuableId, StringComparison.Ordinal)) &&
+            current.HasContextLabels == next.HasContextLabels &&
+            string.Equals(current.ContextLabelsJoinedDisplay, next.ContextLabelsJoinedDisplay, StringComparison.Ordinal)).All(value => value);
 
     private async Task ConfirmQueryInputAsync(IClientContext clientContext, CancellationToken ct)
     {

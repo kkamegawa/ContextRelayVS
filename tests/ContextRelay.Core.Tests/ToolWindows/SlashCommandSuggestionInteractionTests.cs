@@ -2,14 +2,65 @@
 using System.ComponentModel;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.SharedStore;
 using Xunit;
 
 namespace ContextRelay.Core.Tests.ToolWindows;
 
 public sealed class SlashCommandSuggestionInteractionTests
 {
+    [Fact]
+    public void StreamingStateUpdate_PreservesUnchangedCollectionsAndCommands()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        var search = new[] { new ContextItem { Title = "title", Snippet = "snippet", Source = ContextSource.Mail, Timestamp = "time", Url = "url" } };
+        var snippets = new[] { new SharedSnippetItem { Id = "snippet-id", Name = "name", Snippet = "text", Source = "source" } };
+        var history = new[] { new SharedChatHistoryItem { Id = "history-id", Role = "assistant", Text = "reply", Timestamp = "time" } };
+        var pending = new[] { new ResolvedAttachment { Id = "pending-id", RelativePath = "file.md" } };
+        SetState(stateType, state, "SearchResults", search);
+        SetState(stateType, state, "Snippets", snippets);
+        SetState(stateType, state, "ChatHistory", history);
+        SetState(stateType, state, "PendingAttachments", pending);
+        applyState.Invoke(viewModel, new[] { state });
+
+        var searchProperty = viewModelType.GetProperty("SearchResults")!;
+        var snippetsProperty = viewModelType.GetProperty("Snippets")!;
+        var historyProperty = viewModelType.GetProperty("ChatHistory")!;
+        var pendingProperty = viewModelType.GetProperty("PendingAttachments")!;
+        var commandProperty = viewModelType.GetProperty("SearchCommand")!;
+        var firstSearch = searchProperty.GetValue(viewModel);
+        var firstSnippets = snippetsProperty.GetValue(viewModel);
+        var firstHistory = historyProperty.GetValue(viewModel);
+        var firstPending = pendingProperty.GetValue(viewModel);
+        var command = commandProperty.GetValue(viewModel);
+
+        SetState(stateType, state, "IsStreaming", true);
+        SetState(stateType, state, "StreamingResponseText", "partial response");
+        applyState.Invoke(viewModel, new[] { state });
+
+        Assert.Same(firstSearch, searchProperty.GetValue(viewModel));
+        Assert.Same(firstSnippets, snippetsProperty.GetValue(viewModel));
+        Assert.Same(firstHistory, historyProperty.GetValue(viewModel));
+        Assert.Same(firstPending, pendingProperty.GetValue(viewModel));
+        Assert.Same(command, commandProperty.GetValue(viewModel));
+        Assert.Equal("partial response", viewModelType.GetProperty("StreamingResponseText")!.GetValue(viewModel));
+
+        SetState(stateType, state, "PendingAttachments", new[] { new ResolvedAttachment { Id = "replacement-id", RelativePath = "file.md" } });
+        applyState.Invoke(viewModel, new[] { state });
+        Assert.NotSame(firstPending, pendingProperty.GetValue(viewModel));
+    }
+
     [Fact]
     public void SlashCommandSuggestion_IsSelected_RaisesPropertyChangedOnlyWhenValueChanges()
     {
@@ -163,6 +214,9 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"2\" Grid.Column=\"2\" Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding PendingAttachments}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalContentAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding StreamingResponseText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"180\"", xaml, StringComparison.Ordinal);
@@ -502,5 +556,10 @@ public sealed class SlashCommandSuggestionInteractionTests
     {
         var assemblyPath = BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.dll");
         return Assembly.LoadFrom(assemblyPath);
+    }
+
+    private static void SetState(Type stateType, object state, string propertyName, object value)
+    {
+        stateType.GetProperty(propertyName)!.SetValue(state, value);
     }
 }

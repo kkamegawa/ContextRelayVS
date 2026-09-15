@@ -520,15 +520,19 @@
                 </StackPanel>
             </Border>
 
-            <ItemsControl Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" ItemsSource="{Binding PendingAttachments}" Margin="0,0,0,8">
-                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" ItemsSource="{Binding PendingAttachments}" Margin="0,0,0,8" HorizontalContentAlignment="Stretch">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Style="{StaticResource SurfaceBorderStyle}" Margin="0,0,6,4" Padding="6,2">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Label}" Style="{StaticResource CardMutedTextStyle}" />
-                                <Button Margin="6,0,0,0" Style="{StaticResource ThemedButtonStyle}" Padding="6,2" MinHeight="24" Content="{Binding RemoveButtonText}" AutomationProperties.Name="{Binding RemoveAutomationName}" Command="{Binding RemoveCommand}" />
-                            </StackPanel>
+                        <Border Style="{StaticResource SurfaceBorderStyle}" Margin="0,0,6,4" Padding="6,2" HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource CardMutedTextStyle}" TextTrimming="CharacterEllipsis" MinWidth="0" />
+                                <Button Grid.Column="1" Margin="6,0,0,0" Style="{StaticResource ThemedButtonStyle}" Padding="6,2" MinHeight="24" Content="{Binding RemoveButtonText}" AutomationProperties.Name="{Binding RemoveAutomationName}" Command="{Binding RemoveCommand}" />
+                            </Grid>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

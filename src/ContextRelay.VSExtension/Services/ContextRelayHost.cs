@@ -607,6 +607,7 @@ internal sealed class ContextRelayHost : IDisposable
             var currentQuery = GetDraftQueryText();
             logger.LogDiagnostic($"[ui] AddFilesToQuery invoked with currentQueryLength={currentQuery.Length}");
             var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+            PrunePendingAttachmentsFromCurrentWorkspace(workspaceRoots);
             var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             if (settings.ChatMaxAttachedFiles == 0)
             {
@@ -1096,16 +1097,17 @@ internal sealed class ContextRelayHost : IDisposable
             return new SendAttachmentSelection(Array.Empty<ResolvedAttachment>(), Array.Empty<string>());
         }
 
+        ResolvedAttachment? activeAttachment = null;
+        IReadOnlyList<string> workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        var canonicalMentions = CanonicalizeMentions(mentions, workspaceRoots);
         ResolvedAttachment[] pendingSnapshot;
+        PrunePendingAttachmentsFromCurrentWorkspace(workspaceRoots);
         lock (pendingAttachmentsSync)
         {
             pendingSnapshot = pendingAttachments.Select(item => item.Clone()).ToArray();
         }
 
-        ResolvedAttachment? activeAttachment = null;
-        IReadOnlyList<string> workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
-        var canonicalMentions = CanonicalizeMentions(mentions, workspaceRoots);
-        var canonicalPending = CanonicalizePendingAttachments(pendingSnapshot, workspaceRoots);
+        var canonicalPending = pendingSnapshot;
         if (settings.ChatAttachActiveEditor && clientContext is not null)
         {
             var snapshot = await packageServices.GetActiveEditorSnapshotAsync(clientContext, cancellationToken).ConfigureAwait(false);
@@ -1144,6 +1146,36 @@ internal sealed class ContextRelayHost : IDisposable
         }
 
         return canonicalPending;
+    }
+
+    private void PrunePendingAttachmentsFromCurrentWorkspace(IReadOnlyList<string> workspaceRoots)
+    {
+        IReadOnlyList<string> prunedPendingIds;
+        lock (pendingAttachmentsSync)
+        {
+            prunedPendingIds = PrunePendingAttachments(pendingAttachments, workspaceRoots);
+        }
+
+        foreach (var attachmentId in prunedPendingIds)
+        {
+            chatRequestStateMachine.RemovePendingAttachment(attachmentId);
+        }
+    }
+
+    private static IReadOnlyList<string> PrunePendingAttachments(
+        List<ResolvedAttachment> pending,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var canonicalPending = CanonicalizePendingAttachments(pending, workspaceRoots);
+        var retainedIds = new HashSet<string>(canonicalPending.Select(item => item.Id), StringComparer.Ordinal);
+        var prunedIds = pending
+            .Where(item => !retainedIds.Contains(item.Id))
+            .Select(item => item.Id)
+            .ToArray();
+
+        pending.Clear();
+        pending.AddRange(canonicalPending);
+        return prunedIds;
     }
 
     private static IReadOnlyList<ResolvedFileMention> CanonicalizeMentions(

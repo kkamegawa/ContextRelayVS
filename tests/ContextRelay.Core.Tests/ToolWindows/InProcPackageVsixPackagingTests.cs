@@ -30,6 +30,7 @@ public sealed class InProcPackageVsixPackagingTests
         AssertEntryPresent(archive, ".vsextension/string-resources.json");
         AssertEntryPresent(archive, ".vsextension/ja/string-resources.json");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.dll");
+        AssertEntryPresent(archive, "ja/ContextRelay.VSExtension.Package.resources.dll");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.pkgdef");
         AssertEntryPresent(archive, "Community.VisualStudio.Toolkit.dll");
 

@@ -9,15 +9,15 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [DataContract]
 internal sealed class PendingAttachmentViewModel
 {
-    private readonly string attachmentId;
     internal PendingAttachmentViewModel(ResolvedAttachment attachment, ContextRelayWindowViewModel parent)
     {
-        attachmentId = attachment.Id;
+        Id = attachment.Id;
         Label = attachment.Label;
         RemoveButtonText = ContextRelayLocalizedStrings.RemoveAttachmentButtonText;
         RemoveAutomationName = ContextRelayLocalizedStrings.GetRemoveAttachmentAutomationName(Label);
-        RemoveCommand = new AsyncCommand(async (_, ct) => await parent.RemovePendingAttachmentAsync(attachmentId, ct).ConfigureAwait(false));
+        RemoveCommand = new AsyncCommand(async (_, ct) => await parent.RemovePendingAttachmentAsync(Id, ct).ConfigureAwait(false));
     }
+    [DataMember] public string Id { get; }
     [DataMember] public string Label { get; }
     [DataMember] public string RemoveButtonText { get; }
     [DataMember] public string RemoveAutomationName { get; }
