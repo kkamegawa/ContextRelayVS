@@ -18,6 +18,7 @@
   <data name="OpenCopilotButtonText" xml:space="preserve"><value>Copilot を開く</value></data>
   <data name="AttachFileToChatButtonText" xml:space="preserve"><value>ファイルを添付</value></data>
   <data name="RemoveAttachmentButtonText" xml:space="preserve"><value>削除</value></data>
+  <data name="RemoveAttachmentAutomationName_Format" xml:space="preserve"><value>添付ファイル {0} を削除</value></data>
   <data name="StopGenerationButtonText" xml:space="preserve"><value>停止</value></data>
   <data name="ChatResponseCancelledStatus" xml:space="preserve"><value>応答の生成をキャンセルしました。</value></data>
   <data name="ChatResponseFailedStatus" xml:space="preserve"><value>応答の生成に失敗しました: {0}</value></data>
@@ -47,7 +48,7 @@
   <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>指定したソースは ContextRelay のオプションで無効です。</value></data>
   <data name="AskDisabledStatus" xml:space="preserve"><value>/ask は無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
   <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot チャットは無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
-  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>/ask を使うには先に 1 件以上のスニペットをピン留めするか、#path でローカル ファイルを指定してください。明示したコンテキストが Microsoft 365 Copilot に送信されます。</value></data>
+  <data name="AskRequiresContextStatus" xml:space="preserve"><value>/ask を使うには、スニペットをピン留めする、保留中のファイル添付を追加する、#path でローカル ファイルを指定する、またはアクティブ エディターの添付を有効にしてください。明示したコンテキストが Microsoft 365 Copilot に送信されます。</value></data>
   <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value># ファイル メンションを削除するとプロンプトが空になります。</value></data>
   <data name="FilePickerWorkspaceUnavailableStatus" xml:space="preserve"><value>ローカル ファイルを追加する前にソリューションまたはワークスペース ファイルを開いてください。</value></data>
   <data name="FilePickerNoFilesSelectedStatus" xml:space="preserve"><value>ファイルが選択されませんでした。</value></data>

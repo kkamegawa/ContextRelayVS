@@ -73,6 +73,51 @@ public sealed class FilePickerMentionFormattingTests
     {
         var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "ContextRelay.VSExtension", "Services", "ContextRelayHost.cs"));
         Assert.Equal(2, source.Split("GetIncludedPendingAttachmentIds(attachmentSelection, contextPayload)", StringSplitOptions.None).Length - 1);
+        Assert.Contains("var includedAttachmentCount = contextPayload.IncludedAttachmentIds.Count;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryClaimPendingAttachments_RemovesSubmittedAndPreservesNextTurnAttachments()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var claim = hostType.GetMethod("TryClaimPendingAttachments", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var pending = new List<ResolvedAttachment>
+        {
+            Attachment("submitted-1", "submitted-1.md"),
+            Attachment("submitted-2", "submitted-2.md"),
+            Attachment("next-turn", "next-turn.md")
+        };
+
+        var claimed = Assert.IsType<bool>(claim.Invoke(null, new object[]
+        {
+            pending,
+            new[] { "submitted-1", "submitted-2" }
+        }));
+
+        Assert.True(claimed);
+        Assert.Equal(new[] { "next-turn" }, pending.Select(item => item.Id));
+    }
+
+    [Fact]
+    public void TryClaimPendingAttachments_WhenAnAttachmentWasRemoved_LeavesSnapshotUnchanged()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var claim = hostType.GetMethod("TryClaimPendingAttachments", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var pending = new List<ResolvedAttachment>
+        {
+            Attachment("still-pending", "still-pending.md")
+        };
+
+        var claimed = Assert.IsType<bool>(claim.Invoke(null, new object[]
+        {
+            pending,
+            new[] { "still-pending", "removed-during-build" }
+        }));
+
+        Assert.False(claimed);
+        Assert.Equal(new[] { "still-pending" }, pending.Select(item => item.Id));
     }
 
     [Fact]

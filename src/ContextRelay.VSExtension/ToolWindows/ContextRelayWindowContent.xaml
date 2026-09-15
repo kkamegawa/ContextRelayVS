@@ -349,7 +349,9 @@
                                         Content="{Binding StopGenerationButtonText}"
                                         Command="{Binding StopGenerationCommand}" />
                             </DockPanel>
-                            <TextBlock Margin="0,6,0,0" Text="{Binding StreamingResponseText}" Style="{StaticResource CardBodyTextStyle}" />
+                            <ScrollViewer Margin="0,6,0,0" MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <TextBlock Text="{Binding StreamingResponseText}" Style="{StaticResource CardBodyTextStyle}" />
+                            </ScrollViewer>
                         </StackPanel>
                     </Border>
                 <ListBox Grid.Row="1" Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource FluentListBoxItemStyle}" ItemsSource="{Binding ChatHistory}" BorderThickness="0">
@@ -525,7 +527,7 @@
                         <Border Style="{StaticResource SurfaceBorderStyle}" Margin="0,0,6,4" Padding="6,2">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding Label}" Style="{StaticResource CardMutedTextStyle}" />
-                                <Button Margin="6,0,0,0" Style="{StaticResource ThemedButtonStyle}" Padding="6,2" MinHeight="24" Content="{Binding RemoveButtonText}" Command="{Binding RemoveCommand}" />
+                                <Button Margin="6,0,0,0" Style="{StaticResource ThemedButtonStyle}" Padding="6,2" MinHeight="24" Content="{Binding RemoveButtonText}" AutomationProperties.Name="{Binding RemoveAutomationName}" Command="{Binding RemoveCommand}" />
                             </StackPanel>
                         </Border>
                     </DataTemplate>

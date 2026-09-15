@@ -15,9 +15,11 @@ internal sealed class PendingAttachmentViewModel
         attachmentId = attachment.Id;
         Label = attachment.Label;
         RemoveButtonText = ContextRelayLocalizedStrings.RemoveAttachmentButtonText;
+        RemoveAutomationName = ContextRelayLocalizedStrings.GetRemoveAttachmentAutomationName(Label);
         RemoveCommand = new AsyncCommand(async (_, ct) => await parent.RemovePendingAttachmentAsync(attachmentId, ct).ConfigureAwait(false));
     }
     [DataMember] public string Label { get; }
     [DataMember] public string RemoveButtonText { get; }
+    [DataMember] public string RemoveAutomationName { get; }
     [DataMember] public AsyncCommand RemoveCommand { get; }
 }

@@ -135,12 +135,23 @@ public static class WorkspaceFileAttachmentResolver
     private static async Task<string> ReadFullFileAsync(StreamReader reader, CancellationToken cancellationToken)
     {
         var buffer = new char[MaxFileChars + 1];
-        var count = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
+        var count = 0;
+        while (count < buffer.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var read = await reader.ReadAsync(buffer, count, buffer.Length - count).ConfigureAwait(false);
+            if (read == 0)
+                break;
+            count += read;
+        }
+
         var text = new string(buffer, 0, Math.Min(count, MaxFileChars));
-        return count > MaxFileChars
-            ? FileContextPromptBuilder.TruncateForBudget(text + "\n[additional file content omitted]", MaxFileChars)
-            : text;
+        if (count <= MaxFileChars)
+            return text;
+
+        const string omissionMarker = "\n[additional file content omitted]";
+        var contentBudget = Math.Max(0, MaxFileChars - omissionMarker.Length);
+        return text.Substring(0, Math.Min(text.Length, contentBudget)) + omissionMarker;
     }
 
     private static async Task<string> ReadSelectedLinesAsync(StreamReader reader, ResolvedAttachment attachment, CancellationToken cancellationToken)
@@ -176,7 +187,7 @@ public static class WorkspaceFileAttachmentResolver
     {
         canonicalPath = string.Empty;
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return TryGetFullPath(path, out canonicalPath);
+            return TryGetUnixCanonicalPath(path, out canonicalPath);
 
         var handle = CreateFile(path, 0, FileShareRead | FileShareWrite | FileShareDelete, IntPtr.Zero,
             OpenExisting, directory ? FileFlagBackupSemantics : 0, IntPtr.Zero);
@@ -189,6 +200,9 @@ public static class WorkspaceFileAttachmentResolver
     private static bool TryGetFinalPath(SafeFileHandle handle, out string path)
     {
         path = string.Empty;
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return TryGetUnixHandlePath(handle, out path);
+
         var buffer = new StringBuilder(512);
         var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
         if (length == 0)
@@ -204,6 +218,66 @@ public static class WorkspaceFileAttachmentResolver
         return true;
     }
 
+    private static bool TryGetUnixCanonicalPath(string path, out string canonicalPath)
+    {
+        canonicalPath = string.Empty;
+        var buffer = Marshal.AllocHGlobal(4096);
+        try
+        {
+            var result = RealPath(path, buffer);
+            if (result == IntPtr.Zero)
+                return false;
+            canonicalPath = Marshal.PtrToStringAnsi(result) ?? string.Empty;
+            return canonicalPath.Length > 0;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static bool TryGetUnixHandlePath(SafeFileHandle handle, out string path)
+    {
+        path = string.Empty;
+        var descriptor = checked((int)handle.DangerousGetHandle().ToInt64());
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            var buffer = Marshal.AllocHGlobal(4096);
+            try
+            {
+                if (Fcntl(descriptor, FGetPath, buffer) == -1)
+                    return false;
+                path = Marshal.PtrToStringAnsi(buffer) ?? string.Empty;
+                return path.Length > 0;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        foreach (var prefix in new[] { "/proc/self/fd/", "/dev/fd/" })
+        {
+            var link = prefix + descriptor.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var buffer = Marshal.AllocHGlobal(4096);
+            try
+            {
+                var length = ReadLink(link, buffer, (UIntPtr)4096);
+                if (length == new IntPtr(-1) || length == IntPtr.Zero)
+                    continue;
+                path = Marshal.PtrToStringAnsi(buffer, checked((int)length.ToInt64())) ?? string.Empty;
+                if (path.Length > 0)
+                    return true;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        return false;
+    }
+
     private static string NormalizeFinalPath(string path)
     {
         if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
@@ -216,28 +290,17 @@ public static class WorkspaceFileAttachmentResolver
             : path;
     }
 
-    private static bool TryGetFullPath(string path, out string fullPath)
-    {
-        try
-        {
-            fullPath = Path.GetFullPath(path);
-            return true;
-        }
-        catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is IOException)
-        {
-            fullPath = string.Empty;
-            return false;
-        }
-    }
-
     private static bool IsUnderRoot(string path, string root)
     {
+        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
         var separator = root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
             root.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
             ? string.Empty
             : Path.DirectorySeparatorChar.ToString();
-        return string.Equals(path, root, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith(root + separator, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(path, root, comparison) ||
+            path.StartsWith(root + separator, comparison);
     }
 
     private static string NormalizeRootPath(string root)
@@ -267,6 +330,7 @@ public static class WorkspaceFileAttachmentResolver
     private const uint FileShareDelete = 0x00000004;
     private const uint OpenExisting = 3;
     private const uint FileFlagBackupSemantics = 0x02000000;
+    private const int FGetPath = 50;
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFile(string fileName, uint desiredAccess, uint shareMode,
@@ -274,4 +338,13 @@ public static class WorkspaceFileAttachmentResolver
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetFinalPathNameByHandle(SafeFileHandle file, StringBuilder path, uint bufferLength, uint flags);
+
+    [DllImport("libc", EntryPoint = "realpath", CharSet = CharSet.Ansi, SetLastError = true)]
+    private static extern IntPtr RealPath(string path, IntPtr resolvedPath);
+
+    [DllImport("libc", EntryPoint = "readlink", CharSet = CharSet.Ansi, SetLastError = true)]
+    private static extern IntPtr ReadLink(string path, IntPtr buffer, UIntPtr bufferSize);
+
+    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int Fcntl(int descriptor, int command, IntPtr buffer);
 }

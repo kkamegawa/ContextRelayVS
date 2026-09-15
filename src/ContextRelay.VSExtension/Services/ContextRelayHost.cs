@@ -31,7 +31,9 @@ namespace ContextRelay.VSExtension.Services;
 
 internal sealed class ContextRelayHost : IDisposable
 {
-    private sealed class ChatGenerationStoppedException : OperationCanceledException;
+    private sealed class ChatGenerationStoppedException : OperationCanceledException
+    {
+    }
 
     private sealed class CallbackProgress : IProgress<string>
     {
@@ -362,7 +364,7 @@ internal sealed class ContextRelayHost : IDisposable
                 contextPayload.SendOptions.StreamResponses = settings.ChatStreamResponses;
                 if (!contextPayload.HasGroundingContext)
                 {
-                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresPinnedContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
                 var requestMessage = AppendGroundingInstruction(filePrompt.Prompt, contextPayload);
                 LogChatPayloadDiagnostics("ask", requestMessage, contextPayload);
@@ -391,9 +393,10 @@ internal sealed class ContextRelayHost : IDisposable
                     cancellationToken,
                     response.RequestState).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
-                var askStatus = attachmentSelection.Attachments.Count == 0
+                var includedAttachmentCount = contextPayload.IncludedAttachmentIds.Count;
+                var askStatus = includedAttachmentCount == 0
                     ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count)
-                    : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(snippets.Count, attachmentSelection.Attachments.Count);
+                    : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(snippets.Count, includedAttachmentCount);
                 return await RefreshStateCoreAsync(
                     AddCopilotIntegrityWarningIfNeeded(askStatus),
                     trimmed,
@@ -1248,15 +1251,27 @@ internal sealed class ContextRelayHost : IDisposable
 
         isStreaming = true;
         streamingResponseText = string.Empty;
-        PublishStreamingState();
-        var progress = new CallbackProgress(text =>
-        {
-            streamingResponseText = text ?? string.Empty;
-            PublishStreamingState();
-        });
-
         try
         {
+            if (submittedPendingIds.Count > 0)
+            {
+                lock (pendingAttachmentsSync)
+                {
+                    if (!TryClaimPendingAttachments(pendingAttachments, submittedPendingIds))
+                    {
+                        throw new InvalidOperationException("A pending attachment was removed before the request was submitted.");
+                    }
+                }
+
+                await PublishAttachmentStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+            }
+
+            PublishStreamingState();
+            var progress = new CallbackProgress(text =>
+            {
+                streamingResponseText = text ?? string.Empty;
+                PublishStreamingState();
+            });
             var response = await sendAsync(requestState.CancellationToken, progress).ConfigureAwait(false);
             return new ActiveChatResponse(response, requestState);
         }
@@ -1274,19 +1289,32 @@ internal sealed class ContextRelayHost : IDisposable
                 }
             }
 
-            var consumedPendingIds = chatRequestStateMachine.Complete(requestState);
-            if (consumedPendingIds.Count > 0)
-            {
-                lock (pendingAttachmentsSync)
-                {
-                    pendingAttachments.RemoveAll(item => consumedPendingIds.Contains(item.Id, StringComparer.Ordinal));
-                }
-            }
+            chatRequestStateMachine.Complete(requestState);
 
             isStreaming = false;
             streamingResponseText = string.Empty;
             PublishStreamingState();
         }
+    }
+
+    private static bool TryClaimPendingAttachments(
+        List<ResolvedAttachment> pending,
+        IReadOnlyList<string> submittedPendingIds)
+    {
+        var submitted = new HashSet<string>(submittedPendingIds, StringComparer.Ordinal);
+        if (submitted.Count == 0)
+        {
+            return true;
+        }
+
+        var available = new HashSet<string>(pending.Select(item => item.Id), StringComparer.Ordinal);
+        if (!submitted.IsSubsetOf(available))
+        {
+            return false;
+        }
+
+        pending.RemoveAll(item => submitted.Contains(item.Id));
+        return true;
     }
 
     private void PublishStreamingState()

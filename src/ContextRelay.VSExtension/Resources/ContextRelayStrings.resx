@@ -19,6 +19,7 @@
   <data name="AddFilesButtonText" xml:space="preserve"><value>+</value></data>
   <data name="AttachFileToChatButtonText" xml:space="preserve"><value>Attach file</value></data>
   <data name="RemoveAttachmentButtonText" xml:space="preserve"><value>Remove</value></data>
+  <data name="RemoveAttachmentAutomationName_Format" xml:space="preserve"><value>Remove attachment {0}</value></data>
   <data name="StopGenerationButtonText" xml:space="preserve"><value>Stop</value></data>
   <data name="ChatResponseCancelledStatus" xml:space="preserve"><value>Response generation cancelled.</value></data>
   <data name="ChatResponseFailedStatus" xml:space="preserve"><value>Response generation failed: {0}</value></data>
@@ -48,7 +49,7 @@
   <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>The requested source is disabled in ContextRelay options.</value></data>
   <data name="AskDisabledStatus" xml:space="preserve"><value>/ask is disabled. Enable chat preview in ContextRelay options.</value></data>
   <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot chat is disabled. Enable chat preview in ContextRelay options.</value></data>
-  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>Pin one or more snippets or mention a local file with #path before using /ask. Explicit context is sent to Microsoft 365 Copilot.</value></data>
+  <data name="AskRequiresContextStatus" xml:space="preserve"><value>Pin one or more snippets, add a pending file attachment, mention a local file with #path, or enable active-editor attachment before using /ask. Explicit context is sent to Microsoft 365 Copilot.</value></data>
   <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value>Prompt is empty after removing # file mentions.</value></data>
   <data name="FilePickerWorkspaceUnavailableStatus" xml:space="preserve"><value>Open a solution or workspace file before adding local files.</value></data>
   <data name="FilePickerNoFilesSelectedStatus" xml:space="preserve"><value>No files were selected.</value></data>

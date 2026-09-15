@@ -111,7 +111,7 @@ Registered by an in-proc VSSDK `AsyncPackage` and persisted to the shared JSON s
 
 ## 8.1 `/ask` parity settings (Issue #184)
 
-The Visual Studio implementation uses the same explicit-context behavior as the VS Code extension. `/ask` accepts pinned snippets, pending local attachments, and the eligible saved active editor when enabled; it is rejected when no usable explicit context is available. Plain chat continues to work without explicit context. Response streaming is controlled by `ChatStreamResponses`, and the attachment count is bounded by `ChatMaxAttachedFiles`.
+The Visual Studio implementation uses the same explicit-context behavior as the VS Code extension. `/ask` accepts pinned snippets, pending local attachments, and the eligible saved active editor when enabled; it is rejected when no usable explicit context is available. Plain chat continues to work without explicit context. Response streaming is controlled by `ChatStreamResponses`, and the attachment count is bounded by `ChatMaxAttachedFiles`. Pending attachments are claimed and removed from the visible pending queue when the request is submitted, so files added during generation remain queued for the next request and do not compete with in-flight files for the limit.
 
 ## 9. Handoff docs
 

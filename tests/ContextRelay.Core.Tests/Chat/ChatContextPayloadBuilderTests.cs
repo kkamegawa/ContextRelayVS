@@ -58,7 +58,7 @@ public sealed class ChatContextPayloadBuilderTests
                 Array.Empty<SharedSnippetItem>(),
                 cancellationToken: TestContext.Current.CancellationToken);
             Assert.True(payload.SendOptions.AdditionalContext[0].Text.Length <= ChatContextPayloadBuilder.MaxLocalAttachmentChars + 30);
-            Assert.Contains("truncated", payload.SendOptions.AdditionalContext[0].Text);
+            Assert.Contains("additional file content omitted", payload.SendOptions.AdditionalContext[0].Text);
         }
         finally
         {

@@ -165,6 +165,9 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("ItemsSource=\"{Binding PendingAttachments}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding StreamingResponseText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"180\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{Binding RemoveAutomationName}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<Setter Property=\"ScrollViewer.CanContentScroll\" Value=\"False\" />", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("StretchListBoxItemStyle", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Background=\"#", xaml, StringComparison.Ordinal);
@@ -316,6 +319,29 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.Contains("応答の生成に失敗しました", japanese, StringComparison.Ordinal);
         Assert.Contains("detail", japanese, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LocalizedStrings_AskRequiresContextStatus_MentionsAllSupportedContextSources()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var stringsType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true)!;
+        var setLanguage = stringsType.GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)!;
+        var status = stringsType.GetProperty("AskRequiresContextStatus", BindingFlags.Static | BindingFlags.Public)!;
+
+        setLanguage.Invoke(null, new object?[] { "en" });
+        var english = Assert.IsType<string>(status.GetValue(null));
+        Assert.Contains("pending file attachment", english, StringComparison.Ordinal);
+        Assert.Contains("#path", english, StringComparison.Ordinal);
+        Assert.Contains("active-editor attachment", english, StringComparison.Ordinal);
+
+        setLanguage.Invoke(null, new object?[] { "ja" });
+        var japanese = Assert.IsType<string>(status.GetValue(null));
+        Assert.Contains("保留中のファイル添付", japanese, StringComparison.Ordinal);
+        Assert.Contains("#path", japanese, StringComparison.Ordinal);
+        Assert.Contains("アクティブ エディターの添付", japanese, StringComparison.Ordinal);
+
+        setLanguage.Invoke(null, new object?[] { "en" });
     }
 
     [Fact]
