@@ -1,6 +1,6 @@
-﻿# ContextRelay for Visual Studio — 設計プラン
+﻿# ContextRelay for Visual Studio — Issue #184 設計要約
 
-この文書は [docs/plan.md](plan.md) の日本語版です。Issue [#184](https://github.com/kkamegawa/ContextRelayVS/issues/184) の最終仕様を含みます。
+この文書は [docs/plan.md](plan.md) 全体の日本語訳ではなく、Issue [#184](https://github.com/kkamegawa/ContextRelayVS/issues/184) に関する設計の要約と補足です。
 
 ## 製品方針
 

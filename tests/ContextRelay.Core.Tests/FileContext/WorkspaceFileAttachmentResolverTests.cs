@@ -209,4 +209,58 @@ public sealed class WorkspaceFileAttachmentResolverTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task ReadTextAsync_BoundsSelectedLineWithoutAllocatingTheEntireLine()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "file.md");
+            var oversizedLine = new string('x', WorkspaceFileAttachmentResolver.MaxFileChars + 5000);
+            File.WriteAllText(path, "first\r\n" + oversizedLine + "\r\nthird");
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root }, out var attachment));
+            attachment!.SelectionStartLine = 2;
+            attachment.SelectionEndLine = 2;
+
+            var text = await WorkspaceFileAttachmentResolver.ReadTextAsync(attachment, TestContext.Current.CancellationToken);
+
+            Assert.NotNull(text);
+            Assert.Equal(WorkspaceFileAttachmentResolver.MaxFileChars, text!.Length);
+            Assert.Equal(new string('x', WorkspaceFileAttachmentResolver.MaxFileChars), text);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_StopsAtBudgetAcrossSelectedLines()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "file.md");
+            var trailingOversizedLine = new string('z', WorkspaceFileAttachmentResolver.MaxFileChars + 5000);
+            File.WriteAllText(path, new string('a', 7000) + "\r\n" + new string('b', 6000) + "\r\n" + trailingOversizedLine);
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root }, out var attachment));
+            attachment!.SelectionStartLine = 1;
+            attachment.SelectionEndLine = 3;
+
+            var text = await WorkspaceFileAttachmentResolver.ReadTextAsync(attachment, TestContext.Current.CancellationToken);
+
+            Assert.NotNull(text);
+            Assert.Equal(WorkspaceFileAttachmentResolver.MaxFileChars, text!.Length);
+            Assert.StartsWith(new string('a', 7000) + "\n", text, StringComparison.Ordinal);
+            Assert.EndsWith(new string('b', 4999), text, StringComparison.Ordinal);
+            Assert.DoesNotContain('z', text);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

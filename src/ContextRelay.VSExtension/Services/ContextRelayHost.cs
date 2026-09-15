@@ -395,8 +395,8 @@ internal sealed class ContextRelayHost : IDisposable
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 var includedAttachmentCount = contextPayload.IncludedAttachmentIds.Count;
                 var askStatus = includedAttachmentCount == 0
-                    ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count)
-                    : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(snippets.Count, includedAttachmentCount);
+                    ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(contextPayload.IncludedPinnedSnippetCount)
+                    : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(contextPayload.IncludedPinnedSnippetCount, includedAttachmentCount);
                 return await RefreshStateCoreAsync(
                     AddCopilotIntegrityWarningIfNeeded(askStatus),
                     trimmed,

@@ -159,29 +159,124 @@ public static class WorkspaceFileAttachmentResolver
     {
         var start = Math.Max(1, attachment.SelectionStartLine ?? attachment.SelectionEndLine ?? 1);
         var end = Math.Max(start, attachment.SelectionEndLine ?? start);
+        var lineReader = new ChunkedLineReader(reader);
         var builder = new StringBuilder();
         var lineNumber = 0;
         while (lineNumber < end)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var line = await reader.ReadLineAsync().ConfigureAwait(false);
-            if (line is null)
+            var isSelected = lineNumber + 1 >= start;
+            if (isSelected && builder.Length >= MaxFileChars)
+            {
+                break;
+            }
+
+            if (isSelected && builder.Length > 0)
+            {
+                if (builder.Length >= MaxFileChars)
+                {
+                    break;
+                }
+
+                builder.Append('\n');
+            }
+
+            var remaining = isSelected ? MaxFileChars - builder.Length : 0;
+            var result = await lineReader.ReadLineAsync(
+                isSelected ? builder : null,
+                remaining,
+                cancellationToken).ConfigureAwait(false);
+            if (!result.HasLine)
                 break;
             lineNumber++;
-            if (lineNumber >= start)
-            {
-                if (builder.Length > 0)
-                    builder.AppendLine();
-                var remaining = MaxFileChars - builder.Length;
-                if (remaining <= 0)
-                    break;
-                builder.Append(line, 0, Math.Min(line.Length, remaining));
-                if (line.Length >= remaining)
-                    break;
-            }
+            if (result.ReachedLimit)
+                break;
         }
 
         return builder.ToString();
+    }
+
+    private sealed class ChunkedLineReader
+    {
+        private const int BufferSize = 1024;
+        private readonly StreamReader reader;
+        private readonly char[] buffer = new char[BufferSize];
+        private int bufferIndex;
+        private int bufferCount;
+        private bool skipLineFeedAfterCarriageReturn;
+
+        public ChunkedLineReader(StreamReader reader)
+        {
+            this.reader = reader;
+        }
+
+        public async Task<ChunkedLineResult> ReadLineAsync(
+            StringBuilder? destination,
+            int appendLimit,
+            CancellationToken cancellationToken)
+        {
+            var hasContent = false;
+            var appended = 0;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (bufferIndex >= bufferCount)
+                {
+                    bufferCount = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    bufferIndex = 0;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (bufferCount == 0)
+                    {
+                        return new ChunkedLineResult(hasLine: hasContent, reachedLimit: false);
+                    }
+                }
+
+                var value = buffer[bufferIndex++];
+                if (skipLineFeedAfterCarriageReturn)
+                {
+                    skipLineFeedAfterCarriageReturn = false;
+                    if (value == '\n')
+                    {
+                        continue;
+                    }
+                }
+
+                if (value == '\r')
+                {
+                    skipLineFeedAfterCarriageReturn = true;
+                    return new ChunkedLineResult(hasLine: true, reachedLimit: false);
+                }
+
+                if (value == '\n')
+                {
+                    return new ChunkedLineResult(hasLine: true, reachedLimit: false);
+                }
+
+                hasContent = true;
+                if (destination is not null && appended < appendLimit)
+                {
+                    destination.Append(value);
+                    appended++;
+                    if (appended >= appendLimit)
+                    {
+                        return new ChunkedLineResult(hasLine: true, reachedLimit: true);
+                    }
+                }
+            }
+        }
+    }
+
+    private readonly struct ChunkedLineResult
+    {
+        public ChunkedLineResult(bool hasLine, bool reachedLimit)
+        {
+            HasLine = hasLine;
+            ReachedLimit = reachedLimit;
+        }
+
+        public bool HasLine { get; }
+
+        public bool ReachedLimit { get; }
     }
 
     private static bool TryGetCanonicalPath(string path, bool directory, out string canonicalPath)

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using ContextRelay.Core.Chat;
@@ -59,6 +60,36 @@ public sealed class ChatContextPayloadBuilderTests
                 cancellationToken: TestContext.Current.CancellationToken);
             Assert.True(payload.SendOptions.AdditionalContext[0].Text.Length <= ChatContextPayloadBuilder.MaxLocalAttachmentChars + 30);
             Assert.Contains("additional file content omitted", payload.SendOptions.AdditionalContext[0].Text);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_ReportsPinnedSnippetsOmittedWhenAttachmentBudgetIsExhausted()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "contextrelay-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var attachments = new List<ResolvedAttachment>();
+            for (var index = 0; index < 6; index++)
+            {
+                var path = Path.Combine(root, $"context-{index}.md");
+                File.WriteAllText(path, new string('x', ChatContextPayloadBuilder.MaxLocalAttachmentChars + 100));
+                Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root }, out var attachment));
+                attachments.Add(attachment!);
+            }
+
+            var payload = await ChatContextPayloadBuilder.BuildAsync(
+                attachments,
+                new[] { new SharedSnippetItem { Name = "Omitted pinned snippet", Source = "mail", Snippet = "pinned details" } },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.DoesNotContain(payload.SendOptions.AdditionalContext, context => context.Description == "Omitted pinned snippet");
+            Assert.Equal(0, payload.IncludedPinnedSnippetCount);
         }
         finally
         {

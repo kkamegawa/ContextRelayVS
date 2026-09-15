@@ -12,6 +12,8 @@ public sealed class ChatContextPayload
 
     public IReadOnlyList<string> IncludedAttachmentIds { get; set; } = Array.Empty<string>();
 
+    public int IncludedPinnedSnippetCount { get; set; }
+
     public bool HasGroundingContext { get; set; }
 
     public string? GroundingInstruction { get; set; }
