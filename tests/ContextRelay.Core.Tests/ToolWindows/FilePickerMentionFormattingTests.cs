@@ -136,15 +136,14 @@ public sealed class FilePickerMentionFormattingTests
             }
 
             var resolution = FileMentionResolver.Resolve("#target.md #alias.md", new[] { root }, 5);
-            Assert.Equal(2, resolution.Files.Count);
+            Assert.Single(resolution.Files);
             var assembly = LoadBuiltExtensionAssembly();
             var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
             var canonicalize = hostType.GetMethod("CanonicalizeMentions", BindingFlags.Static | BindingFlags.NonPublic)!;
             var method = hostType.GetMethod("SelectSendAttachments", BindingFlags.Static | BindingFlags.NonPublic)!;
             var canonicalMentions = Assert.IsAssignableFrom<IReadOnlyList<ResolvedFileMention>>(
                 canonicalize.Invoke(null, new object[] { resolution.Files, new[] { root } }));
-            Assert.Equal(2, canonicalMentions.Count);
-            Assert.Equal(canonicalMentions[0].AbsolutePath, canonicalMentions[1].AbsolutePath, ignoreCase: true);
+            Assert.Single(canonicalMentions);
             var selection = method.Invoke(null, new object[] { canonicalMentions, Array.Empty<ResolvedAttachment>(), null!, 5 });
             Assert.Single(GetProperty<IReadOnlyList<ResolvedAttachment>>(selection!, "Attachments"));
         }
