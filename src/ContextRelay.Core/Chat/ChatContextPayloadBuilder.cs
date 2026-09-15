@@ -41,6 +41,11 @@ public static class ChatContextPayloadBuilder
 
         foreach (var attachment in attachments)
         {
+            if (remaining <= 0)
+            {
+                break;
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             if (attachment is null || !seen.Add(Path.GetFullPath(attachment.AbsolutePath))) continue;
             var content = await WorkspaceFileAttachmentResolver.ReadTextAsync(attachment, cancellationToken).ConfigureAwait(false);

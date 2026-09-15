@@ -171,6 +171,30 @@ public sealed class FileMentionResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_CanonicalizesSymlinkAliasesBeforeApplyingLimit()
+    {
+        var target = WriteFile("target.md", "target");
+        var alias = Path.Combine(root, "alias.md");
+        try
+        {
+            File.CreateSymbolicLink(alias, target);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            Assert.Skip($"Creating a symbolic link is unavailable in this environment: {ex.Message}");
+        }
+
+        var result = FileMentionResolver.Resolve(
+            "Read #target.md #alias.md",
+            new[] { root },
+            maxFileMentions: 1);
+
+        Assert.Empty(result.Errors);
+        Assert.Single(result.Files);
+        Assert.Equal(Path.GetFullPath(target), result.Files[0].AbsolutePath, ignoreCase: true);
+    }
+
+    [Fact]
     public async Task BuildWorkIqPromptAsync_AppendsBoundedLocalFileSections()
     {
         var path = WriteFile("notes.md", new string('x', FileContextPromptBuilder.MaxWorkIqFileChars + 100));

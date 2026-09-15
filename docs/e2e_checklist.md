@@ -43,8 +43,12 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 1. Open **Tools > Options > ContextRelay > General** and confirm the `Chat` category contains **Maximum attached files** (default `5`), **Attach active editor** (default disabled), and **Stream chat responses** (default enabled).
 2. Set the maximum to `0`, reload the Options page, and confirm the value remains non-negative and file attachments are disabled. Restore it to `5`.
 3. Enable **Attach active editor** with a saved supported file open, then send `/ask` with no pinned snippet. Confirm the active editor is used as explicit context; with no eligible active editor, confirm `/ask` is rejected without an API request.
-4. Add pending local files and pinned snippets, send `/ask`, and confirm the request uses the bounded attachment set and the response displays the context labels.
-5. Toggle **Stream chat responses** and confirm both settings persist in `%AppData%\ContextRelay\settings.json`; verify an existing JSON file with none of the three properties loads with defaults `5`, disabled, and enabled.
+4. Click **Attach file**, select a supported workspace file, and confirm a pending attachment chip appears. Remove the chip and confirm it is no longer included in the next request.
+5. Add pending local files and pinned snippets, send `/ask`, and confirm the request uses the bounded attachment set and the response displays the context labels.
+6. Start a chat request with **Stream chat responses** enabled and confirm the response text is updated incrementally while the request is in progress, rather than appearing only after completion.
+7. While a request is generating, add another attachment. Stop the request with **Stop**, then start a new chat request and confirm the attachment added during generation is still present and is included in that next request.
+8. After stopping a request, send a fresh query and confirm it succeeds; no automatic continuation request is made after the stop.
+9. Toggle **Stream chat responses** and confirm both settings persist in `%AppData%\ContextRelay\settings.json`; verify an existing JSON file with none of the three properties loads with defaults `5`, disabled, and enabled.
 
 ### Core chat and shared state
 

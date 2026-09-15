@@ -233,13 +233,30 @@ public static class FileMentionResolver
             return null;
         }
 
+        if (!CopilotSupportedFilePolicy.IsSupported(canonicalPath))
+        {
+            error = CreateError(FileMentionErrorCode.UnsupportedFileType, rawPath);
+            return null;
+        }
+
+        // Resolve through the attachment policy so symlink aliases are canonicalized before
+        // the caller applies the per-message unique-file limit.
+        if (!WorkspaceFileAttachmentResolver.TryResolve(canonicalPath, workspaceRoots, out var attachment) ||
+            attachment is null)
+        {
+            error = CreateError(FileMentionErrorCode.OutsideWorkspace, rawPath);
+            return null;
+        }
+
         error = null;
         return new ResolvedFileMention
         {
-            AbsolutePath = canonicalPath,
-            WorkspaceRoot = root,
-            RelativePath = GetRelativePath(root, canonicalPath),
-            Uri = new Uri(canonicalPath).AbsoluteUri
+            AbsolutePath = attachment.AbsolutePath,
+            WorkspaceRoot = attachment.WorkspaceRoot,
+            RelativePath = attachment.RelativePath
+                .Replace(Path.DirectorySeparatorChar, '/')
+                .Replace(Path.AltDirectorySeparatorChar, '/'),
+            Uri = new Uri(attachment.AbsolutePath).AbsoluteUri
         };
     }
 
@@ -278,17 +295,6 @@ public static class FileMentionResolver
 
         var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
         return normalizedCandidate.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetRelativePath(string root, string absolutePath)
-    {
-        var normalizedRoot = TrimTrailingSeparators(Path.GetFullPath(root));
-        var normalizedPath = Path.GetFullPath(absolutePath);
-        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
-        var relative = normalizedPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
-            ? normalizedPath.Substring(rootWithSeparator.Length)
-            : Path.GetFileName(normalizedPath);
-        return relative.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
     }
 
     private static string TrimTrailingSeparators(string value)

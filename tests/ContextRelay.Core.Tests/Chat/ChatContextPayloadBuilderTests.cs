@@ -98,6 +98,47 @@ public sealed class ChatContextPayloadBuilderTests
     }
 
     [Fact]
+    public async Task BuildAsync_StopsReadingAttachmentsWhenBudgetIsExhaustedAndStillProcessesPinnedFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "contextrelay-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var attachments = new List<ResolvedAttachment>();
+            for (var index = 0; index < 5; index++)
+            {
+                var path = Path.Combine(root, $"context-{index}.md");
+                File.WriteAllText(path, new string('x', ChatContextPayloadBuilder.MaxLocalAttachmentChars));
+                Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root }, out var attachment));
+                attachments.Add(attachment!);
+            }
+
+            // Reaching this attachment would throw while resolving its path. A full budget must skip it.
+            attachments.Add(new ResolvedAttachment { AbsolutePath = null!, RelativePath = "unread.md" });
+            var payload = await ChatContextPayloadBuilder.BuildAsync(
+                attachments,
+                new[]
+                {
+                    new SharedSnippetItem
+                    {
+                        Name = "Pinned file",
+                        Source = "sharepoint",
+                        SourceUrl = "https://contoso.sharepoint.com/sites/eng/pinned.docx"
+                    }
+                },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(5, payload.IncludedAttachmentIds.Count);
+            Assert.Single(payload.SendOptions.ContextualResources!.Files);
+            Assert.Equal("https://contoso.sharepoint.com/sites/eng/pinned.docx", payload.SendOptions.ContextualResources.Files[0].Uri);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_UsesSelectedAttachmentLines()
     {
         var root = Path.Combine(Path.GetTempPath(), "contextrelay-core-" + Guid.NewGuid().ToString("N"));
