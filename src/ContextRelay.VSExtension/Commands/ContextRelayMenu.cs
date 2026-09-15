@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ContextRelay.VSExtension.Commands;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;

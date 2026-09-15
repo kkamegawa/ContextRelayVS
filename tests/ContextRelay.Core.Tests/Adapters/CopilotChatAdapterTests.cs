@@ -139,12 +139,15 @@ public sealed class CopilotChatAdapterTests
         Assert.Equal(0, adapter.LastResponseDiagnostics.ContinuationRounds);
     }
 
-    [Fact]
-    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsUnavailable()
+    [Theory]
+    [InlineData(404)]
+    [InlineData(405)]
+    [InlineData(501)]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatBeforeAcceptanceForUnsupportedStreamingStatus(int streamingStatus)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
-            CreateResponse(HttpStatusCode.NotFound, """{ "error": { "code": "notFound" } }"""),
+            CreateResponse((HttpStatusCode)streamingStatus, """{ "error": { "code": "streamingUnavailable" } }"""),
             CreateResponse(HttpStatusCode.OK, """
                 {
                   "messages": [
@@ -159,7 +162,7 @@ public sealed class CopilotChatAdapterTests
         var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
 
         Assert.Equal("Fallback reply.", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.Equal(2, handler.RequestBodies.Count); // one stream attempt and one synchronous fallback
         Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
         Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }

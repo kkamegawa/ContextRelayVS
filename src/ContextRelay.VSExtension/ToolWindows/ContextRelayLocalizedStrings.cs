@@ -54,6 +54,7 @@ internal static class ContextRelayLocalizedStrings
     public static string RemoveAttachmentButtonText => GetString("RemoveAttachmentButtonText");
     public static string StopGenerationButtonText => GetString("StopGenerationButtonText");
     public static string ChatResponseCancelledStatus => GetString("ChatResponseCancelledStatus");
+    public static string GetChatResponseFailedStatus(string detail) => Format("ChatResponseFailedStatus", detail);
     public static string AddFilesToolTip => GetString("AddFilesToolTip");
     public static string ClearChatButtonText => GetString("ClearChatButtonText");
     public static string ClearSnippetsButtonText => GetString("ClearSnippetsButtonText");

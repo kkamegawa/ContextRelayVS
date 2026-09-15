@@ -56,7 +56,7 @@ public static class WorkspaceFileAttachmentResolver
             string fullRoot;
             try
             {
-                fullRoot = Path.GetFullPath(root.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                fullRoot = NormalizeRootPath(root);
             }
             catch (ArgumentException)
             {
@@ -232,9 +232,27 @@ public static class WorkspaceFileAttachmentResolver
 
     private static bool IsUnderRoot(string path, string root)
     {
+        var separator = root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+            root.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? string.Empty
+            : Path.DirectorySeparatorChar.ToString();
         return string.Equals(path, root, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            path.StartsWith(root + separator, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeRootPath(string root)
+    {
+        var fullRoot = Path.GetFullPath(root.Trim());
+        var pathRoot = Path.GetPathRoot(fullRoot);
+        var minimumLength = pathRoot?.Length ?? 0;
+        while (fullRoot.Length > minimumLength &&
+            (fullRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+             fullRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)))
+        {
+            fullRoot = fullRoot.Substring(0, fullRoot.Length - 1);
+        }
+
+        return fullRoot;
     }
 
     private static string GetRelativePath(string root, string path)

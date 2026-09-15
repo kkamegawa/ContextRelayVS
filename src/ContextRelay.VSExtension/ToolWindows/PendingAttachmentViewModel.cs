@@ -1,4 +1,4 @@
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.FileContext;

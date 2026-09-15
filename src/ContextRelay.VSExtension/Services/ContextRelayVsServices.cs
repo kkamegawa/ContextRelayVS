@@ -251,10 +251,28 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         if (!selection.IsEmpty)
         {
             startLine = textView.Document.GetLineNumberFromPosition(selection.Start.Offset) + 1;
-            endLine = textView.Document.GetLineNumberFromPosition(selection.End.Offset) + 1;
+            // Selection.End is exclusive. When it lands at column zero, the selected
+            // content ends on the preceding line.
+            var endOffset = GetInclusiveSelectionEndOffset(
+                selection.Start.Offset,
+                selection.End.Offset,
+                textView.Document.GetLineNumberFromPosition);
+
+            endLine = textView.Document.GetLineNumberFromPosition(endOffset) + 1;
         }
 
         return new ActiveEditorSnapshot(textView.FilePath, startLine, endLine);
+    }
+
+    private static int GetInclusiveSelectionEndOffset(
+        int startOffset,
+        int exclusiveEndOffset,
+        Func<int, int> getLineNumber)
+    {
+        return exclusiveEndOffset > startOffset &&
+            getLineNumber(exclusiveEndOffset) > getLineNumber(exclusiveEndOffset - 1)
+                ? exclusiveEndOffset - 1
+                : exclusiveEndOffset;
     }
 
     public Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default)

@@ -50,6 +50,25 @@ public sealed class WorkspaceFileAttachmentResolverTests
     }
 
     [Fact]
+    public void TryResolve_PreservesDriveRootWorkspace()
+    {
+        var root = Path.GetPathRoot(Path.GetTempPath());
+        Assert.False(string.IsNullOrWhiteSpace(root));
+        var path = Path.Combine(Path.GetTempPath(), "workspace-root-" + Guid.NewGuid().ToString("N") + ".md");
+        File.WriteAllText(path, "drive root file");
+        try
+        {
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root! }, out var attachment));
+            Assert.Equal(root, attachment!.WorkspaceRoot, ignoreCase: true);
+            Assert.Contains("drive root file", File.ReadAllText(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task ReadTextAsync_RejectsPathReplacedBySymlinkToOutsideWorkspace()
     {
         var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));

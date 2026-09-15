@@ -10,6 +10,8 @@ public sealed class ChatContextPayload
 
     public IReadOnlyList<string> Labels { get; set; } = Array.Empty<string>();
 
+    public IReadOnlyList<string> IncludedAttachmentIds { get; set; } = Array.Empty<string>();
+
     public bool HasGroundingContext { get; set; }
 
     public string? GroundingInstruction { get; set; }

@@ -1,8 +1,13 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.Chat;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Settings;
 using Xunit;
 
@@ -10,6 +15,95 @@ namespace ContextRelay.Core.Tests.ToolWindows;
 
 public sealed class FilePickerMentionFormattingTests
 {
+    [Fact]
+    public void SelectSendAttachments_UsesPriorityDeduplicationLimitAndPendingId()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var method = hostType.GetMethod("SelectSendAttachments", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var mentions = new[] { Mention("mention.md"), Mention("shared.md") };
+        var pending = new[] { Attachment("pending-id", "shared.md"), Attachment("pending-only", "pending.md") };
+        var active = Attachment("active-id", "active.md");
+        var selection = method!.Invoke(null, new object[] { mentions, pending, active, 3 });
+        var attachments = GetProperty<IReadOnlyList<ResolvedAttachment>>(selection!, "Attachments");
+        var submitted = GetProperty<IReadOnlyList<string>>(selection!, "SubmittedPendingIds");
+
+        Assert.Equal(new[] { "mention.md", "shared.md", "pending.md" }, attachments.Select(item => item.RelativePath));
+        Assert.Equal(new[] { "pending-id", "pending-only" }, submitted);
+        Assert.DoesNotContain(attachments, item => item.RelativePath == "active.md");
+
+        var withRoom = method.Invoke(null, new object[] { mentions, pending, active, 4 });
+        var withRoomAttachments = GetProperty<IReadOnlyList<ResolvedAttachment>>(withRoom!, "Attachments");
+        Assert.Contains(withRoomAttachments, item => item.RelativePath == "active.md");
+    }
+
+    [Fact]
+    public async Task GetIncludedPendingAttachmentIds_ExcludesUnreadableAttachment()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var select = hostType.GetMethod("SelectSendAttachments", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var filter = hostType.GetMethod("GetIncludedPendingAttachmentIds", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var root = CreateTemporaryWorkspace();
+        try
+        {
+            var readablePath = Path.Combine(root, "readable.md");
+            File.WriteAllText(readablePath, "readable");
+            var readable = Attachment("readable-id", "readable.md", readablePath, root);
+            var unreadable = Attachment("unreadable-id", "missing.md", Path.Combine(root, "missing.md"), root);
+            var selection = select.Invoke(null, new object[] { Array.Empty<ResolvedFileMention>(), new[] { readable, unreadable }, null!, 5 });
+            var selected = GetProperty<IReadOnlyList<ResolvedAttachment>>(selection!, "Attachments");
+            var payload = await ChatContextPayloadBuilder.BuildAsync(
+                selected,
+                Array.Empty<ContextRelay.Core.SharedStore.SharedSnippetItem>(),
+                cancellationToken: TestContext.Current.CancellationToken);
+            var included = Assert.IsAssignableFrom<IReadOnlyList<string>>(filter.Invoke(null, new[] { selection, payload }));
+            Assert.Equal(new[] { "readable-id" }, included);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ChatRoutes_ApplyIncludedPendingFilter()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "ContextRelay.VSExtension", "Services", "ContextRelayHost.cs"));
+        Assert.Equal(2, source.Split("GetIncludedPendingAttachmentIds(attachmentSelection, contextPayload)", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public void PublishAttachmentStateAsync_DuringGenerationPublishesImmediately()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        var stateField = hostType.GetField("state", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var pendingField = hostType.GetField("pendingAttachments", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var pendingSyncField = hostType.GetField("pendingAttachmentsSync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var machineField = hostType.GetField("chatRequestStateMachine", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var machine = new ChatRequestStateMachine();
+        Assert.True(machine.TryBegin(Array.Empty<string>(), CancellationToken.None, out var request));
+        stateField.SetValue(host, state);
+        pendingField.SetValue(host, new List<ResolvedAttachment> { Attachment("pending", "pending.md") });
+        pendingSyncField.SetValue(host, new object());
+        machineField.SetValue(host, machine);
+
+        var method = hostType.GetMethod("PublishAttachmentStateAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var task = Assert.IsAssignableFrom<Task>(method.Invoke(host, new object[] { "updated" }));
+        Assert.True(task.IsCompletedSuccessfully);
+        Assert.Equal("updated", stateType.GetProperty("StatusMessage")!.GetValue(state));
+        var published = Assert.IsAssignableFrom<IReadOnlyList<ResolvedAttachment>>(stateType.GetProperty("PendingAttachments")!.GetValue(state));
+        Assert.Single(published);
+        machine.Complete(request);
+        machine.Dispose();
+    }
+
     [Fact]
     public void MergeSelectedFilesIntoQuery_WhenPathContainsWhitespace_UsesQuotedMentionToken()
     {
@@ -315,6 +409,41 @@ public sealed class FilePickerMentionFormattingTests
         {
             TryDeleteDirectory(selectedFolder);
         }
+    }
+
+    private static ResolvedFileMention Mention(string relativePath) => new()
+    {
+        AbsolutePath = Path.Combine("C:\\workspace", relativePath),
+        WorkspaceRoot = "C:\\workspace",
+        RelativePath = relativePath,
+        Uri = "file:///" + relativePath
+    };
+
+    private static ResolvedAttachment Attachment(string id, string relativePath, string? absolutePath = null, string? root = null) => new()
+    {
+        Id = id,
+        AbsolutePath = absolutePath ?? Path.Combine("C:\\workspace", relativePath),
+        WorkspaceRoot = root ?? "C:\\workspace",
+        RelativePath = relativePath,
+        DisplayName = relativePath
+    };
+
+    private static T GetProperty<T>(object target, string propertyName)
+    {
+        var property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(property);
+        return Assert.IsAssignableFrom<T>(property!.GetValue(target));
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null && !File.Exists(Path.Combine(current.FullName, "ContextRelayVS.sln")))
+        {
+            current = current.Parent;
+        }
+
+        return current?.FullName ?? throw new DirectoryNotFoundException("Repository root was not found.");
     }
 
     private static string GetStringProperty(object target, string propertyName)

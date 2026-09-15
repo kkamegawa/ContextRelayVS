@@ -34,6 +34,7 @@ public static class ChatContextPayloadBuilder
         var additionalContext = new List<CopilotContextMessage>();
         var fileResources = new List<CopilotContextualFileResource>();
         var labels = new List<string>();
+        var includedAttachmentIds = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var remaining = MaxChatContextChars;
 
@@ -44,7 +45,12 @@ public static class ChatContextPayloadBuilder
             var content = await WorkspaceFileAttachmentResolver.ReadTextAsync(attachment, cancellationToken).ConfigureAwait(false);
             if (content is null) continue;
             var body = $"[File: {attachment.RelativePath}]\n{(string.IsNullOrWhiteSpace(content) ? "(empty file)" : content)}";
+            var contextCount = additionalContext.Count;
             AddTextContext(additionalContext, labels, attachment.Label, body, ref remaining);
+            if (additionalContext.Count > contextCount)
+            {
+                includedAttachmentIds.Add(attachment.Id);
+            }
         }
 
         foreach (var snippet in pinnedSnippets)
@@ -77,6 +83,7 @@ public static class ChatContextPayloadBuilder
         {
             SendOptions = options,
             Labels = labels,
+            IncludedAttachmentIds = includedAttachmentIds,
             HasGroundingContext = grounded,
             GroundingInstruction = grounded ? GroundingInstructionText : null
         };

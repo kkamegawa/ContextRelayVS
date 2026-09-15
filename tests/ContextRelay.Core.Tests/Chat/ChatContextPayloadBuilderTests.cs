@@ -35,6 +35,7 @@ public sealed class ChatContextPayloadBuilderTests
             Assert.Contains("local details", payload.SendOptions.AdditionalContext[0].Text);
             Assert.Equal("Pinned", payload.SendOptions.AdditionalContext[1].Description);
             Assert.Contains("Latest ContextRelay search summary", payload.Labels);
+            Assert.Equal(new[] { attachment!.Id }, payload.IncludedAttachmentIds);
         }
         finally
         {
@@ -86,6 +87,32 @@ public sealed class ChatContextPayloadBuilderTests
             Assert.DoesNotContain("before", payload.SendOptions.AdditionalContext[0].Text);
             Assert.Contains("selected", payload.SendOptions.AdditionalContext[0].Text);
             Assert.DoesNotContain("after", payload.SendOptions.AdditionalContext[0].Text);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_DoesNotReportUnreadableAttachmentAsIncluded()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "contextrelay-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "deleted.md");
+            File.WriteAllText(path, "temporary");
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root }, out var attachment));
+            File.Delete(path);
+
+            var payload = await ChatContextPayloadBuilder.BuildAsync(
+                new[] { attachment! },
+                Array.Empty<SharedSnippetItem>(),
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Empty(payload.IncludedAttachmentIds);
+            Assert.Empty(payload.SendOptions.AdditionalContext);
         }
         finally
         {

@@ -303,6 +303,35 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void LocalizedStrings_GetChatResponseFailedStatus_FormatsConfiguredLanguage()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var stringsType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true)!;
+        var setLanguage = stringsType.GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)!;
+        var formatFailure = stringsType.GetMethod("GetChatResponseFailedStatus", BindingFlags.Static | BindingFlags.Public)!;
+
+        setLanguage.Invoke(null, new object?[] { "ja" });
+        var japanese = Assert.IsType<string>(formatFailure.Invoke(null, new object?[] { "detail" }));
+        setLanguage.Invoke(null, new object?[] { "en" });
+
+        Assert.Contains("応答の生成に失敗しました", japanese, StringComparison.Ordinal);
+        Assert.Contains("detail", japanese, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ContextRelayVsServices_SelectionEndingAtNextLineStart_UsesLastSelectedCharacter()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var servicesType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayVsServices", throwOnError: true);
+        var method = servicesType!.GetMethod("GetInclusiveSelectionEndOffset", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, new object[] { 2, 10, (Func<int, int>)(offset => offset / 10) });
+
+        Assert.Equal(9, Assert.IsType<int>(result));
+    }
+
+    [Fact]
     public void BuildComposerSuggestions_WhenHashMentionIsTyped_ReturnsFileSuggestions()
     {
         var assembly = LoadBuiltExtensionAssembly();
