@@ -110,6 +110,34 @@ public sealed class FilePickerMentionFormattingTests
     }
 
     [Fact]
+    public void GetAuthorizedRememberedRoots_UsesOnlyRootsAuthorizedByCurrentWorkspace()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var servicesType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayVsServices", throwOnError: true)!;
+        var getAuthorizedRoots = servicesType.GetMethod("GetAuthorizedRememberedRoots", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(getAuthorizedRoots);
+
+        var workspaceA = CreateTemporaryWorkspace();
+        var workspaceB = CreateTemporaryWorkspace();
+        try
+        {
+            var rememberedB = Path.Combine(workspaceB, "nested");
+            var afterSwitch = Assert.IsAssignableFrom<IReadOnlyList<string>>(
+                getAuthorizedRoots!.Invoke(null, new object[] { new[] { workspaceA, rememberedB }, new[] { workspaceB } }));
+            Assert.Equal(new[] { rememberedB }, afterSwitch);
+
+            var withNoWorkspace = Assert.IsAssignableFrom<IReadOnlyList<string>>(
+                getAuthorizedRoots.Invoke(null, new object[] { new[] { workspaceA }, Array.Empty<string>() }));
+            Assert.Empty(withNoWorkspace);
+        }
+        finally
+        {
+            TryDeleteDirectory(workspaceA);
+            TryDeleteDirectory(workspaceB);
+        }
+    }
+
+    [Fact]
     public void ChatRoutes_ApplyIncludedPendingFilter()
     {
         var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "src", "ContextRelay.VSExtension", "Services", "ContextRelayHost.cs"));

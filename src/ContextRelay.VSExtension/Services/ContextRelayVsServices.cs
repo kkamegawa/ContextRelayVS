@@ -39,6 +39,17 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     public async Task<IReadOnlyList<string>> GetWorkspaceRootsAsync(CancellationToken cancellationToken = default)
     {
         var roots = new List<string>();
+        var solutions = await extensibility.Workspaces()
+            .QuerySolutionAsync(solution => solution, cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var solution in solutions)
+        {
+            if (!string.IsNullOrWhiteSpace(solution.Directory))
+            {
+                roots.Add(solution.Directory);
+            }
+        }
+
         var documents = await extensibility.Documents().GetOpenDocumentsAsync(cancellationToken).ConfigureAwait(false);
         foreach (var document in documents)
         {
@@ -55,22 +66,60 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
             }
         }
 
-        var currentDirectoryRoot = WorkspaceRootInference.InferWorkspaceRootFromPath(
-            Environment.CurrentDirectory,
-            requireWorkspaceMarker: true);
-        if (!string.IsNullOrWhiteSpace(currentDirectoryRoot))
+        if (roots.Count == 0)
         {
-            roots.Add(currentDirectoryRoot);
+            var currentDirectoryRoot = WorkspaceRootInference.InferWorkspaceRootFromPath(
+                Environment.CurrentDirectory,
+                requireWorkspaceMarker: true);
+            if (!string.IsNullOrWhiteSpace(currentDirectoryRoot))
+            {
+                roots.Add(currentDirectoryRoot);
+            }
         }
 
+        var currentWorkspaceRoots = roots.ToArray();
         lock (selectedWorkspaceRootsGate)
         {
-            roots.AddRange(selectedWorkspaceRoots);
+            roots.AddRange(GetAuthorizedRememberedRoots(selectedWorkspaceRoots, currentWorkspaceRoots));
         }
 
         return roots
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyList<string> GetAuthorizedRememberedRoots(
+        IReadOnlyList<string> rememberedRoots,
+        IReadOnlyList<string> currentWorkspaceRoots)
+    {
+        if (currentWorkspaceRoots.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return rememberedRoots
+            .Where(rememberedRoot => currentWorkspaceRoots.Any(currentRoot => IsPathUnderRoot(rememberedRoot, currentRoot)))
+            .ToArray();
+    }
+
+    private static bool IsPathUnderRoot(string path, string root)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(fullPath, fullRoot, StringComparison.OrdinalIgnoreCase) ||
+                fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                fullPath.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
     }
 
     public async Task<IReadOnlyList<string>> PickWorkspaceFilesAsync(string? initialDirectory, CancellationToken cancellationToken = default)
