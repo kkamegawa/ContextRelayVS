@@ -64,6 +64,35 @@ public sealed class ChatContextPayloadBuilderTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task BuildAsync_UsesSelectedAttachmentLines()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "contextrelay-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "notes.md");
+            File.WriteAllText(path, "before\nselected\nafter");
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root }, out var attachment));
+            attachment!.SelectionStartLine = 2;
+            attachment.SelectionEndLine = 2;
+
+            var payload = await ChatContextPayloadBuilder.BuildAsync(
+                new[] { attachment },
+                Array.Empty<SharedSnippetItem>(),
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.DoesNotContain("before", payload.SendOptions.AdditionalContext[0].Text);
+            Assert.Contains("selected", payload.SendOptions.AdditionalContext[0].Text);
+            Assert.DoesNotContain("after", payload.SendOptions.AdditionalContext[0].Text);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void Build_UsesFileResourcesForSharePointAndOneDriveHttpsSnippets()
     {

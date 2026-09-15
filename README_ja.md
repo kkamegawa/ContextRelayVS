@@ -17,6 +17,7 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 - `/workiq` では Work IQ Gateway に A2A v1.0 で自然言語クエリを送り、専用トークン audience と会話 `contextId` を使って Microsoft 365 のワークインテリジェンスを問い合わせ
 - 英語/日本語の UI 文言、結果カードのコンテキストアクション、ステータス/ヘルプ文言を備えた WPF ツールウィンドウ UI
 - General / Chat / Authentication / Cache / Adapters の Options ページ。Chat には添付ファイル上限 (既定値 5、0 で無効)、アクティブ エディター自動添付 (既定値オフ)、応答ストリーミング (既定値オン) を含む
+- ファイル メンションの **Maximum attached files** (既定値 5) は通常のチャットと `/ask` に適用し、`/workiq` は常に最大 5 件の重複しない `#file` メンションを受け付ける。不完全な可能性がある応答にはその旨が表示され、**続きを取得** ボタンで手動継続できる
 - MSAL.NET + WAM 認証と DPAPI ベースのトークンキャッシュ
 - TTL + LRU キャッシュとワークスペース永続化
 - VS Code 版との **クロスエディタセッション共有** — `%LocalAppData%\ContextRelay\shared\` を介してスニペット/チャット履歴/ハンドオフ文書インデックスを同期。詳細は [docs/shared-session-schema.md](docs/shared-session-schema.md)

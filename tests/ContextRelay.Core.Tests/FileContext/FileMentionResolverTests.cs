@@ -156,6 +156,21 @@ public sealed class FileMentionResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_DeduplicatesMentionsBeforeApplyingLimit()
+    {
+        WriteFile("shared.md", "shared");
+
+        var result = FileMentionResolver.Resolve(
+            "Read #shared.md #shared.md #\"shared.md\"",
+            new[] { root },
+            maxFileMentions: 1);
+
+        Assert.Empty(result.Errors);
+        Assert.Single(result.Files);
+        Assert.Equal("shared.md", result.Files[0].RelativePath);
+    }
+
+    [Fact]
     public async Task BuildWorkIqPromptAsync_AppendsBoundedLocalFileSections()
     {
         var path = WriteFile("notes.md", new string('x', FileContextPromptBuilder.MaxWorkIqFileChars + 100));

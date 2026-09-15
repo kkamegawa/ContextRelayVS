@@ -535,6 +535,7 @@
             <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="2" Grid.Column="0"
                     Margin="0,0,8,0"
                     Content="{Binding AddFilesButtonText}"
+                    AutomationProperties.Name="{Binding AddFilesToolTipText}"
                     ToolTip="{Binding AddFilesToolTipText}"
                     Command="{Binding AddFilesCommand}" />
 

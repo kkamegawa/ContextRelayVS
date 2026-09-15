@@ -52,7 +52,9 @@ Summarize #README.md
 /workiq #docs/plan.md find related workplace context
 ```
 
-File mentions are resolved only inside the opened Visual Studio workspace, limited by **Maximum attached files** (default five) and restricted to Copilot-supported text/code file types. Work IQ local file context is disabled by default; enable **Allow local file context for Work IQ** in Tools > Options > ContextRelay before sending local file text to Work IQ.
+File mentions are resolved only inside the opened Visual Studio workspace and restricted to Copilot-supported text/code file types. **Maximum attached files** (default five) applies to plain chat and `/ask`; `/workiq` always accepts up to five unique `#file` mentions. Work IQ local file context is disabled by default; enable **Allow local file context for Work IQ** in Tools > Options > ContextRelay before sending local file text to Work IQ.
+
+Responses that appear incomplete are reported as such and can be extended with the **Fetch continuation** button. Continuation is always a manual action.
 
 ## Authentication and delegated permissions
 

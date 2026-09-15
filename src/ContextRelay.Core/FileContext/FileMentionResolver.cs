@@ -99,15 +99,6 @@ public static class FileMentionResolver
             };
         }
 
-        if (candidates.Count > maxFileMentions)
-        {
-            return new FileMentionResolutionResult
-            {
-                CleanedPrompt = cleanedPrompt,
-                Errors = new[] { CreateError(FileMentionErrorCode.MentionLimitReached, maxFileMentions.ToString(System.Globalization.CultureInfo.InvariantCulture)) }
-            };
-        }
-
         var files = new List<ResolvedFileMention>();
         var errors = new List<FileMentionResolutionError>();
         var seenUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -123,6 +114,14 @@ public static class FileMentionResolver
             if (seenUris.Add(resolved.Uri))
             {
                 files.Add(resolved);
+                if (files.Count > maxFileMentions)
+                {
+                    return new FileMentionResolutionResult
+                    {
+                        CleanedPrompt = cleanedPrompt,
+                        Errors = new[] { CreateError(FileMentionErrorCode.MentionLimitReached, maxFileMentions.ToString(System.Globalization.CultureInfo.InvariantCulture)) }
+                    };
+                }
             }
         }
 

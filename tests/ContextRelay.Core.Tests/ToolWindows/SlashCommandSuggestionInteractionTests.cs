@@ -120,6 +120,7 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("x:Name=\"QueryTextBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding AddFilesCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"{Binding AddFilesButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{Binding AddFilesToolTipText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ToolTip=\"{Binding AddFilesToolTipText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ToolWindowTextBrushKey", xaml, StringComparison.Ordinal);
         Assert.Contains("Focusable\" Value=\"False\"", xaml, StringComparison.Ordinal);

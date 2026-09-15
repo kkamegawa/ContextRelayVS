@@ -50,6 +50,9 @@ internal sealed class ContextRelayHost : IDisposable
     private readonly record struct SendAttachmentSelection(
         IReadOnlyList<ResolvedAttachment> Attachments,
         IReadOnlyList<string> SubmittedPendingIds);
+    private readonly record struct ActiveChatResponse(
+        string Text,
+        ChatRequestStateMachine.Request RequestState);
 
     private readonly IContextRelayPackageServices packageServices;
     private readonly ContextRelayOutputLogger logger;
@@ -58,6 +61,7 @@ internal sealed class ContextRelayHost : IDisposable
     private readonly object draftQuerySync = new();
     private readonly object pendingAttachmentsSync = new();
     private readonly object activeChatRequestSync = new();
+    private readonly ChatRequestStateMachine chatRequestStateMachine = new();
     private readonly Lazy<IContextRelayAuthProvider> authProvider;
     private readonly FileSystemSharedSessionStore sharedStore;
     private readonly SharedStoreWatcher watcher;
@@ -254,6 +258,7 @@ internal sealed class ContextRelayHost : IDisposable
 
             if (route.Target == RouteTarget.Clear)
             {
+                chatRequestStateMachine.Clear();
                 await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
                 await snippetRepository.ClearAsync(cancellationToken).ConfigureAwait(false);
                 currentSearchResults = Array.Empty<ContextItem>();
@@ -361,20 +366,27 @@ internal sealed class ContextRelayHost : IDisposable
                 LogChatPayloadDiagnostics("ask", requestMessage, contextPayload);
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
                 copilotConversationAssistantItemId = null;
-                var reply = await SendCopilotMessageAsync(
+                var response = await SendCopilotMessageAsync(
                     token.AccessToken,
                     conversationId,
                     requestMessage,
                     contextPayload.SendOptions,
                     attachmentSelection.SubmittedPendingIds,
                     cancellationToken).ConfigureAwait(false);
+                var reply = response.Text;
                 if (string.IsNullOrWhiteSpace(reply))
                 {
                     throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
                 }
 
                 var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Ask, requestMessage, reply);
-                copilotConversationAssistantItemId = await AppendChatHistoryAsync(filePrompt.Prompt, normalizedReply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+                copilotConversationAssistantItemId = await AppendChatHistoryAsync(
+                    filePrompt.Prompt,
+                    normalizedReply,
+                    "ask",
+                    contextPayload.Labels,
+                    cancellationToken,
+                    response.RequestState).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
                 var askStatus = attachmentSelection.Attachments.Count == 0
                     ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count)
@@ -542,6 +554,7 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task<ContextRelayHostState> ClearChatAsync(CancellationToken cancellationToken = default)
     {
+        chatRequestStateMachine.Clear();
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -620,6 +633,7 @@ internal sealed class ContextRelayHost : IDisposable
 
                     attachment.DisplayName = attachment.RelativePath.Replace(Path.DirectorySeparatorChar, '/');
                     pendingAttachments.Add(attachment);
+                    chatRequestStateMachine.AddPendingAttachment(attachment.Id);
                     addedCount++;
                 }
             }
@@ -734,11 +748,12 @@ internal sealed class ContextRelayHost : IDisposable
             // button active against an already-advanced server conversation.
             copilotConversationAssistantItemId = null;
 
-            var continuation = await ContinueCopilotMessageAsync(
+            var continuationResponse = await ContinueCopilotMessageAsync(
                 token.AccessToken,
                 copilotConversationId!,
                 settings.ChatStreamResponses,
                 cancellationToken).ConfigureAwait(false);
+            var continuation = continuationResponse.Text;
             if (string.IsNullOrWhiteSpace(continuation))
             {
                 throw new InvalidOperationException(ContextRelayLocalizedStrings.AssistantContinuationEmptyStatus);
@@ -762,6 +777,10 @@ internal sealed class ContextRelayHost : IDisposable
                 Metadata = new Dictionary<string, JsonElement>(currentItem.Metadata),
                 ExtensionData = new Dictionary<string, JsonElement>(currentItem.ExtensionData)
             };
+            if (!continuationResponse.RequestState.TryRecordHistory())
+            {
+                return;
+            }
             await sharedStore.AppendChatHistoryAsync(new[] { continuationItem }, cancellationToken).ConfigureAwait(false);
             copilotConversationAssistantItemId = continuationItem.Id;
             logger.LogInformation("Fetched and updated Microsoft 365 Copilot continuation.");
@@ -861,6 +880,7 @@ internal sealed class ContextRelayHost : IDisposable
 
     public void Dispose()
     {
+        chatRequestStateMachine.Dispose();
         disposeCancellation.Cancel();
         watcher.Changed -= OnSharedStoreChanged;
         workIqAdapter.Dispose();
@@ -1014,6 +1034,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             pendingAttachments.RemoveAll(item => string.Equals(item.Id, attachmentId, StringComparison.Ordinal));
         }
+        chatRequestStateMachine.RemovePendingAttachment(attachmentId);
 
         await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
         return state;
@@ -1042,6 +1063,12 @@ internal sealed class ContextRelayHost : IDisposable
             return new SendAttachmentSelection(result, submittedPendingIds);
         }
 
+        ResolvedAttachment[] pendingSnapshot;
+        lock (pendingAttachmentsSync)
+        {
+            pendingSnapshot = pendingAttachments.Select(item => item.Clone()).ToArray();
+        }
+
         foreach (var mention in mentions)
         {
             var attachment = ToAttachment(mention);
@@ -1050,21 +1077,21 @@ internal sealed class ContextRelayHost : IDisposable
                 result.Add(attachment);
                 if (result.Count >= maxAttachments)
                 {
+                    submittedPendingIds.AddRange(pendingSnapshot
+                        .Where(item => seen.Contains(item.AbsolutePath))
+                        .Select(item => item.Id));
                     return new SendAttachmentSelection(result, submittedPendingIds);
                 }
             }
-        }
-
-        ResolvedAttachment[] pendingSnapshot;
-        lock (pendingAttachmentsSync)
-        {
-            pendingSnapshot = pendingAttachments.Select(item => item.Clone()).ToArray();
         }
 
         foreach (var attachment in pendingSnapshot)
         {
             if (!seen.Add(attachment.AbsolutePath))
             {
+                // A pending chip is consumed when its file participates in the
+                // submitted request, even if a #mention supplied the payload.
+                submittedPendingIds.Add(attachment.Id);
                 continue;
             }
 
@@ -1097,13 +1124,14 @@ internal sealed class ContextRelayHost : IDisposable
 
     public void StopGeneration()
     {
+        chatRequestStateMachine.Stop();
         lock (activeChatRequestSync)
         {
             activeChatRequestCancellation?.Cancel();
         }
     }
 
-    private async Task<string> SendCopilotMessageAsync(
+    private async Task<ActiveChatResponse> SendCopilotMessageAsync(
         string accessToken,
         string conversationId,
         string message,
@@ -1123,7 +1151,7 @@ internal sealed class ContextRelayHost : IDisposable
             cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<string> ContinueCopilotMessageAsync(
+    private async Task<ActiveChatResponse> ContinueCopilotMessageAsync(
         string accessToken,
         string conversationId,
         bool streamResponses,
@@ -1140,7 +1168,7 @@ internal sealed class ContextRelayHost : IDisposable
             cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<string> RunActiveChatRequestAsync(
+    private async Task<ActiveChatResponse> RunActiveChatRequestAsync(
         Func<CancellationToken, IProgress<string>, Task<string>> sendAsync,
         IReadOnlyList<string> submittedPendingIds,
         CancellationToken cancellationToken)
@@ -1148,6 +1176,10 @@ internal sealed class ContextRelayHost : IDisposable
         using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             disposeCancellation.Token);
+        if (!chatRequestStateMachine.TryBegin(submittedPendingIds, requestCancellation.Token, out var requestState))
+        {
+            throw new InvalidOperationException("A chat request is already in progress.");
+        }
         lock (activeChatRequestSync)
         {
             activeChatRequestCancellation = requestCancellation;
@@ -1164,9 +1196,10 @@ internal sealed class ContextRelayHost : IDisposable
 
         try
         {
-            return await sendAsync(requestCancellation.Token, progress).ConfigureAwait(false);
+            var response = await sendAsync(requestState.CancellationToken, progress).ConfigureAwait(false);
+            return new ActiveChatResponse(response, requestState);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && requestCancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && requestState.CancellationToken.IsCancellationRequested)
         {
             throw new ChatGenerationStoppedException();
         }
@@ -1180,11 +1213,12 @@ internal sealed class ContextRelayHost : IDisposable
                 }
             }
 
-            if (submittedPendingIds.Count > 0)
+            var consumedPendingIds = chatRequestStateMachine.Complete(requestState);
+            if (consumedPendingIds.Count > 0)
             {
                 lock (pendingAttachmentsSync)
                 {
-                    pendingAttachments.RemoveAll(item => submittedPendingIds.Contains(item.Id, StringComparer.Ordinal));
+                    pendingAttachments.RemoveAll(item => consumedPendingIds.Contains(item.Id, StringComparer.Ordinal));
                 }
             }
 
@@ -1238,8 +1272,14 @@ internal sealed class ContextRelayHost : IDisposable
         string assistantReply,
         string? kind,
         IReadOnlyList<string> contextLabels,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChatRequestStateMachine.Request? requestState = null)
     {
+        if (requestState is not null && !requestState.TryRecordHistory())
+        {
+            return string.Empty;
+        }
+
         var assistantItem = CreateChatItem("assistant", assistantReply, kind, contextLabels);
         await sharedStore.AppendChatHistoryAsync(new[]
         {
@@ -1299,20 +1339,27 @@ internal sealed class ContextRelayHost : IDisposable
         LogChatPayloadDiagnostics("chat", requestMessage, contextPayload);
         var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
         copilotConversationAssistantItemId = null;
-        var reply = await SendCopilotMessageAsync(
+        var response = await SendCopilotMessageAsync(
             accessToken,
             conversationId,
             requestMessage,
             contextPayload.SendOptions,
             attachmentSelection.SubmittedPendingIds,
             cancellationToken).ConfigureAwait(false);
+        var reply = response.Text;
         if (string.IsNullOrWhiteSpace(reply))
         {
             throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
         }
 
         var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Chat, requestMessage, reply);
-        copilotConversationAssistantItemId = await AppendChatHistoryAsync(message, normalizedReply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+        copilotConversationAssistantItemId = await AppendChatHistoryAsync(
+            message,
+            normalizedReply,
+            "chat",
+            contextPayload.Labels,
+            cancellationToken,
+            response.RequestState).ConfigureAwait(false);
         logger.LogInformation("Handled plain chat with Microsoft 365 Copilot.");
         var chatStatus = contextPayload.Labels.Count == 0
             ? ContextRelayLocalizedStrings.ChatReplyShownStatus
