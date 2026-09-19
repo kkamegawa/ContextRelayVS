@@ -398,7 +398,32 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private void OnHostStateChanged(object? sender, ContextRelayStateChangedEventArgs e)
     {
+        if (e.StreamingOnly)
+        {
+            ApplyStreamingState(e.State);
+            return;
+        }
+
         ApplyState(e.State);
+    }
+
+    /// <summary>
+    /// Applies a streaming progress snapshot. One arrives per response frame, so this notifies only the
+    /// streaming properties instead of rescanning every collection and refreshing all localized labels.
+    /// </summary>
+    /// <param name="state">The host state carrying the current streaming snapshot.</param>
+    private void ApplyStreamingState(ContextRelayHostState state)
+    {
+        isApplyingState = true;
+        try
+        {
+            IsStreaming = state.IsStreaming;
+            StreamingResponseText = state.StreamingResponseText;
+        }
+        finally
+        {
+            isApplyingState = false;
+        }
     }
 
     private void ApplyState(ContextRelayHostState state)

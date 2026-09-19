@@ -106,7 +106,7 @@ Registered by an in-proc VSSDK `AsyncPackage` and persisted to the shared JSON s
 
 - **Integrated page**: one `ContextRelay > General` property grid that contains General, Authentication, Diagnostics, Caching, and Feature toggles.
 - **Shared persistence**: the in-proc Options page writes to the same JSON file consumed by the out-of-proc extension.
-- **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value.
+- **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value. Option labels resolve from that persisted value rather than the Visual Studio process culture, and the property descriptors refresh when it changes.
 - **Chat settings**: the `Chat` category exposes `ChatMaxAttachedFiles` (default `5`, non-negative; `0` disables attachments), `ChatAttachActiveEditor` (default `false`), and `ChatStreamResponses` (default `true`). These values are persisted in the same JSON object and missing properties retain these defaults for existing settings files.
 
 ## 8.1 Chat context rules and parity settings (Issue #184)

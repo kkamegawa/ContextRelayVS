@@ -62,6 +62,37 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void OnHostStateChanged_StreamingOnlyUpdate_NotifiesOnlyStreamingProperties()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var eventArgsType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayStateChangedEventArgs", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var onHostStateChanged = viewModelType.GetMethod("OnHostStateChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        SetState(stateType, state, "SearchResults", new[] { new ContextItem { Title = "title", Snippet = "snippet", Source = ContextSource.Mail, Timestamp = "time", Url = "url" } });
+        SetState(stateType, state, "PendingAttachments", new[] { new ResolvedAttachment { Id = "pending-id", RelativePath = "file.md" } });
+        applyState.Invoke(viewModel, new[] { state });
+
+        var notifyPropertyChanged = Assert.IsAssignableFrom<INotifyPropertyChanged>(viewModel);
+        var raisedProperties = new System.Collections.Generic.List<string?>();
+        notifyPropertyChanged.PropertyChanged += (_, e) => raisedProperties.Add(e.PropertyName);
+
+        SetState(stateType, state, "IsStreaming", true);
+        SetState(stateType, state, "StreamingResponseText", "partial response");
+        var streamingArgs = Activator.CreateInstance(eventArgsType, new object[] { state, true })!;
+        onHostStateChanged.Invoke(viewModel, new object?[] { null, streamingArgs });
+
+        Assert.Equal("partial response", viewModelType.GetProperty("StreamingResponseText")!.GetValue(viewModel));
+        Assert.True((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
+        Assert.Equal(new[] { "IsStreaming", "StreamingResponseText" }, raisedProperties);
+    }
+
+    [Fact]
     public void SlashCommandSuggestion_IsSelected_RaisesPropertyChangedOnlyWhenValueChanges()
     {
         var assembly = LoadBuiltExtensionAssembly();

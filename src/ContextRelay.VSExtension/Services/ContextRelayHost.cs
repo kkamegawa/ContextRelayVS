@@ -1420,7 +1420,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         state.IsStreaming = isStreaming;
         state.StreamingResponseText = streamingResponseText;
-        StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state));
+        StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state, streamingOnly: true));
     }
 
     private static string AppendGroundingInstruction(string message, ChatContextPayload payload)

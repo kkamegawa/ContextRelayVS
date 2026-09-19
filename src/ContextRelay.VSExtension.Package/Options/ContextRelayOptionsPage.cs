@@ -277,6 +277,23 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     [DefaultValue(true)]
     public bool TodoEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Applies the configured ContextRelay UI language to the option labels and refreshes the
+    /// property descriptors so the property grid re-reads them after a language change.
+    /// </summary>
+    /// <param name="uiLanguage">The configured UI language value.</param>
+    private void ApplyUiLanguage(string uiLanguage)
+    {
+        var normalized = ContextRelaySettingsStore.NormalizeUiLanguage(uiLanguage);
+        if (string.Equals(normalized, OptionsLocalization.CurrentUiLanguage, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        OptionsLocalization.SetUiLanguage(normalized);
+        TypeDescriptor.Refresh(this);
+    }
+
     /// <inheritdoc />
     public override void Load()
     {
@@ -324,6 +341,7 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
         ChatAttachActiveEditor = settings.ChatAttachActiveEditor;
         ChatStreamResponses = settings.ChatStreamResponses;
         UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage);
+        ApplyUiLanguage(UiLanguage);
         EnableGraphDebugLogging = settings.EnableGraphDebugLogging;
         EnableWorkIqDebugLogging = settings.EnableWorkIqDebugLogging;
         AllowLocalFileContextForWorkIq = settings.AllowLocalFileContextForWorkIq;
