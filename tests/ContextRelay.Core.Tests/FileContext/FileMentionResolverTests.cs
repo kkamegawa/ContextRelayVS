@@ -42,6 +42,22 @@ public sealed class FileMentionResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_ResolvesMentionsWhenWorkspaceIsOpenedAtThePathRoot()
+    {
+        WriteFile("root-workspace.md", "Root workspace file");
+        var filePath = Path.Combine(root, "root-workspace.md");
+        var pathRoot = Path.GetPathRoot(filePath);
+        Assert.False(string.IsNullOrEmpty(pathRoot));
+
+        var mentionPath = filePath.Substring(pathRoot!.Length).Replace(Path.DirectorySeparatorChar, '/');
+        var result = FileMentionResolver.Resolve($"Summarize #\"{mentionPath}\" please", new[] { pathRoot! });
+
+        Assert.Empty(result.Errors);
+        Assert.Single(result.Files);
+        Assert.Equal(mentionPath, result.Files[0].RelativePath);
+    }
+
+    [Fact]
     public void Resolve_PreservesQuotedMentionPathTextInCleanedPrompt()
     {
         WriteFile("notes\\release plan.md", "Release items");

@@ -293,13 +293,35 @@ public static class FileMentionResolver
             return true;
         }
 
-        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
+        var rootWithSeparator = EndsWithSeparator(normalizedRoot)
+            ? normalizedRoot
+            : normalizedRoot + Path.DirectorySeparatorChar;
         return normalizedCandidate.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool EndsWithSeparator(string value)
+    {
+        return value.Length > 0 &&
+            (value[value.Length - 1] == Path.DirectorySeparatorChar ||
+             value[value.Length - 1] == Path.AltDirectorySeparatorChar);
     }
 
     private static string TrimTrailingSeparators(string value)
     {
-        return value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        // Keep the path root intact. Trimming every separator turns a Unix root ("/") into an empty
+        // string and a Windows drive root ("C:\") into the drive-relative path "C:", which then
+        // rejects every file in a workspace opened at the root.
+        var pathRoot = Path.GetPathRoot(value);
+        var minimumLength = pathRoot?.Length ?? 0;
+        var result = value;
+        while (result.Length > minimumLength &&
+            (result[result.Length - 1] == Path.DirectorySeparatorChar ||
+             result[result.Length - 1] == Path.AltDirectorySeparatorChar))
+        {
+            result = result.Substring(0, result.Length - 1);
+        }
+
+        return result;
     }
 
     private static string StripMentionTokens(string input, IReadOnlyList<FileMentionCandidate> candidates)

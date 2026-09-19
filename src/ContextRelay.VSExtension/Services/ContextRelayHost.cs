@@ -1550,9 +1550,12 @@ internal sealed class ContextRelayHost : IDisposable
             cancellationToken,
             response.RequestState).ConfigureAwait(false);
         logger.LogInformation("Handled plain chat with Microsoft 365 Copilot.");
-        var chatStatus = contextPayload.Labels.Count == 0
+        // Labels also cover the search summary, which is orientation rather than explicit context.
+        // Report only the attachments and pinned snippets that the payload actually included.
+        var explicitContextCount = contextPayload.IncludedAttachmentIds.Count + contextPayload.IncludedPinnedSnippetCount;
+        var chatStatus = explicitContextCount == 0
             ? ContextRelayLocalizedStrings.ChatReplyShownStatus
-            : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(contextPayload.Labels.Count);
+            : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(explicitContextCount);
         return await RefreshStateCoreAsync(
             AddCopilotIntegrityWarningIfNeeded(chatStatus),
             originalInput,
