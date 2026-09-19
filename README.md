@@ -9,7 +9,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 
 ## Implemented features
 
-- **Plain Copilot chat** — input without a slash command starts or continues a Microsoft 365 Copilot conversation without implicit ContextRelay search context.
+- **Plain Copilot chat** — input without a slash command starts or continues a Microsoft 365 Copilot conversation. No search results are attached implicitly; only explicit context is sent, meaning pinned snippets, queued file attachments, `#file` mentions, and the saved active editor when that option is enabled. Unlike `/ask`, plain chat also runs when no explicit context is available.
 - **Explicit source search** across Exchange Mail, Teams, SharePoint, OneDrive, OneNote, Planner/To Do, and connectors via Microsoft Graph slash commands.
 - **Slash-command source targeting** — `/mail`, `/teams`, `/sharepoint`, `/onedrive`, `/onenote`, `/task`, `/connectors`, `/all`, `/ask`, `/workiq`, `/clear`.
 - **Slash-command discovery popup** — keyboard-navigable suggestions appear as you type `/...`.
@@ -40,7 +40,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 | `/task <query>` | Planner tasks and Microsoft To Do tasks |
 | `/connectors <query>` | Microsoft Graph connectors |
 | `/all <query>` | All enabled sources |
-| `/ask <instruction>` | Send pinned snippets to Microsoft 365 Copilot and show the answer in the panel |
+| `/ask <instruction>` | Send explicit context (pinned snippets, queued attachments, `#file` mentions, active editor) to Microsoft 365 Copilot and show the answer in the panel; rejected when no explicit context is available |
 | `/workiq <query>` | Send a natural language query to Work IQ (A2A protocol) |
 | `/clear` | Clear chat transcript, pinned snippets, and Work IQ conversation context |
 
@@ -53,6 +53,15 @@ Summarize #README.md
 ```
 
 File mentions are resolved only inside the opened Visual Studio workspace and restricted to Copilot-supported text/code file types. **Maximum attached files** (default five) applies to plain chat and `/ask`; `/workiq` always accepts up to five unique `#file` mentions. Work IQ local file context is disabled by default; enable **Allow local file context for Work IQ** in Tools > Options > ContextRelay before sending local file text to Work IQ.
+
+## Chat context, attachments, and streaming
+
+Plain chat and `/ask` use the same explicit context rules. `/ask` is rejected before any API request when none of that context is available, while plain chat runs either way.
+
+- **Attachments** — queue workspace files with the **+** button in the tool window or **Attach File to Chat** on the Tools > ContextRelay menu, and drop one with **Remove** on its chip. `#file` mentions are attached first, then queued attachments, then the active editor, up to **Maximum attached files**; `0` disables attachments entirely. A request claims the attachments it sends and clears them from the queue, so files queued while a response is generating are kept for the next request.
+- **Active editor** — enabling **Attach active editor** attaches the saved content of the file in the active editor. When the editor has a selection, only the selected lines are sent.
+- **Grounding** — a request that carries explicit context also carries an instruction to treat the attached files and pinned snippets as the primary sources, and Copilot web context is disabled for that request. Requests without explicit context are sent unchanged.
+- **Streaming** — with **Stream chat responses** enabled, the reply is shown incrementally while it arrives and **Stop** cancels generation. Stopping never issues an automatic continuation request.
 
 Responses that appear incomplete are reported as such and can be extended with the **Fetch continuation** button. Continuation is always a manual action.
 

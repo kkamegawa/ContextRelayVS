@@ -13,6 +13,11 @@ Visual Studio 版は、VS Code 版と同じスラッシュコマンド、チャ�
 - 添付数は `ChatMaxAttachedFiles` で制限し、既定値は 5、0 は添付なしです。
 - 送信対象の保留中添付はリクエスト送信時に画面上の保留キューから外します。応答生成中に追加したファイルは次のリクエスト用として保留し、送信中のファイルは添付上限の枠を使用しません。
 - `ChatAttachActiveEditor` の既定値は false、`ChatStreamResponses` の既定値は true です。
+- スラッシュコマンドなしの通常チャットも `/ask` と同じコンテキスト選択を使います。違いは、明示的コンテキストが無い場合でも実行を許す点だけです。
+- 添付の優先順位は `#file` メンション → 保留中の添付 → アクティブ エディターで、正規化したパスで重複を除き、`ChatMaxAttachedFiles` で打ち切ります。`/workiq` は従来どおり `FileMentionResolver.MaxFileMentions` を使います。
+- アクティブ エディターは保存済み内容のみを読み、選択範囲がある場合はその行だけを添付します。
+- 明示的コンテキストを含む要求では、`ChatContextPayloadBuilder.GroundingInstructionText` を送信メッセージに付加し、`CopilotWebContext.IsWebEnabled` を `false` にして Web 結果ではなく添付とピン留めを主情報源にします。明示的コンテキストが無い要求にはどちらも適用しません。
+- 生成中の要求はツールウィンドウから停止でき、停止した要求はキャンセルとして報告します。継続要求は常に手動です。
 
 ## Options と共有設定
 

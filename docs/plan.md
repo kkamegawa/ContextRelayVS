@@ -109,9 +109,16 @@ Registered by an in-proc VSSDK `AsyncPackage` and persisted to the shared JSON s
 - **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value.
 - **Chat settings**: the `Chat` category exposes `ChatMaxAttachedFiles` (default `5`, non-negative; `0` disables attachments), `ChatAttachActiveEditor` (default `false`), and `ChatStreamResponses` (default `true`). These values are persisted in the same JSON object and missing properties retain these defaults for existing settings files.
 
-## 8.1 `/ask` parity settings (Issue #184)
+## 8.1 Chat context rules and parity settings (Issue #184)
 
 The Visual Studio implementation uses the same explicit-context behavior as the VS Code extension. `/ask` accepts pinned snippets, pending local attachments, and the eligible saved active editor when enabled; it is rejected when no usable explicit context is available. Plain chat continues to work without explicit context. Response streaming is controlled by `ChatStreamResponses`, and the attachment count is bounded by `ChatMaxAttachedFiles`. Pending attachments are claimed and removed from the visible pending queue when the request is submitted, so files added during generation remain queued for the next request and do not compete with in-flight files for the limit.
+
+The same context selection applies to plain chat, so an input without a slash command is built from the identical sources and differs only in that it is allowed to run with no explicit context at all:
+
+- **Attachment selection**: `#file` mentions are taken first, then queued attachments, then the active editor, deduplicated by canonical path and truncated at `ChatMaxAttachedFiles`. `/workiq` keeps its own limit of `FileMentionResolver.MaxFileMentions`.
+- **Active editor**: only saved file content is read, and a non-empty editor selection narrows the attachment to the selected lines.
+- **Grounding**: when a request carries explicit context, `ChatContextPayloadBuilder.GroundingInstructionText` is appended to the outbound message and `CopilotWebContext.IsWebEnabled` is set to `false` so the answer is built from the attached files and pinned snippets instead of web results. Requests without explicit context send no grounding instruction and no web context override.
+- **Request lifecycle**: a request is cancellable from the tool window while it streams, and a stopped request reports cancellation without issuing an automatic continuation. Continuation stays manual.
 
 ## 9. Handoff docs
 
