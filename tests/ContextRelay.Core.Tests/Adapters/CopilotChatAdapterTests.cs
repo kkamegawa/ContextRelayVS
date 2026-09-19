@@ -59,7 +59,7 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
-    public async Task SendMessageAsync_ContinuesWhenResponseLooksTruncated()
+    public async Task SendMessageAsync_DoesNotAutomaticallyContinueWhenResponseLooksTruncated()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
@@ -84,16 +84,15 @@ public sealed class CopilotChatAdapterTests
 
         var reply = await adapter.SendMessageAsync("token", "c", "Create a fenced block.", cancellationToken: cancellationToken);
 
-        Assert.Equal($"```text\nFirst line{Environment.NewLine}Second line.\n```", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
-        Assert.Contains("Continue exactly from where", handler.RequestBodies[1], StringComparison.Ordinal);
+        Assert.Equal("```text\nFirst line", reply);
+        Assert.Single(handler.RequestBodies);
         Assert.True(adapter.LastResponseDiagnostics.TruncationDetected);
-        Assert.False(adapter.LastResponseDiagnostics.MayBeIncomplete);
-        Assert.Equal(1, adapter.LastResponseDiagnostics.ContinuationRounds);
+        Assert.True(adapter.LastResponseDiagnostics.MayBeIncomplete);
+        Assert.Equal(0, adapter.LastResponseDiagnostics.ContinuationRounds);
     }
 
     [Fact]
-    public async Task SendMessageAsync_StopsContinuationAtLimit()
+    public async Task SendMessageAsync_ReturnsTruncatedResponseWithoutContinuationRounds()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
@@ -108,14 +107,14 @@ public sealed class CopilotChatAdapterTests
 
         var reply = await adapter.SendMessageAsync("token", "c", "Create a fenced block.", cancellationToken: cancellationToken);
 
-        Assert.Contains("part 5", reply, StringComparison.Ordinal);
-        Assert.Equal(6, handler.RequestBodies.Count);
+        Assert.Contains("part 0", reply, StringComparison.Ordinal);
+        Assert.Single(handler.RequestBodies);
         Assert.True(adapter.LastResponseDiagnostics.MayBeIncomplete);
-        Assert.Equal(5, adapter.LastResponseDiagnostics.ContinuationRounds);
+        Assert.Equal(0, adapter.LastResponseDiagnostics.ContinuationRounds);
     }
 
     [Fact]
-    public async Task SendMessageAsync_StopsContinuationWhenStitchingAddsNoNewContent()
+    public async Task SendMessageAsync_DoesNotRequestContinuationForRepeatedContent()
     {
         // The continuation repeats the tail of the existing response verbatim (full overlap),
         // so stitching adds nothing. Automatic continuation must stop after one attempt instead
@@ -135,17 +134,20 @@ public sealed class CopilotChatAdapterTests
         var reply = await adapter.SendMessageAsync("token", "c", "Create a fenced block.", cancellationToken: cancellationToken);
 
         Assert.Contains(repeatedTail, reply, StringComparison.Ordinal);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.Single(handler.RequestBodies);
         Assert.True(adapter.LastResponseDiagnostics.MayBeIncomplete);
-        Assert.Equal(1, adapter.LastResponseDiagnostics.ContinuationRounds);
+        Assert.Equal(0, adapter.LastResponseDiagnostics.ContinuationRounds);
     }
 
-    [Fact]
-    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsUnavailable()
+    [Theory]
+    [InlineData(404)]
+    [InlineData(405)]
+    [InlineData(501)]
+    public async Task SendMessageAsync_FallsBackToSynchronousChatBeforeAcceptanceForUnsupportedStreamingStatus(int streamingStatus)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
-            CreateResponse(HttpStatusCode.NotFound, """{ "error": { "code": "notFound" } }"""),
+            CreateResponse((HttpStatusCode)streamingStatus, """{ "error": { "code": "streamingUnavailable" } }"""),
             CreateResponse(HttpStatusCode.OK, """
                 {
                   "messages": [
@@ -160,13 +162,13 @@ public sealed class CopilotChatAdapterTests
         var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
 
         Assert.Equal("Fallback reply.", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.Equal(2, handler.RequestBodies.Count); // one stream attempt and one synchronous fallback
         Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
         Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingTimesOut()
+    public async Task SendMessageAsync_DoesNotFallbackToSynchronousChatWhenStreamingTimesOut()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
@@ -182,12 +184,9 @@ public sealed class CopilotChatAdapterTests
         using var httpClient = new HttpClient(handler);
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
 
-        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
-
-        Assert.Equal("Fallback after timeout.", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        await Assert.ThrowsAnyAsync<Exception>(() => adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken));
+        Assert.Single(handler.RequestBodies);
         Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
-        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -216,7 +215,7 @@ public sealed class CopilotChatAdapterTests
     }
 
     [Fact]
-    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingErrorBodyStalls()
+    public async Task SendMessageAsync_DoesNotFallbackToSynchronousChatWhenStreamingErrorBodyStalls()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
@@ -232,16 +231,13 @@ public sealed class CopilotChatAdapterTests
         using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(100) };
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
 
-        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
-
-        Assert.Equal("Fallback after stalled error body.", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        await Assert.ThrowsAnyAsync<Exception>(() => adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken));
+        Assert.Single(handler.RequestBodies);
         Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
-        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingTransportFails()
+    public async Task SendMessageAsync_DoesNotFallbackToSynchronousChatWhenStreamingTransportFails()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
@@ -257,16 +253,13 @@ public sealed class CopilotChatAdapterTests
         using var httpClient = new HttpClient(handler);
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
 
-        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
-
-        Assert.Equal("Fallback after transport failure.", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken));
+        Assert.Single(handler.RequestBodies);
         Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
-        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task SendMessageAsync_FallsBackToSynchronousChatWhenStreamingIsThrottled()
+    public async Task SendMessageAsync_DoesNotFallbackToSynchronousChatWhenStreamingIsThrottled()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var handler = new RecordingQueueHttpMessageHandler(
@@ -282,12 +275,9 @@ public sealed class CopilotChatAdapterTests
         using var httpClient = new HttpClient(handler);
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
 
-        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken);
-
-        Assert.Equal("Fallback after throttle.", reply);
-        Assert.Equal(2, handler.RequestBodies.Count);
+        await Assert.ThrowsAnyAsync<Exception>(() => adapter.SendMessageAsync("token", "c", "Summarize.", cancellationToken: cancellationToken));
+        Assert.Single(handler.RequestBodies);
         Assert.EndsWith("/chatOverStream", handler.RequestUris[0], StringComparison.Ordinal);
-        Assert.EndsWith("/chat", handler.RequestUris[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -307,6 +297,82 @@ public sealed class CopilotChatAdapterTests
 
         Assert.Contains("First line", reply, StringComparison.Ordinal);
         Assert.True(adapter.LastResponseDiagnostics.MayBeIncomplete);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_DisabledStreamingUsesSynchronousEndpointFromStart()
+    {
+        var handler = new RecordingQueueHttpMessageHandler(CreateResponse(HttpStatusCode.OK,
+            """{ "messages": [{ "text": "Summarize." }, { "text": "Synchronous reply." }] }"""));
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Summarize.",
+            new CopilotChatSendOptions { StreamResponses = false },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Synchronous reply.", reply);
+        Assert.Single(handler.RequestUris);
+        Assert.EndsWith("/chat", handler.RequestUris[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_ReportsCumulativeStreamingSnapshots()
+    {
+        var handler = new RecordingQueueHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "data: {\"messages\":[{\"text\":\"Prompt\"},{\"text\":\"First\"}]}\n\n" +
+                "data: {\"messages\":[{\"text\":\"Prompt\"},{\"text\":\"First and final\"}]}\n\n",
+                Encoding.UTF8,
+                "text/event-stream")
+        });
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+        var progressValues = new List<string>();
+
+        var reply = await adapter.SendMessageAsync("token", "c", "Prompt",
+            cancellationToken: TestContext.Current.CancellationToken,
+            progress: new RecordingProgress(progressValues));
+
+        Assert.Equal("First and final", reply);
+        Assert.Equal(new[] { "First", "First and final" }, progressValues);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_SerializesDisabledWebContextForGroundedRequests()
+    {
+        var handler = new RecordingQueueHttpMessageHandler(CreateResponse(
+            HttpStatusCode.OK,
+            """{ "messages": [{ "text": "Prompt" }, { "text": "Reply" }] }"""));
+        using var httpClient = new HttpClient(handler);
+        var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));
+
+        await adapter.SendMessageAsync(
+            "token",
+            "c",
+            "Prompt",
+            new CopilotChatSendOptions
+            {
+                StreamResponses = false,
+                WebContext = new CopilotWebContext { IsWebEnabled = false }
+            },
+            TestContext.Current.CancellationToken);
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.False(body.RootElement.GetProperty("webContext").GetProperty("isWebEnabled").GetBoolean());
+    }
+
+    private sealed class RecordingProgress : IProgress<string>
+    {
+        private readonly ICollection<string> values;
+
+        public RecordingProgress(ICollection<string> values)
+        {
+            this.values = values;
+        }
+
+        public void Report(string value) => values.Add(value);
     }
 
 

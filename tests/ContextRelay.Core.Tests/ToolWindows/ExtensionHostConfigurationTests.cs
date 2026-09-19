@@ -32,7 +32,9 @@ public sealed class ExtensionHostConfigurationTests
         var toolWindows = document.RootElement.GetProperty("toolWindows").EnumerateArray().ToArray();
         var controlPlacements = document.RootElement.GetProperty("controlPlacements").EnumerateArray().ToArray();
 
-        Assert.DoesNotContain("%ContextRelay.", manifestText);
+        const string attachFileDisplayToken = "%ContextRelay.Command.AttachFileToChat.DisplayName%";
+        Assert.Contains(attachFileDisplayToken, manifestText);
+        Assert.DoesNotContain("%ContextRelay.", manifestText.Replace(attachFileDisplayToken, string.Empty, StringComparison.Ordinal));
         Assert.NotEmpty(services);
         Assert.Contains(
             services,
@@ -89,6 +91,25 @@ public sealed class ExtensionHostConfigurationTests
         Assert.DoesNotContain(
             contextRelayToolsPlacements,
             placement => placement.GetProperty("controlName").GetString() == ContextRelayMenuName);
+    }
+
+    [Fact]
+    public void BuiltExtensionManifest_ContainsLocalizedAttachFileCommandResources()
+    {
+        var extensionAssemblyPath = BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.dll");
+        var extensionOutputDirectory = Path.GetDirectoryName(extensionAssemblyPath);
+        Assert.NotNull(extensionOutputDirectory);
+
+        var rootResource = Path.Combine(extensionOutputDirectory!, ".vsextension", "string-resources.json");
+        var japaneseResource = Path.Combine(extensionOutputDirectory!, ".vsextension", "ja", "string-resources.json");
+        Assert.True(File.Exists(rootResource), "Default string-resources.json was not deployed.");
+        Assert.True(File.Exists(japaneseResource), "Japanese string-resources.json was not deployed.");
+
+        using var root = JsonDocument.Parse(File.ReadAllText(rootResource));
+        using var japanese = JsonDocument.Parse(File.ReadAllText(japaneseResource));
+        const string key = "ContextRelay.Command.AttachFileToChat.DisplayName";
+        Assert.Equal("Attach File to Chat", root.RootElement.GetProperty(key).GetString());
+        Assert.Equal("チャットにファイルを添付", japanese.RootElement.GetProperty(key).GetString());
     }
 
     private static bool IsToolsMenuPlacement(JsonElement placement)

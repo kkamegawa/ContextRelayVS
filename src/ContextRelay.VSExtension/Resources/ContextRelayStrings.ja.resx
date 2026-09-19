@@ -16,6 +16,13 @@
   <data name="CopyPromptButtonText" xml:space="preserve"><value>プロンプトをコピー</value></data>
   <data name="OpenHandoffButtonText" xml:space="preserve"><value>引き継ぎ文書を開く</value></data>
   <data name="OpenCopilotButtonText" xml:space="preserve"><value>Copilot を開く</value></data>
+  <data name="AttachFileToChatButtonText" xml:space="preserve"><value>ファイルを添付</value></data>
+  <data name="RemoveAttachmentButtonText" xml:space="preserve"><value>削除</value></data>
+  <data name="RemoveAttachmentAutomationName_Format" xml:space="preserve"><value>添付ファイル {0} を削除</value></data>
+  <data name="StopGenerationButtonText" xml:space="preserve"><value>停止</value></data>
+  <data name="ChatResponseCancelledStatus" xml:space="preserve"><value>応答の生成をキャンセルしました。</value></data>
+  <data name="ChatResponseFailedStatus" xml:space="preserve"><value>応答の生成に失敗しました: {0}</value></data>
+  <data name="AddFilesToolTip" xml:space="preserve"><value>次のチャット要求にローカル ワークスペース ファイルを添付します。</value></data>
   <data name="ClearChatButtonText" xml:space="preserve"><value>チャットをクリア</value></data>
   <data name="ClearSnippetsButtonText" xml:space="preserve"><value>スニペットをクリア</value></data>
   <data name="ClearCacheButtonText" xml:space="preserve"><value>キャッシュをクリア</value></data>
@@ -41,7 +48,7 @@
   <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>指定したソースは ContextRelay のオプションで無効です。</value></data>
   <data name="AskDisabledStatus" xml:space="preserve"><value>/ask は無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
   <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot チャットは無効です。ContextRelay のオプションで chat preview を有効にしてください。</value></data>
-  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>/ask を使うには先に 1 件以上のスニペットをピン留めするか、#path でローカル ファイルを指定してください。明示したコンテキストが Microsoft 365 Copilot に送信されます。</value></data>
+  <data name="AskRequiresContextStatus" xml:space="preserve"><value>/ask を使うには、スニペットをピン留めする、保留中のファイル添付を追加する、#path でローカル ファイルを指定する、またはアクティブ エディターの添付を有効にしてください。明示したコンテキストが Microsoft 365 Copilot に送信されます。</value></data>
   <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value># ファイル メンションを削除するとプロンプトが空になります。</value></data>
   <data name="FilePickerWorkspaceUnavailableStatus" xml:space="preserve"><value>ローカル ファイルを追加する前にソリューションまたはワークスペース ファイルを開いてください。</value></data>
   <data name="FilePickerNoFilesSelectedStatus" xml:space="preserve"><value>ファイルが選択されませんでした。</value></data>
@@ -90,8 +97,8 @@
   <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットをコンテキストとして使用しました。</value></data>
   <data name="AskReplyShownWithContextBreakdownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件のピン留めスニペットと {1} 件のローカル ファイル コンテキストを使用しました。</value></data>
   <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot の応答をパネルに表示しました。{0} 件の明示的な ContextRelay コンテキストを使用しました。</value></data>
-  <data name="CopilotResponseMayBeIncompleteStatus_Format" xml:space="preserve"><value>{0} 自動継続後も応答がまだ不完全な可能性があります。</value></data>
-  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>1 回のメッセージで参照できるファイルは最大 {0} 個です。</value></data>
+  <data name="CopilotResponseMayBeIncompleteStatus_Format" xml:space="preserve"><value>{0} 応答は不完全な可能性があります。「続きを取得」で続きを要求できます。</value></data>
+  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>1 回のメッセージで添付できるファイルは最大 {0} 件です。</value></data>
   <data name="LocalFileContextLabel_Format" xml:space="preserve"><value>ローカル ファイル: {0}</value></data>
   <data name="FileMentionNotFoundStatus_Format" xml:space="preserve"><value>#{0} のファイルが見つかりません。</value></data>
   <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>#{0} のファイルは開いているワークスペースの外にあります。</value></data>
@@ -105,8 +112,8 @@
   <data name="SearchSummaryCachedSuffix" xml:space="preserve"><value> （キャッシュ）</value></data>
   <data name="SearchSummaryTopItems_Format" xml:space="preserve"><value> 上位項目: {0}。</value></data>
   <data name="SearchSummarySourceLine_Format" xml:space="preserve"><value>- {0}: {1} 件{2}。{3}</value></data>
-  <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>{0} 件のファイル メンションをクエリに追加しました。</value></data>
-  <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>{0} 件のファイル メンションを追加し、{1} 件のファイルは重複、ワークスペース範囲外、または上限超過のためスキップしました。</value></data>
+  <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>次のチャット要求に {0} 件のファイルを添付しました。</value></data>
+  <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>{0} 件のファイルを添付し、{1} 件は重複、ワークスペース範囲外、未対応のファイル形式、または添付上限のためスキップしました。</value></data>
   <data name="AddFilesDialogTitle" xml:space="preserve"><value>コンテキストとして追加するファイルを選択</value></data>
   <data name="AddFilesDialogFilter" xml:space="preserve"><value>すべてのファイル (*.*)|*.*</value></data>
   <data name="CreatedFilesFolderDialogTitle" xml:space="preserve"><value>ContextRelay が作成するファイルの保存先フォルダーを選択</value></data>

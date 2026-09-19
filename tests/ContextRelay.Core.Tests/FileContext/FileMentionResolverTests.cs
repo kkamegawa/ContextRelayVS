@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Tasks;
 using ContextRelay.Core.FileContext;
@@ -39,6 +39,22 @@ public sealed class FileMentionResolverTests : IDisposable
         Assert.Single(result.Files);
         Assert.Equal("docs/plan.md", result.Files[0].RelativePath);
         Assert.StartsWith("file:///", result.Files[0].Uri, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_ResolvesMentionsWhenWorkspaceIsOpenedAtThePathRoot()
+    {
+        WriteFile("root-workspace.md", "Root workspace file");
+        var filePath = Path.Combine(root, "root-workspace.md");
+        var pathRoot = Path.GetPathRoot(filePath);
+        Assert.False(string.IsNullOrEmpty(pathRoot));
+
+        var mentionPath = filePath.Substring(pathRoot!.Length).Replace(Path.DirectorySeparatorChar, '/');
+        var result = FileMentionResolver.Resolve($"Summarize #\"{mentionPath}\" please", new[] { pathRoot! });
+
+        Assert.Empty(result.Errors);
+        Assert.Single(result.Files);
+        Assert.Equal(mentionPath, result.Files[0].RelativePath);
     }
 
     [Fact]
@@ -136,6 +152,62 @@ public sealed class FileMentionResolverTests : IDisposable
         Assert.Empty(result.Files);
         Assert.Single(result.Errors);
         Assert.Equal(FileMentionErrorCode.MentionLimitReached, result.Errors[0].Code);
+    }
+
+    [Fact]
+    public void Resolve_UsesConfiguredMentionLimit()
+    {
+        WriteFile("first.md", "first");
+        WriteFile("second.md", "second");
+
+        var result = FileMentionResolver.Resolve(
+            "Read #first.md #second.md",
+            new[] { root },
+            maxFileMentions: 1);
+
+        Assert.Empty(result.Files);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(FileMentionErrorCode.MentionLimitReached, error.Code);
+        Assert.Equal("1", error.Detail);
+    }
+
+    [Fact]
+    public void Resolve_DeduplicatesMentionsBeforeApplyingLimit()
+    {
+        WriteFile("shared.md", "shared");
+
+        var result = FileMentionResolver.Resolve(
+            "Read #shared.md #shared.md #\"shared.md\"",
+            new[] { root },
+            maxFileMentions: 1);
+
+        Assert.Empty(result.Errors);
+        Assert.Single(result.Files);
+        Assert.Equal("shared.md", result.Files[0].RelativePath);
+    }
+
+    [Fact]
+    public void Resolve_CanonicalizesSymlinkAliasesBeforeApplyingLimit()
+    {
+        var target = WriteFile("target.md", "target");
+        var alias = Path.Combine(root, "alias.md");
+        try
+        {
+            File.CreateSymbolicLink(alias, target);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            Assert.Skip($"Creating a symbolic link is unavailable in this environment: {ex.Message}");
+        }
+
+        var result = FileMentionResolver.Resolve(
+            "Read #target.md #alias.md",
+            new[] { root },
+            maxFileMentions: 1);
+
+        Assert.Empty(result.Errors);
+        Assert.Single(result.Files);
+        Assert.Equal(Path.GetFullPath(target), result.Files[0].AbsolutePath, ignoreCase: true);
     }
 
     [Fact]

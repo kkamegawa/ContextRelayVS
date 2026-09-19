@@ -18,10 +18,13 @@ public interface ICopilotChatAdapter
         string conversationId,
         string message,
         CopilotChatSendOptions? options = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        System.IProgress<string>? progress = null);
 
     Task<string> ContinueAsync(
         string accessToken,
         string conversationId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        System.IProgress<string>? progress = null,
+        bool streamResponses = true);
 }
