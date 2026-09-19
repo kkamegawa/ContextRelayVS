@@ -9,7 +9,7 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 
 ## Implemented features
 
-- **Plain Copilot chat** — input without a slash command starts or continues a Microsoft 365 Copilot conversation. No search results are attached implicitly; only explicit context is sent, meaning pinned snippets, queued file attachments, `#file` mentions, and the saved active editor when that option is enabled. Unlike `/ask`, plain chat also runs when no explicit context is available.
+- **Plain Copilot chat** — input without a slash command starts or continues a Microsoft 365 Copilot conversation. Individual search results are never attached; the explicit context is pinned snippets, queued file attachments, `#file` mentions, and the saved active editor when that option is enabled. The latest ContextRelay search summary may still be sent as orientation, but it does not count as explicit context. Unlike `/ask`, plain chat also runs when no explicit context is available.
 - **Explicit source search** across Exchange Mail, Teams, SharePoint, OneDrive, OneNote, Planner/To Do, and connectors via Microsoft Graph slash commands.
 - **Slash-command source targeting** — `/mail`, `/teams`, `/sharepoint`, `/onedrive`, `/onenote`, `/task`, `/connectors`, `/all`, `/ask`, `/workiq`, `/clear`.
 - **Slash-command discovery popup** — keyboard-navigable suggestions appear as you type `/...`.
@@ -56,11 +56,11 @@ File mentions are resolved only inside the opened Visual Studio workspace and re
 
 ## Chat context, attachments, and streaming
 
-Plain chat and `/ask` use the same explicit context rules. `/ask` is rejected before any API request when none of that context is available, while plain chat runs either way.
+Plain chat and `/ask` use the same explicit context rules. `/ask` is rejected locally — before authentication and before any Copilot request — when none of that context is available, while plain chat runs either way. The latest ContextRelay search summary is sent as orientation when one exists, but it is not explicit context: it neither satisfies the `/ask` check nor changes web context.
 
 - **Attachments** — queue workspace files with the **+** button in the tool window or **Attach File to Chat** on the Tools > ContextRelay menu, and drop one with **Remove** on its chip. `#file` mentions are attached first, then queued attachments, then the active editor, up to **Maximum attached files**; `0` disables attachments entirely. A request claims the attachments it sends and clears them from the queue, so files queued while a response is generating are kept for the next request.
 - **Active editor** — enabling **Attach active editor** attaches the saved content of the file in the active editor. When the editor has a selection, only the selected lines are sent.
-- **Grounding** — a request that carries explicit context also carries an instruction to treat the attached files and pinned snippets as the primary sources, and Copilot web context is disabled for that request. Requests without explicit context are sent unchanged.
+- **Grounding** — a request that carries explicit context also carries an instruction to treat the attached files and pinned snippets as the primary sources, and Copilot web context is disabled for that request. A request whose only context is the search summary is sent unchanged.
 - **Streaming** — with **Stream chat responses** enabled, the reply is shown incrementally while it arrives and **Stop** cancels generation. Stopping never issues an automatic continuation request.
 
 Responses that appear incomplete are reported as such and can be extended with the **Fetch continuation** button. Continuation is always a manual action.

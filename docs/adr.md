@@ -5,7 +5,7 @@
 - Context: Plain chat and `/ask` share one payload builder, and the same explicit context (pinned snippets, queued attachments, `#file` mentions, active editor) can now reach both routes. Copilot could still answer from web results instead of the attached material.
 - Decision: When a request carries explicit context, append `ChatContextPayloadBuilder.GroundingInstructionText` to the outbound message and set `CopilotWebContext.IsWebEnabled` to `false` for that request. Requests without explicit context are sent unchanged, with no grounding instruction and no web context override.
 - Reason: Attached files and pinned snippets are the reason the user attached them, so they must be the primary sources; turning off web context for grounded requests keeps the answer inside the material the user chose to share.
-- Consequence: Grounded prompts differ from the literal user input, so history normalization and diagnostics operate on the composed request message. Documentation must state that a grounded request does not use Copilot web results.
+- Consequence: Grounded prompts differ from the literal user input, so history normalization and diagnostics operate on the composed request message. Documentation must state that a grounded request does not use Copilot web results. The `/ask` context check runs before the Copilot token is acquired, so a request with no explicit context is rejected without authentication, and trusted workspace roots are compared through their final directory targets so a redirected directory cannot widen the trusted set.
 
 ## 2026-09-15 — Issue #184: Align Visual Studio `/ask` settings with VS Code
 

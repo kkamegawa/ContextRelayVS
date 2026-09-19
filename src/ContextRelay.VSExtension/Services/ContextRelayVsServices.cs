@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
@@ -97,9 +98,34 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
             return Array.Empty<string>();
         }
 
-        return rememberedRoots
-            .Where(rememberedRoot => currentWorkspaceRoots.Any(currentRoot => IsPathUnderRoot(rememberedRoot, currentRoot)))
-            .ToArray();
+        // Compare final directory targets. A remembered directory inside the solution can be a link or
+        // junction that points outside it, and a lexical comparison would promote that outside target
+        // to a trusted root for attachment validation.
+        var canonicalCurrentRoots = new List<string>(currentWorkspaceRoots.Count);
+        foreach (var currentRoot in currentWorkspaceRoots)
+        {
+            if (WorkspaceFileAttachmentResolver.TryGetCanonicalDirectory(currentRoot, out var canonicalCurrentRoot))
+            {
+                canonicalCurrentRoots.Add(canonicalCurrentRoot);
+            }
+        }
+
+        if (canonicalCurrentRoots.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var authorized = new List<string>(rememberedRoots.Count);
+        foreach (var rememberedRoot in rememberedRoots)
+        {
+            if (WorkspaceFileAttachmentResolver.TryGetCanonicalDirectory(rememberedRoot, out var canonicalRememberedRoot) &&
+                canonicalCurrentRoots.Any(canonicalCurrentRoot => IsPathUnderRoot(canonicalRememberedRoot, canonicalCurrentRoot)))
+            {
+                authorized.Add(rememberedRoot);
+            }
+        }
+
+        return authorized;
     }
 
     private static bool IsPathUnderRoot(string path, string root)

@@ -118,6 +118,8 @@ The same context selection applies to plain chat, so an input without a slash co
 - **Attachment selection**: `#file` mentions are taken first, then queued attachments, then the active editor, deduplicated by canonical path and truncated at `ChatMaxAttachedFiles`. `/workiq` keeps its own limit of `FileMentionResolver.MaxFileMentions`.
 - **Active editor**: only saved file content is read, and a non-empty editor selection narrows the attachment to the selected lines.
 - **Grounding**: when a request carries explicit context, `ChatContextPayloadBuilder.GroundingInstructionText` is appended to the outbound message and `CopilotWebContext.IsWebEnabled` is set to `false` so the answer is built from the attached files and pinned snippets instead of web results. Requests without explicit context send no grounding instruction and no web context override.
+- **Search summary**: the latest search summary is added to `additionalContext` as orientation when one exists, but it is not grounding context. It does not satisfy the `/ask` check and does not disable web context.
+- **Validation order**: `/ask` builds and validates its payload before acquiring a Copilot token, so a request with no explicit context is rejected locally without authentication or network work.
 - **Request lifecycle**: a request is cancellable from the tool window while it streams, and a stopped request reports cancellation without issuing an automatic continuation. Continuation stays manual.
 
 ## 9. Handoff docs

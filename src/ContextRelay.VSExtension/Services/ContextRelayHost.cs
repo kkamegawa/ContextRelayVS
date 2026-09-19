@@ -313,6 +313,38 @@ internal sealed class ContextRelayHost : IDisposable
                 return await HandleWorkIqCommandAsync(trimmed, filePrompt.Prompt, authSettings, settings, filePrompt.Files, cancellationToken).ConfigureAwait(false);
             }
 
+            // Build and validate the /ask payload before authentication. A request without explicit
+            // context must be rejected locally instead of triggering token acquisition or network work.
+            ChatContextPayload? askContextPayload = null;
+            var askAttachmentSelection = new SendAttachmentSelection(
+                Array.Empty<ResolvedAttachment>(),
+                Array.Empty<string>());
+            if (route.Target == RouteTarget.Ask)
+            {
+                if (!settings.EnableChatPreview)
+                {
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                }
+
+                var askSnippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                logger.LogDiagnostic($"/ask context sources: pinnedSnippets={askSnippets.Count}, localFiles={filePrompt.Files.Count}");
+                askAttachmentSelection = await GetSendAttachmentsAsync(
+                    filePrompt.Files,
+                    settings,
+                    clientContext,
+                    cancellationToken).ConfigureAwait(false);
+                askContextPayload = await ChatContextPayloadBuilder.BuildAsync(
+                    askAttachmentSelection.Attachments,
+                    askSnippets,
+                    lastSearchSummary,
+                    cancellationToken).ConfigureAwait(false);
+                askContextPayload.SendOptions.StreamResponses = settings.ChatStreamResponses;
+                if (!askContextPayload.HasGroundingContext)
+                {
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
             var featureOptions = settings.ToFeatureOptions();
             ContextRelayAccessToken token;
             try
@@ -344,28 +376,8 @@ internal sealed class ContextRelayHost : IDisposable
 
             if (route.Target == RouteTarget.Ask)
             {
-                if (!settings.EnableChatPreview)
-                {
-                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
-                }
-
-                var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-                logger.LogDiagnostic($"/ask context sources: pinnedSnippets={snippets.Count}, localFiles={filePrompt.Files.Count}");
-                var attachmentSelection = await GetSendAttachmentsAsync(
-                    filePrompt.Files,
-                    settings,
-                    clientContext,
-                    cancellationToken).ConfigureAwait(false);
-                var contextPayload = await ChatContextPayloadBuilder.BuildAsync(
-                    attachmentSelection.Attachments,
-                    snippets,
-                    lastSearchSummary,
-                    cancellationToken).ConfigureAwait(false);
-                contextPayload.SendOptions.StreamResponses = settings.ChatStreamResponses;
-                if (!contextPayload.HasGroundingContext)
-                {
-                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
-                }
+                var attachmentSelection = askAttachmentSelection;
+                var contextPayload = askContextPayload!;
                 var requestMessage = AppendGroundingInstruction(filePrompt.Prompt, contextPayload);
                 LogChatPayloadDiagnostics("ask", requestMessage, contextPayload);
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);

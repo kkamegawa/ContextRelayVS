@@ -17,6 +17,19 @@ public static class WorkspaceFileAttachmentResolver
 {
     public const int MaxFileChars = 12000;
 
+    /// <summary>
+    /// Resolves the final directory target of <paramref name="path"/>, following links and junctions.
+    /// Callers compare trusted roots through this method so a redirected directory cannot widen the trusted set.
+    /// </summary>
+    /// <param name="path">The directory path to canonicalize.</param>
+    /// <param name="canonicalPath">The canonical directory path when resolution succeeds.</param>
+    /// <returns><see langword="true"/> when the directory exists and its final target was resolved.</returns>
+    public static bool TryGetCanonicalDirectory(string path, out string canonicalPath)
+    {
+        canonicalPath = string.Empty;
+        return !string.IsNullOrWhiteSpace(path) && TryGetCanonicalPath(path, directory: true, out canonicalPath);
+    }
+
     public static bool TryResolve(
         string path,
         IReadOnlyList<string> workspaceRoots,

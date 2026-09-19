@@ -122,9 +122,25 @@ public sealed class FilePickerMentionFormattingTests
         try
         {
             var rememberedB = Path.Combine(workspaceB, "nested");
+            Directory.CreateDirectory(rememberedB);
             var afterSwitch = Assert.IsAssignableFrom<IReadOnlyList<string>>(
                 getAuthorizedRoots!.Invoke(null, new object[] { new[] { workspaceA, rememberedB }, new[] { workspaceB } }));
             Assert.Equal(new[] { rememberedB }, afterSwitch);
+
+            // A remembered directory inside the workspace that redirects outside it must not be trusted.
+            var redirected = Path.Combine(workspaceB, "redirected");
+            try
+            {
+                Directory.CreateSymbolicLink(redirected, workspaceA);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                Assert.Skip($"Creating a directory symbolic link is unavailable: {ex.Message}");
+            }
+
+            var withRedirectedRoot = Assert.IsAssignableFrom<IReadOnlyList<string>>(
+                getAuthorizedRoots.Invoke(null, new object[] { new[] { redirected }, new[] { workspaceB } }));
+            Assert.Empty(withRedirectedRoot);
 
             var withNoWorkspace = Assert.IsAssignableFrom<IReadOnlyList<string>>(
                 getAuthorizedRoots.Invoke(null, new object[] { new[] { workspaceA }, Array.Empty<string>() }));
