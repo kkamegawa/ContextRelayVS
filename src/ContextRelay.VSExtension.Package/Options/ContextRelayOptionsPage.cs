@@ -29,6 +29,7 @@ internal partial class OptionsProvider
 public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptionsModel>
 {
     private int chatMaxAttachedFiles = 5;
+    private string uiLanguage = "auto";
 
     /// <summary>
     /// Gets or sets the maximum number of results returned for each ContextRelay search.
@@ -95,7 +96,18 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     [DisplayName("UI language")]
     [Description("Selects the ContextRelay UI language. Use 'auto' to follow the Visual Studio language.")]
     [DefaultValue("auto")]
-    public string UiLanguage { get; set; } = "auto";
+    public string UiLanguage
+    {
+        get => uiLanguage;
+        set
+        {
+            uiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(value);
+
+            // Apply on assignment so editing this value, loading the shared settings file, or a tool
+            // window language change all switch the localized option labels without waiting for Save.
+            ApplyUiLanguage(uiLanguage);
+        }
+    }
 
     /// <summary>
     /// Gets or sets a value indicating whether verbose Microsoft Graph logging is enabled.
@@ -340,8 +352,7 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
         ChatMaxAttachedFiles = settings.ChatMaxAttachedFiles;
         ChatAttachActiveEditor = settings.ChatAttachActiveEditor;
         ChatStreamResponses = settings.ChatStreamResponses;
-        UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage);
-        ApplyUiLanguage(UiLanguage);
+        UiLanguage = settings.UiLanguage;
         EnableGraphDebugLogging = settings.EnableGraphDebugLogging;
         EnableWorkIqDebugLogging = settings.EnableWorkIqDebugLogging;
         AllowLocalFileContextForWorkIq = settings.AllowLocalFileContextForWorkIq;

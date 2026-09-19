@@ -429,9 +429,23 @@ public static class WorkspaceFileAttachmentResolver
 
     private static string GetRelativePath(string root, string path)
     {
-        var rootUri = new Uri(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar);
-        var pathUri = new Uri(path);
-        return Uri.UnescapeDataString(rootUri.MakeRelativeUri(pathUri).ToString()).Replace('/', Path.DirectorySeparatorChar);
+        // Compute the relative path directly. Unix paths such as "/" and "/tmp/file.md" are not absolute
+        // System.Uri instances, so routing them through Uri.MakeRelativeUri throws on non-Windows hosts.
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (path.Length > normalizedRoot.Length &&
+            path.StartsWith(normalizedRoot, comparison) &&
+            (path[normalizedRoot.Length] == Path.DirectorySeparatorChar ||
+             path[normalizedRoot.Length] == Path.AltDirectorySeparatorChar))
+        {
+            return path.Substring(normalizedRoot.Length + 1)
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        }
+
+        // Callers verify containment first, so this only guards against unexpected input.
+        return Path.GetFileName(path);
     }
 
     private const uint FileShareRead = 0x00000001;
