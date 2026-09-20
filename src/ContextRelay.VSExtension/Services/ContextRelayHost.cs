@@ -315,10 +315,6 @@ internal sealed class ContextRelayHost : IDisposable
 
             // Build and validate the /ask payload before authentication. A request without explicit
             // context must be rejected locally instead of triggering token acquisition or network work.
-            ChatContextPayload? askContextPayload = null;
-            var askAttachmentSelection = new SendAttachmentSelection(
-                Array.Empty<ResolvedAttachment>(),
-                Array.Empty<string>());
             if (route.Target == RouteTarget.Ask)
             {
                 if (!settings.EnableChatPreview)
@@ -326,19 +322,11 @@ internal sealed class ContextRelayHost : IDisposable
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
 
-                var askSnippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-                logger.LogDiagnostic($"/ask context sources: pinnedSnippets={askSnippets.Count}, localFiles={filePrompt.Files.Count}");
-                askAttachmentSelection = await GetSendAttachmentsAsync(
+                var (_, askContextPayload) = await BuildSendContextAsync(
                     filePrompt.Files,
                     settings,
                     clientContext,
                     cancellationToken).ConfigureAwait(false);
-                askContextPayload = await ChatContextPayloadBuilder.BuildAsync(
-                    askAttachmentSelection.Attachments,
-                    askSnippets,
-                    lastSearchSummary,
-                    cancellationToken).ConfigureAwait(false);
-                askContextPayload.SendOptions.StreamResponses = settings.ChatStreamResponses;
                 if (!askContextPayload.HasGroundingContext)
                 {
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
@@ -376,12 +364,22 @@ internal sealed class ContextRelayHost : IDisposable
 
             if (route.Target == RouteTarget.Ask)
             {
-                var attachmentSelection = askAttachmentSelection;
-                var contextPayload = askContextPayload!;
-                var requestMessage = AppendGroundingInstruction(filePrompt.Prompt, contextPayload);
-                LogChatPayloadDiagnostics("ask", requestMessage, contextPayload);
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
                 copilotConversationAssistantItemId = null;
+                // The pre-auth payload only guards against context-less requests. Sign-in and conversation
+                // creation can take a while, so re-read attachments at the actual send boundary.
+                var (attachmentSelection, contextPayload) = await BuildSendContextAsync(
+                    filePrompt.Files,
+                    settings,
+                    clientContext,
+                    cancellationToken).ConfigureAwait(false);
+                if (!contextPayload.HasGroundingContext)
+                {
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                }
+
+                var requestMessage = AppendGroundingInstruction(filePrompt.Prompt, contextPayload);
+                LogChatPayloadDiagnostics("ask", requestMessage, contextPayload);
                 var includedPendingIds = GetIncludedPendingAttachmentIds(attachmentSelection, contextPayload);
                 var response = await SendCopilotMessageAsync(
                     token.AccessToken,
@@ -1501,6 +1499,28 @@ internal sealed class ContextRelayHost : IDisposable
         };
     }
 
+    private async Task<(SendAttachmentSelection Selection, ChatContextPayload Payload)> BuildSendContextAsync(
+        IReadOnlyList<ResolvedFileMention> localFiles,
+        ContextRelaySettingsSnapshot settings,
+        IClientContext? clientContext,
+        CancellationToken cancellationToken)
+    {
+        var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        logger.LogDiagnostic($"chat context sources: pinnedSnippets={snippets.Count}, localFiles={localFiles.Count}, hasSearchSummary={!string.IsNullOrWhiteSpace(lastSearchSummary)}");
+        var selection = await GetSendAttachmentsAsync(
+            localFiles,
+            settings,
+            clientContext,
+            cancellationToken).ConfigureAwait(false);
+        var payload = await ChatContextPayloadBuilder.BuildAsync(
+            selection.Attachments,
+            snippets,
+            lastSearchSummary,
+            cancellationToken).ConfigureAwait(false);
+        payload.SendOptions.StreamResponses = settings.ChatStreamResponses;
+        return (selection, payload);
+    }
+
     private async Task<ContextRelayHostState> HandleChatCommandAsync(
         string originalInput,
         string message,
@@ -1510,23 +1530,17 @@ internal sealed class ContextRelayHost : IDisposable
         IClientContext? clientContext,
         CancellationToken cancellationToken)
     {
-        var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        logger.LogDiagnostic($"chat context sources: pinnedSnippets={snippets.Count}, localFiles={localFiles.Count}, hasSearchSummary={!string.IsNullOrWhiteSpace(lastSearchSummary)}");
-        var attachmentSelection = await GetSendAttachmentsAsync(
+        var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
+        copilotConversationAssistantItemId = null;
+        // Build the payload only after token acquisition and conversation creation so attachments
+        // reflect the file state at the actual send boundary.
+        var (attachmentSelection, contextPayload) = await BuildSendContextAsync(
             localFiles,
             settings,
             clientContext,
             cancellationToken).ConfigureAwait(false);
-        var contextPayload = await ChatContextPayloadBuilder.BuildAsync(
-            attachmentSelection.Attachments,
-            snippets,
-            lastSearchSummary,
-            cancellationToken).ConfigureAwait(false);
-        contextPayload.SendOptions.StreamResponses = settings.ChatStreamResponses;
         var requestMessage = AppendGroundingInstruction(message, contextPayload);
         LogChatPayloadDiagnostics("chat", requestMessage, contextPayload);
-        var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
-        copilotConversationAssistantItemId = null;
         var includedPendingIds = GetIncludedPendingAttachmentIds(attachmentSelection, contextPayload);
         var response = await SendCopilotMessageAsync(
             accessToken,
