@@ -228,10 +228,13 @@ internal sealed class ContextRelayHost : IDisposable
         }
 
         var directory = Path.GetDirectoryName(ContextRelaySettingsStore.SettingsFilePath);
-        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        if (string.IsNullOrEmpty(directory))
         {
             return;
         }
+
+        // A fresh profile has no settings directory yet; create it so the first save raises Created.
+        Directory.CreateDirectory(directory);
 
         var created = new FileSystemWatcher(directory, Path.GetFileName(ContextRelaySettingsStore.SettingsFilePath))
         {
