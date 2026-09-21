@@ -270,6 +270,32 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void SuggestionKeyBindings_AreDisabledWhileTheCommandPopupIsClosed()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+
+        // The query box binds Tab to the apply command. While the popup is closed the binding must
+        // not handle the key, otherwise Tab cannot move focus to the composer's primary button.
+        var applyCommand = viewModelType.GetProperty("ApplyCommandSelectionCommand")!.GetValue(viewModel)!;
+        var canExecute = applyCommand.GetType().GetProperty("CanExecute")!;
+        var popupOpen = viewModelType.GetProperty("IsCommandPopupOpen")!;
+
+        Assert.False((bool)popupOpen.GetValue(viewModel)!);
+        Assert.False((bool)canExecute.GetValue(applyCommand)!);
+
+        var popupField = viewModelType.GetField("isCommandPopupOpen", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var refresh = viewModelType.GetMethod("UpdateSuggestionKeyBindingAvailability", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        popupField.SetValue(viewModel, true);
+        refresh.Invoke(viewModel, null);
+
+        Assert.True((bool)canExecute.GetValue(applyCommand)!);
+    }
+
+    [Fact]
     public void EmbeddedXaml_WiresSuggestionApplyAndConfirmBindings()
     {
         var assembly = LoadBuiltExtensionAssembly();

@@ -102,6 +102,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
         ConfirmQueryInputCommand = new AsyncCommand(async (_, context, ct) => await ConfirmQueryInputAsync(context, ct).ConfigureAwait(false));
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
+        UpdateSuggestionKeyBindingAvailability();
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -297,6 +298,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             {
                 isCommandPopupOpen = value;
                 RaiseNotifyPropertyChangedEvent(nameof(IsCommandPopupOpen));
+
+                // The query box binds Tab, Up, Down, and Escape to these commands. While the
+                // popup is closed the key bindings must not handle the key, so Tab keeps moving
+                // focus to the next control instead of being swallowed by the input.
+                UpdateSuggestionKeyBindingAvailability();
             }
         }
     }
@@ -755,6 +761,19 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         // Notify the derived caption last. It reads whichever label matches the current state,
         // so notifying before both labels are assigned would publish the previous language.
         RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
+    }
+
+    /// <summary>
+    /// Enables the suggestion key bindings only while the slash-command popup is open, so the
+    /// query box does not consume Tab, Up, Down, or Escape when there is nothing to navigate.
+    /// </summary>
+    private void UpdateSuggestionKeyBindingAvailability()
+    {
+        var popupOpen = isCommandPopupOpen;
+        ApplyCommandSelectionCommand.CanExecute = popupOpen;
+        MoveSelectionDownCommand.CanExecute = popupOpen;
+        MoveSelectionUpCommand.CanExecute = popupOpen;
+        CloseCommandPopupCommand.CanExecute = popupOpen;
     }
 
     private void CloseCommandPopup()
