@@ -300,6 +300,38 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public async Task PrimaryAction_WhenNotStreaming_SubmitsInsteadOfCancelling()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var stateMachine = new ChatRequestStateMachine();
+        hostType.GetField("chatRequestStateMachine", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, stateMachine);
+        hostType.GetField("activeChatRequestSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+        using var requestCancellation = new CancellationTokenSource();
+        Assert.True(stateMachine.TryBegin(Array.Empty<string>(), requestCancellation.Token, out var request));
+
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        Assert.False((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
+
+        var command = viewModelType.GetProperty("SearchCommand")!.GetValue(viewModel)!;
+        var execute = command.GetType().GetMethods()
+            .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
+        try
+        {
+            await (Task)execute.Invoke(command, new object?[] { null, null, TestContext.Current.CancellationToken })!;
+        }
+        catch
+        {
+            // The bare host cannot complete a real submission; this test only checks which branch ran.
+        }
+
+        // The send branch must not cancel the active request; only the stop branch does that.
+        Assert.False(request!.CancellationToken.IsCancellationRequested);
+    }
+
+    [Fact]
     public async Task PrimaryAction_WhileStreaming_RequestsCancellationInsteadOfSubmitting()
     {
         var assembly = LoadBuiltExtensionAssembly();
