@@ -79,8 +79,10 @@ public static class WorkspaceFileAttachmentResolver
             {
                 continue;
             }
-            if (!IsUnderRoot(fullPath, fullRoot) ||
-                !TryGetCanonicalPath(fullRoot, directory: true, out var canonicalRoot) ||
+            // Containment is decided on the canonical paths alone. A lexical check against the
+            // original root rejects a canonical path stored by an earlier resolution when the
+            // workspace root itself is a link or junction, which would drop valid attachments.
+            if (!TryGetCanonicalPath(fullRoot, directory: true, out var canonicalRoot) ||
                 !TryGetCanonicalPath(fullPath, directory: false, out var canonicalPath) ||
                 !IsUnderRoot(canonicalPath, canonicalRoot))
             {
@@ -175,6 +177,7 @@ public static class WorkspaceFileAttachmentResolver
         var lineReader = new ChunkedLineReader(reader);
         var builder = new StringBuilder();
         var lineNumber = 0;
+        var isFirstSelectedLine = true;
         while (lineNumber < end)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -184,7 +187,9 @@ public static class WorkspaceFileAttachmentResolver
                 break;
             }
 
-            if (isSelected && builder.Length > 0)
+            // Separate on the line boundary rather than on whether earlier lines produced
+            // characters, so a blank line inside the selection is preserved.
+            if (isSelected && !isFirstSelectedLine)
             {
                 if (builder.Length >= MaxFileChars)
                 {
@@ -192,6 +197,11 @@ public static class WorkspaceFileAttachmentResolver
                 }
 
                 builder.Append('\n');
+            }
+
+            if (isSelected)
+            {
+                isFirstSelectedLine = false;
             }
 
             var remaining = isSelected ? MaxFileChars - builder.Length : 0;

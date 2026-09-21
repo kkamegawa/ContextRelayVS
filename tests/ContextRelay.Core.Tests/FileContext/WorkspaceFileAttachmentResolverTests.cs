@@ -9,6 +9,71 @@ namespace ContextRelay.Core.Tests.FileContext;
 public sealed class WorkspaceFileAttachmentResolverTests
 {
     [Fact]
+    public async Task ReadTextAsync_PreservesBlankLinesInsideSelection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "file.md");
+            File.WriteAllText(path, "\nselected text\n\nlast selected\ntrailing");
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(path, new[] { root }, out var attachment));
+            attachment!.SelectionStartLine = 1;
+            attachment.SelectionEndLine = 4;
+
+            var text = await WorkspaceFileAttachmentResolver.ReadTextAsync(attachment, TestContext.Current.CancellationToken);
+
+            // ReadTextAsync trims the surrounding whitespace, so the assertion covers the blank
+            // line inside the selected range rather than the leading one.
+            Assert.Equal("selected text\n\nlast selected", text);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryResolve_AcceptsCanonicalPathWhenWorkspaceRootIsALink()
+    {
+        var target = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));
+        var link = Path.Combine(Path.GetTempPath(), "workspace-link-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(target);
+        try
+        {
+            try
+            {
+                Directory.CreateSymbolicLink(link, target);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                Assert.Skip($"Creating a directory symbolic link is unavailable: {ex.Message}");
+            }
+
+            var path = Path.Combine(target, "file.md");
+            File.WriteAllText(path, "content");
+
+            // The first resolution through the link stores the canonical path; revalidating that
+            // canonical path against the same aliased root must still succeed.
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(
+                Path.Combine(link, "file.md"),
+                new[] { link },
+                out var first));
+            Assert.True(WorkspaceFileAttachmentResolver.TryResolve(first!.AbsolutePath, new[] { link }, out var second));
+            Assert.Equal("file.md", second!.RelativePath);
+        }
+        finally
+        {
+            if (Directory.Exists(link))
+            {
+                Directory.Delete(link);
+            }
+
+            Directory.Delete(target, recursive: true);
+        }
+    }
+
+    [Fact]
     public void TryResolve_RejectsOutsideWorkspaceAndPathPrefixCollision()
     {
         var root = Path.Combine(Path.GetTempPath(), "workspace-" + Guid.NewGuid().ToString("N"));

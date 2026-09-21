@@ -532,7 +532,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource CardMutedTextStyle}" TextTrimming="CharacterEllipsis" MinWidth="0" />
+                                <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource CardMutedTextStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MinWidth="0" />
                                 <Button Grid.Column="1" Margin="6,0,0,0" Style="{StaticResource ThemedButtonStyle}" Padding="6,2" MinHeight="24" Content="{Binding RemoveButtonText}" AutomationProperties.Name="{Binding RemoveAutomationName}" Command="{Binding RemoveCommand}" />
                             </Grid>
                         </Border>
