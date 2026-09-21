@@ -63,35 +63,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 return;
             }
 
-            if (isBusy)
-            {
-                host.LogUiDiagnostic("Submit ignored because the view model is already busy.");
-                return;
-            }
-
-            // Authentication and conversation setup run before the first streaming update.
-            // Keep the button enabled across that gap for routes that can stream and be stopped;
-            // disabling it would move keyboard focus away, and WPF does not restore it when the
-            // control is enabled again. Other routes keep the ordinary disabled-while-busy state.
-            var stoppable = IsStoppableRoute(QueryText);
-            if (stoppable)
-            {
-                isChatRequestActive = true;
-                RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
-            }
-
-            try
-            {
-                await SubmitAsync(context, ct).ConfigureAwait(false);
-            }
-            finally
-            {
-                if (stoppable)
-                {
-                    isChatRequestActive = false;
-                    RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
-                }
-            }
+            await SubmitAsync(context, ct).ConfigureAwait(false);
         });
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
         CopyPromptCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.CopyHandoffPromptAsync(ct)).ConfigureAwait(false));
@@ -591,8 +563,41 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     {
         var query = QueryText;
         host.LogUiDiagnostic($"SubmitAsync invoked queryLength={query.Length} startsWithSlash={query.StartsWith("/", StringComparison.Ordinal)}");
+
+        // Both the primary button and Enter in the query box submit through here, so the enabled
+        // state has to be maintained here rather than in either caller. Checking busy first keeps
+        // a second submission from clearing the flag of the request that is already running.
+        if (isBusy)
+        {
+            host.LogUiDiagnostic("Submit ignored because the view model is already busy.");
+            return;
+        }
+
         CloseCommandPopup();
-        await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, clientContext, ct).ConfigureAwait(false); }).ConfigureAwait(false);
+
+        // Authentication and conversation setup run before the first streaming update. Keep the
+        // button enabled across that gap for routes that can stream and be stopped; disabling it
+        // would move keyboard focus away, and WPF does not restore it when the control is enabled
+        // again. Other routes keep the ordinary disabled-while-busy state.
+        var stoppable = IsStoppableRoute(query);
+        if (stoppable)
+        {
+            isChatRequestActive = true;
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+        }
+
+        try
+        {
+            await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, clientContext, ct).ConfigureAwait(false); }).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (stoppable)
+            {
+                isChatRequestActive = false;
+                RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+            }
+        }
     }
 
     private bool PendingAttachmentsEqual(IReadOnlyList<ResolvedAttachment> items) =>

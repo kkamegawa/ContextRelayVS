@@ -231,7 +231,7 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
 
         // The enabled state across the submit-to-streaming gap is covered by
-        // PrimaryAction_WhileSubmittingAChatQuery_StaysEnabledBeforeStreamingStarts, which drives
+        // PrimaryAction_WhileSubmitting_IsEnabledOnlyForChatRoutesOnEitherSubmitPath, which drives
         // the real command instead of setting the fields it maintains.
     }
 
@@ -291,8 +291,20 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.True((bool)canExecute.GetValue(applyCommand)!);
     }
 
-    [Fact]
-    public async Task PrimaryAction_WhileSubmittingAChatQuery_StaysEnabledBeforeStreamingStarts()
+    // Both the primary button (SearchCommand) and Enter in the query box (ConfirmQueryInputCommand)
+    // submit, and they must leave the primary button in the same state. Enter used to bypass the
+    // enabled-state bookkeeping, so the button was disabled and Tab could not reach Stop.
+    [Theory]
+    [InlineData("SearchCommand", "explain this", true)]
+    [InlineData("ConfirmQueryInputCommand", "explain this", true)]
+    [InlineData("SearchCommand", "/ask summarize", true)]
+    [InlineData("ConfirmQueryInputCommand", "/ask summarize", true)]
+    [InlineData("SearchCommand", "/mail budget", false)]
+    [InlineData("ConfirmQueryInputCommand", "/mail budget", false)]
+    public async Task PrimaryAction_WhileSubmitting_IsEnabledOnlyForChatRoutesOnEitherSubmitPath(
+        string commandName,
+        string query,
+        bool expectedEnabled)
     {
         var assembly = LoadBuiltExtensionAssembly();
         var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
@@ -309,11 +321,11 @@ public sealed class SlashCommandSuggestionInteractionTests
         hostType.GetField("draftQuerySync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
 
         var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
-        viewModelType.GetField("queryText", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(viewModel, "explain this");
+        viewModelType.GetField("queryText", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(viewModel, query);
         var primaryEnabled = viewModelType.GetProperty("IsPrimaryActionEnabled")!;
         var busyField = viewModelType.GetField("isBusy", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-        var command = viewModelType.GetProperty("SearchCommand")!.GetValue(viewModel)!;
+        var command = viewModelType.GetProperty(commandName)!.GetValue(viewModel)!;
         var execute = command.GetType().GetMethods()
             .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
         using var cancellation = new CancellationTokenSource();
@@ -327,10 +339,11 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.True((bool)busyField.GetValue(viewModel)!);
 
-        // Busy but not streaming yet: the button must stay enabled, because disabling a focused
-        // control moves keyboard focus away and WPF does not restore it.
+        // Busy but not streaming yet. A chat request keeps the button enabled, because disabling a
+        // focused control moves keyboard focus away and WPF does not restore it. Other routes keep
+        // the ordinary disabled-while-busy state.
         Assert.False((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
-        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+        Assert.Equal(expectedEnabled, (bool)primaryEnabled.GetValue(viewModel)!);
 
         cancellation.Cancel();
         try
@@ -341,6 +354,9 @@ public sealed class SlashCommandSuggestionInteractionTests
         {
             // Expected: the held gate is released only by cancelling the request.
         }
+
+        // Finished requests hand the button back to its ordinary state.
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
     }
 
     [Fact]
