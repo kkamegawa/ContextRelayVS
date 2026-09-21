@@ -256,7 +256,7 @@ public static class FileMentionResolver
             RelativePath = attachment.RelativePath
                 .Replace(Path.DirectorySeparatorChar, '/')
                 .Replace(Path.AltDirectorySeparatorChar, '/'),
-            Uri = new Uri(attachment.AbsolutePath).AbsoluteUri
+            Uri = FilePathUri.FromPath(attachment.AbsolutePath)
         };
     }
 

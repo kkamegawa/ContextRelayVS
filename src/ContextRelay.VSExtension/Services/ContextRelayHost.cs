@@ -1206,7 +1206,7 @@ internal sealed class ContextRelayHost : IDisposable
                 AbsolutePath = resolved.AbsolutePath,
                 WorkspaceRoot = resolved.WorkspaceRoot,
                 RelativePath = resolved.RelativePath,
-                Uri = new Uri(resolved.AbsolutePath).AbsoluteUri
+                Uri = FilePathUri.FromPath(resolved.AbsolutePath)
             });
         }
 
