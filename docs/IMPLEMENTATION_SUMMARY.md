@@ -48,12 +48,14 @@
 
 #### Phase 2: Options Page Implementation ✅
 - [x] Created `ContextRelayOptionsPage` (DialogPage subclass)
-- [x] Implemented 18 properties across 5 categories:
+- [x] Implemented 27 properties across 7 categories:
   - General (4): MaxResults, OutputDirectory, EnableChatPreview, UiLanguage
+  - Chat (3): ChatMaxAttachedFiles, ChatAttachActiveEditor, ChatStreamResponses
   - Diagnostics (2): EnableGraphDebugLogging, EnableWorkIqDebugLogging
-  - Authentication (7): ClientId, TenantId, CloudEnvironment, CustomGraphEndpoint, CustomAuthEndpoint, UseBroker
+  - Privacy (1): AllowLocalFileContextForWorkIq
+  - Authentication (6): ClientId, TenantId, CloudEnvironment, CustomGraphEndpoint, CustomAuthEndpoint, UseBroker
   - Caching (3): CacheTtlSeconds, CacheMaxEntries, PersistWorkspaceState
-  - Features (2): MailEnabled, TeamsEnabled, SharePointEnabled, OneDriveEnabled, ConnectorsEnabled, OneNoteEnabled, PlannerEnabled, TodoEnabled
+  - Features (8): MailEnabled, TeamsEnabled, SharePointEnabled, OneDriveEnabled, ConnectorsEnabled, OneNoteEnabled, PlannerEnabled, TodoEnabled
 - [x] Added full XML documentation for all properties
 - [x] Implemented `LoadSnapshot()` and `CreateSettingsSnapshot()` for bidirectional sync
 - [x] Added language normalization in UiLanguage setter
@@ -72,7 +74,7 @@
 
 #### Phase 4: Shared Settings Layer ✅
 - [x] Created `ContextRelay.Core` (netstandard2.0) with:
-  - `ContextRelaySettingsSnapshot` (DTO with all 18 properties)
+  - `ContextRelaySettingsSnapshot` (DTO with all 27 properties)
   - `ContextRelaySettingsStore` (JSON-based persistence)
 - [x] Implemented atomic JSON writes using `.tmp` file pattern
 - [x] Added automatic directory creation and error handling
@@ -109,13 +111,13 @@
   - `ContextRelay.VSExtension.Package.pkgdef` (registration)
   - `extension.vsixmanifest` (with VsPackage asset)
 - [x] Settings file exists: `%AppData%\ContextRelay\settings.json`
-- [x] All 18 settings properties present in JSON
+- [x] All 27 settings properties present in JSON
 
 ### Key Features
 
 #### 1. **Unified Options Page**
 - Single integrated page under Tools > Options > ContextRelay > General
-- 18 settings organized into 5 logical categories
+- 27 settings organized into 7 logical categories
 - Full XML documentation for each property
 - Type-safe property grid with default values
 
@@ -150,13 +152,13 @@
 src/
 ├── ContextRelay.Core/
 │   └── Settings/
-│       ├── ContextRelaySettingsSnapshot.cs (18 properties)
+│       ├── ContextRelaySettingsSnapshot.cs (27 properties)
 │       └── ContextRelaySettingsStore.cs (JSON I/O)
 ├── ContextRelay.VSExtension.Package/
 │   ├── ContextRelay.VSExtension.Package.csproj (net472, VSSDK)
 │   ├── Options/
 │   │   ├── ContextRelayOptionsPackage.cs (AsyncPackage)
-│   │   ├── ContextRelayOptionsPage.cs (DialogPage, 18 properties)
+│   │   ├── ContextRelayOptionsPage.cs (DialogPage, 27 properties)
 │   │   └── ContextRelayPackageGuids.cs (GUIDs)
 │   └── obj/Debug/net472/
 │       └── ContextRelay.VSExtension.Package.pkgdef (generated)
@@ -179,7 +181,7 @@ docs/
 ├── validation-guide.md (comprehensive checklist)
 └── plan.md (design reference)
 %AppData%/ContextRelay/
-└── settings.json (18 properties, user-editable)
+└── settings.json (27 properties, user-editable)
 ```
 
 ### Configuration Details
@@ -212,9 +214,13 @@ docs/
   "MaxResults": 10,
   "OutputDirectory": ".contextrelay",
   "EnableChatPreview": true,
+  "ChatMaxAttachedFiles": 5,
+  "ChatAttachActiveEditor": false,
+  "ChatStreamResponses": true,
   "UiLanguage": "auto",
   "EnableGraphDebugLogging": false,
   "EnableWorkIqDebugLogging": false,
+  "AllowLocalFileContextForWorkIq": false,
   "ClientId": "",
   "TenantId": "organizations",
   "CloudEnvironment": 0,
@@ -271,7 +277,7 @@ docs/
 
 After installation, verify:
 - [ ] Tools > Options > ContextRelay > General appears
-- [ ] All 18 properties display with correct defaults
+- [ ] All 27 properties display with correct defaults
 - [ ] Search for "contextrelay" finds the Options page
 - [ ] Changing settings persists to `%AppData%\ContextRelay\settings.json`
 - [ ] JSON file remains valid and human-readable

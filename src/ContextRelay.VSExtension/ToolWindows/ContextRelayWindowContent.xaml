@@ -329,7 +329,32 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource PanelSurfaceBorderStyle}" Margin="0,0,12,0">
-                <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource FluentListBoxItemStyle}" ItemsSource="{Binding ChatHistory}" BorderThickness="0">
+                <Border.Resources>
+                    <Style x:Key="StreamingPreviewBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
+                        <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                    </Style>
+                </Border.Resources>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Style="{StaticResource StreamingPreviewBorderStyle}"
+                            Visibility="{Binding IsStreaming, Converter={StaticResource BoolToVisConverter}}">
+                        <StackPanel>
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="{Binding ChatHistoryHeaderText}" Style="{StaticResource CardTitleTextStyle}" />
+                                <Button DockPanel.Dock="Right"
+                                        Style="{StaticResource ThemedButtonStyle}"
+                                        Content="{Binding StopGenerationButtonText}"
+                                        Command="{Binding StopGenerationCommand}" />
+                            </DockPanel>
+                            <ScrollViewer Margin="0,6,0,0" MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <TextBlock Text="{Binding StreamingResponseText}" Style="{StaticResource CardBodyTextStyle}" />
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Border>
+                <ListBox Grid.Row="1" Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource FluentListBoxItemStyle}" ItemsSource="{Binding ChatHistory}" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Style="{StaticResource CardContentBorderStyle}">
@@ -360,6 +385,7 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                </Grid>
             </Border>
 
             <Border Grid.Column="1" Style="{StaticResource PanelSurfaceBorderStyle}">
@@ -450,6 +476,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -493,15 +520,36 @@
                 </StackPanel>
             </Border>
 
-            <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="1" Grid.Column="0"
+            <ScrollViewer Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,8" MaxHeight="96"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding PendingAttachments}" HorizontalContentAlignment="Stretch">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource SurfaceBorderStyle}" Margin="0,0,6,4" Padding="6,2" HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource CardMutedTextStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MinWidth="0" />
+                                <Button Grid.Column="1" Margin="6,0,0,0" Style="{StaticResource ThemedButtonStyle}" Padding="6,2" MinHeight="24" Content="{Binding RemoveButtonText}" AutomationProperties.Name="{Binding RemoveAutomationName}" Command="{Binding RemoveCommand}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="2" Grid.Column="0"
                     Margin="0,0,8,0"
                     Content="{Binding AddFilesButtonText}"
+                    AutomationProperties.Name="{Binding AddFilesToolTipText}"
                     ToolTip="{Binding AddFilesToolTipText}"
-                    Command="{Binding AddFilesCommand}"
-                    IsEnabled="{Binding IsNotBusy}" />
+                    Command="{Binding AddFilesCommand}" />
 
             <TextBox x:Name="QueryTextBox"
-                     Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="1" Grid.Column="1"
+                     Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="2" Grid.Column="1"
                       Margin="0,0,8,0"
                       Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
                       ToolTip="{Binding SearchToolTipText}">
@@ -514,7 +562,7 @@
                 </TextBox.InputBindings>
 
             </TextBox>
-            <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="1" Grid.Column="2" Content="{Binding SearchButtonText}" Command="{Binding SearchCommand}" IsEnabled="{Binding IsNotBusy}" />
+            <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="2" Grid.Column="2" Content="{Binding SearchButtonText}" Command="{Binding SearchCommand}" IsEnabled="{Binding IsNotBusy}" />
         </Grid>
     </Grid>
 </DataTemplate>

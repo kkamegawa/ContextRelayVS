@@ -4,9 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
+using Microsoft.VisualStudio.Extensibility.Editor;
 using Microsoft.VisualStudio.Extensibility.Shell.FileDialog;
 using Microsoft.VisualStudio.ProjectSystem.Query;
 
@@ -38,6 +40,17 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     public async Task<IReadOnlyList<string>> GetWorkspaceRootsAsync(CancellationToken cancellationToken = default)
     {
         var roots = new List<string>();
+        var solutions = await extensibility.Workspaces()
+            .QuerySolutionAsync(solution => solution, cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var solution in solutions)
+        {
+            if (!string.IsNullOrWhiteSpace(solution.Directory))
+            {
+                roots.Add(solution.Directory);
+            }
+        }
+
         var documents = await extensibility.Documents().GetOpenDocumentsAsync(cancellationToken).ConfigureAwait(false);
         foreach (var document in documents)
         {
@@ -54,22 +67,85 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
             }
         }
 
-        var currentDirectoryRoot = WorkspaceRootInference.InferWorkspaceRootFromPath(
-            Environment.CurrentDirectory,
-            requireWorkspaceMarker: true);
-        if (!string.IsNullOrWhiteSpace(currentDirectoryRoot))
+        if (roots.Count == 0)
         {
-            roots.Add(currentDirectoryRoot);
+            var currentDirectoryRoot = WorkspaceRootInference.InferWorkspaceRootFromPath(
+                Environment.CurrentDirectory,
+                requireWorkspaceMarker: true);
+            if (!string.IsNullOrWhiteSpace(currentDirectoryRoot))
+            {
+                roots.Add(currentDirectoryRoot);
+            }
         }
 
+        var currentWorkspaceRoots = roots.ToArray();
         lock (selectedWorkspaceRootsGate)
         {
-            roots.AddRange(selectedWorkspaceRoots);
+            roots.AddRange(GetAuthorizedRememberedRoots(selectedWorkspaceRoots, currentWorkspaceRoots));
         }
 
         return roots
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyList<string> GetAuthorizedRememberedRoots(
+        IReadOnlyList<string> rememberedRoots,
+        IReadOnlyList<string> currentWorkspaceRoots)
+    {
+        if (currentWorkspaceRoots.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        // Compare final directory targets. A remembered directory inside the solution can be a link or
+        // junction that points outside it, and a lexical comparison would promote that outside target
+        // to a trusted root for attachment validation.
+        var canonicalCurrentRoots = new List<string>(currentWorkspaceRoots.Count);
+        foreach (var currentRoot in currentWorkspaceRoots)
+        {
+            if (WorkspaceFileAttachmentResolver.TryGetCanonicalDirectory(currentRoot, out var canonicalCurrentRoot))
+            {
+                canonicalCurrentRoots.Add(canonicalCurrentRoot);
+            }
+        }
+
+        if (canonicalCurrentRoots.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var authorized = new List<string>(rememberedRoots.Count);
+        foreach (var rememberedRoot in rememberedRoots)
+        {
+            if (WorkspaceFileAttachmentResolver.TryGetCanonicalDirectory(rememberedRoot, out var canonicalRememberedRoot) &&
+                canonicalCurrentRoots.Any(canonicalCurrentRoot => IsPathUnderRoot(canonicalRememberedRoot, canonicalCurrentRoot)))
+            {
+                authorized.Add(rememberedRoot);
+            }
+        }
+
+        return authorized;
+    }
+
+    private static bool IsPathUnderRoot(string path, string root)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(fullPath, fullRoot, StringComparison.OrdinalIgnoreCase) ||
+                fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                fullPath.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
     }
 
     public async Task<IReadOnlyList<string>> PickWorkspaceFilesAsync(string? initialDirectory, CancellationToken cancellationToken = default)
@@ -231,6 +307,51 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     {
         // Editor API stub — requires checking exact VS Extensibility SDK 17.14 editor API signatures
         return Task.FromResult(false);
+    }
+
+    public async Task<ActiveEditorSnapshot?> GetActiveEditorSnapshotAsync(
+        IClientContext clientContext,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clientContext);
+        var textView = await clientContext.GetActiveTextViewAsync(cancellationToken).ConfigureAwait(false);
+        if (textView is null || string.IsNullOrWhiteSpace(textView.FilePath))
+        {
+            return null;
+        }
+
+        var selection = textView.Selection;
+        int? startLine = null;
+        int? endLine = null;
+
+        // Selection offsets come from the live buffer, but the attachment is read from the saved file.
+        // With unsaved edits the line numbers no longer match on disk, so attach the whole saved file
+        // instead of a range that would point at unrelated lines.
+        if (!selection.IsEmpty && !textView.Document.IsDirty)
+        {
+            startLine = textView.Document.GetLineNumberFromPosition(selection.Start.Offset) + 1;
+            // Selection.End is exclusive. When it lands at column zero, the selected
+            // content ends on the preceding line.
+            var endOffset = GetInclusiveSelectionEndOffset(
+                selection.Start.Offset,
+                selection.End.Offset,
+                textView.Document.GetLineNumberFromPosition);
+
+            endLine = textView.Document.GetLineNumberFromPosition(endOffset) + 1;
+        }
+
+        return new ActiveEditorSnapshot(textView.FilePath, startLine, endLine);
+    }
+
+    private static int GetInclusiveSelectionEndOffset(
+        int startOffset,
+        int exclusiveEndOffset,
+        Func<int, int> getLineNumber)
+    {
+        return exclusiveEndOffset > startOffset &&
+            getLineNumber(exclusiveEndOffset) > getLineNumber(exclusiveEndOffset - 1)
+                ? exclusiveEndOffset - 1
+                : exclusiveEndOffset;
     }
 
     public Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default)

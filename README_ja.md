@@ -1,4 +1,4 @@
-# ContextRelay for Visual Studio (日本語)
+﻿# ContextRelay for Visual Studio (日本語)
 
 ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsoft 365 (Exchange Mail、Microsoft Teams、SharePoint、OneDrive) のコンテキストをツールウィンドウに表示する拡張機能です。VS Code 版 [ContextRelay](https://github.com/kkamegawa/ContextRelay) の機能仕様をそのまま Visual Studio に移植し、同一マシン上の VS Code 版とスニペット・チャット履歴・ハンドオフ文書パスを共有できます。
 
@@ -6,6 +6,7 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 
 ## 実装済み機能
 
+- 通常の Copilot チャット — スラッシュコマンドなしの入力で Microsoft 365 Copilot の会話を開始・継続する。個々の検索結果は添付せず、明示的コンテキストはピン留めスニペット、保留中の添付ファイル、`#file` メンション、有効化した場合の保存済みアクティブ エディター。直近の ContextRelay 検索要約は参考情報として送信される場合があるが、明示的コンテキストには含めない。`/ask` と異なり、明示的コンテキストがなくても実行できる
 - Exchange Mail / Teams / SharePoint / OneDrive を対象とするキーワード検索 (Microsoft Graph 経由)
 - スラッシュコマンドによるソース指定 — `/mail` `/teams` `/sharepoint` `/onedrive` `/connectors` `/all` `/ask` `/workiq` `/clear`
 - `/` 入力時に表示されるキーボード操作対応のスラッシュコマンド候補ポップアップ
@@ -13,13 +14,23 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 - VS Code 版と共有されるチャット/検索履歴
 - タイムスタンプ付きハンドオフ文書 (`PLAN.md` / `TASKS.md` / `TEST_PLAN.md` / 任意で `HANDOFF.md`) の生成
 - Copilot for Visual Studio へ渡すためのソフトハンドオフ (プロンプトのクリップボード転送、選択結果の `HANDOFF.md` 追記、利用可能な場合の GitHub Copilot Chat 自動オープン)
-- `/ask` ではピン留め済みスニペットを必須コンテキストとして送り、サイズ上限を掛けたうえで Microsoft 365 Copilot の応答を共有チャット履歴へ保存し、内容に応じた形式のエディタータブで表示
+- `/ask` では [Issue #184](https://github.com/kkamegawa/ContextRelayVS/issues/184) に定めた明示的コンテキストと添付の規則を適用し、ピン留めスニペット、保留中のローカル添付、有効化した保存済みアクティブ エディターを上限内で送信する。利用可能なコンテキストがない場合は実行しない
 - `/workiq` では Work IQ Gateway に A2A v1.0 で自然言語クエリを送り、専用トークン audience と会話 `contextId` を使って Microsoft 365 のワークインテリジェンスを問い合わせ
 - 英語/日本語の UI 文言、結果カードのコンテキストアクション、ステータス/ヘルプ文言を備えた WPF ツールウィンドウ UI
-- General / Authentication / Cache / Adapters の Options ページ
+- General / Chat / Authentication / Cache / Adapters の Options ページ。Chat には添付ファイル上限 (既定値 5、0 で無効)、アクティブ エディター自動添付 (既定値オフ)、応答ストリーミング (既定値オン) を含む
+- ファイル メンションの **添付ファイルの最大数** (既定値 5) は通常のチャットと `/ask` に適用し、`/workiq` は常に最大 5 件の重複しない `#file` メンションを受け付ける。不完全な可能性がある応答にはその旨が表示され、**続きを取得** ボタンで手動継続できる
 - MSAL.NET + WAM 認証と DPAPI ベースのトークンキャッシュ
 - TTL + LRU キャッシュとワークスペース永続化
 - VS Code 版との **クロスエディタセッション共有** — `%LocalAppData%\ContextRelay\shared\` を介してスニペット/チャット履歴/ハンドオフ文書インデックスを同期。詳細は [docs/shared-session-schema.md](docs/shared-session-schema.md)
+
+## チャットのコンテキスト・添付・ストリーミング
+
+通常のチャットと `/ask` は同じ明示的コンテキスト規則を使います。`/ask` は利用できる明示的コンテキストがない場合、認証と Copilot 要求の前にローカルで拒否しますが、通常のチャットはいずれの場合でも実行されます。直近の ContextRelay 検索要約がある場合は参考情報として送信しますが、明示的コンテキストではなく、`/ask` の判定も Web コンテキストの扱いも変えません。
+
+- **添付** — ツールウィンドウの **+** ボタン、または Tools > ContextRelay メニューの **チャットにファイルを添付** でワークスペース内のファイルを保留し、チップの **削除** で外せます。`#file` メンション、保留中の添付、アクティブ エディターの順で **添付ファイルの最大数** (Maximum attached files) の上限まで添付し、`0` にすると添付を無効化します。送信した添付はその要求が占有して保留キューから外すため、応答生成中に追加したファイルは次の要求用に残ります。
+- **アクティブ エディター** — **アクティブなエディターを添付** (Attach active editor) を有効にすると、アクティブ エディターの保存済み内容を添付します。選択範囲があればその行だけを送りますが、未保存の編集がある場合はディスク上の行番号と一致しないため、選択を無視して保存済みファイル全体を添付します。
+- **グラウンディング** — 明示的コンテキストを含む要求には、添付ファイルとピン留めスニペットを主な情報源として扱う指示を付加し、その要求では Copilot の Web コンテキストを無効化します。検索要約だけの要求はそのまま送信します。
+- **ストリーミング** — **チャット応答をストリーミング** (Stream chat responses) が有効なら応答を受信中に逐次表示し、**停止** で生成をキャンセルできます。停止後に自動で継続要求を送ることはありません。
 
 ## ビルドとパッケージング
 

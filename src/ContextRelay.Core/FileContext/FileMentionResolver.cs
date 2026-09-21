@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -68,7 +68,17 @@ public static class FileMentionResolver
     /// the resulting prompt still carries a concrete file reference signal.
     /// </returns>
     public static FileMentionResolutionResult Resolve(string input, IReadOnlyList<string> workspaceRoots)
+        => Resolve(input, workspaceRoots, MaxFileMentions);
+
+    /// <summary>
+    /// Resolves file mention tokens using a caller-provided attachment limit.
+    /// </summary>
+    public static FileMentionResolutionResult Resolve(
+        string input,
+        IReadOnlyList<string> workspaceRoots,
+        int maxFileMentions)
     {
+        maxFileMentions = Math.Max(0, maxFileMentions);
         var candidates = ExtractCandidates(input ?? string.Empty);
         if (candidates.Count == 0)
         {
@@ -89,15 +99,6 @@ public static class FileMentionResolver
             };
         }
 
-        if (candidates.Count > MaxFileMentions)
-        {
-            return new FileMentionResolutionResult
-            {
-                CleanedPrompt = cleanedPrompt,
-                Errors = new[] { CreateError(FileMentionErrorCode.MentionLimitReached, MaxFileMentions.ToString(System.Globalization.CultureInfo.InvariantCulture)) }
-            };
-        }
-
         var files = new List<ResolvedFileMention>();
         var errors = new List<FileMentionResolutionError>();
         var seenUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -113,6 +114,14 @@ public static class FileMentionResolver
             if (seenUris.Add(resolved.Uri))
             {
                 files.Add(resolved);
+                if (files.Count > maxFileMentions)
+                {
+                    return new FileMentionResolutionResult
+                    {
+                        CleanedPrompt = cleanedPrompt,
+                        Errors = new[] { CreateError(FileMentionErrorCode.MentionLimitReached, maxFileMentions.ToString(System.Globalization.CultureInfo.InvariantCulture)) }
+                    };
+                }
             }
         }
 
@@ -224,13 +233,30 @@ public static class FileMentionResolver
             return null;
         }
 
+        if (!CopilotSupportedFilePolicy.IsSupported(canonicalPath))
+        {
+            error = CreateError(FileMentionErrorCode.UnsupportedFileType, rawPath);
+            return null;
+        }
+
+        // Resolve through the attachment policy so symlink aliases are canonicalized before
+        // the caller applies the per-message unique-file limit.
+        if (!WorkspaceFileAttachmentResolver.TryResolve(canonicalPath, workspaceRoots, out var attachment) ||
+            attachment is null)
+        {
+            error = CreateError(FileMentionErrorCode.OutsideWorkspace, rawPath);
+            return null;
+        }
+
         error = null;
         return new ResolvedFileMention
         {
-            AbsolutePath = canonicalPath,
-            WorkspaceRoot = root,
-            RelativePath = GetRelativePath(root, canonicalPath),
-            Uri = new Uri(canonicalPath).AbsoluteUri
+            AbsolutePath = attachment.AbsolutePath,
+            WorkspaceRoot = attachment.WorkspaceRoot,
+            RelativePath = attachment.RelativePath
+                .Replace(Path.DirectorySeparatorChar, '/')
+                .Replace(Path.AltDirectorySeparatorChar, '/'),
+            Uri = FilePathUri.FromPath(attachment.AbsolutePath)
         };
     }
 
@@ -267,24 +293,35 @@ public static class FileMentionResolver
             return true;
         }
 
-        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
+        var rootWithSeparator = EndsWithSeparator(normalizedRoot)
+            ? normalizedRoot
+            : normalizedRoot + Path.DirectorySeparatorChar;
         return normalizedCandidate.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetRelativePath(string root, string absolutePath)
+    private static bool EndsWithSeparator(string value)
     {
-        var normalizedRoot = TrimTrailingSeparators(Path.GetFullPath(root));
-        var normalizedPath = Path.GetFullPath(absolutePath);
-        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
-        var relative = normalizedPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
-            ? normalizedPath.Substring(rootWithSeparator.Length)
-            : Path.GetFileName(normalizedPath);
-        return relative.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+        return value.Length > 0 &&
+            (value[value.Length - 1] == Path.DirectorySeparatorChar ||
+             value[value.Length - 1] == Path.AltDirectorySeparatorChar);
     }
 
     private static string TrimTrailingSeparators(string value)
     {
-        return value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        // Keep the path root intact. Trimming every separator turns a Unix root ("/") into an empty
+        // string and a Windows drive root ("C:\") into the drive-relative path "C:", which then
+        // rejects every file in a workspace opened at the root.
+        var pathRoot = Path.GetPathRoot(value);
+        var minimumLength = pathRoot?.Length ?? 0;
+        var result = value;
+        while (result.Length > minimumLength &&
+            (result[result.Length - 1] == Path.DirectorySeparatorChar ||
+             result[result.Length - 1] == Path.AltDirectorySeparatorChar))
+        {
+            result = result.Substring(0, result.Length - 1);
+        }
+
+        return result;
     }
 
     private static string StripMentionTokens(string input, IReadOnlyList<FileMentionCandidate> candidates)

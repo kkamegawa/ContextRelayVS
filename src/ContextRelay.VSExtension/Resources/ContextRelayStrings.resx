@@ -17,7 +17,13 @@
   <data name="OpenHandoffButtonText" xml:space="preserve"><value>Open handoff</value></data>
   <data name="OpenCopilotButtonText" xml:space="preserve"><value>Open Copilot</value></data>
   <data name="AddFilesButtonText" xml:space="preserve"><value>+</value></data>
-  <data name="AddFilesToolTip" xml:space="preserve"><value>Add local files to the prompt as #file mentions.</value></data>
+  <data name="AttachFileToChatButtonText" xml:space="preserve"><value>Attach file</value></data>
+  <data name="RemoveAttachmentButtonText" xml:space="preserve"><value>Remove</value></data>
+  <data name="RemoveAttachmentAutomationName_Format" xml:space="preserve"><value>Remove attachment {0}</value></data>
+  <data name="StopGenerationButtonText" xml:space="preserve"><value>Stop</value></data>
+  <data name="ChatResponseCancelledStatus" xml:space="preserve"><value>Response generation cancelled.</value></data>
+  <data name="ChatResponseFailedStatus" xml:space="preserve"><value>Response generation failed: {0}</value></data>
+  <data name="AddFilesToolTip" xml:space="preserve"><value>Attach local workspace files to the next chat request.</value></data>
   <data name="ClearChatButtonText" xml:space="preserve"><value>Clear chat</value></data>
   <data name="ClearSnippetsButtonText" xml:space="preserve"><value>Clear snippets</value></data>
   <data name="ClearCacheButtonText" xml:space="preserve"><value>Clear cache</value></data>
@@ -43,7 +49,7 @@
   <data name="RequestedSourceDisabledStatus" xml:space="preserve"><value>The requested source is disabled in ContextRelay options.</value></data>
   <data name="AskDisabledStatus" xml:space="preserve"><value>/ask is disabled. Enable chat preview in ContextRelay options.</value></data>
   <data name="ChatPreviewDisabledStatus" xml:space="preserve"><value>Copilot chat is disabled. Enable chat preview in ContextRelay options.</value></data>
-  <data name="AskRequiresPinnedContextStatus" xml:space="preserve"><value>Pin one or more snippets or mention a local file with #path before using /ask. Explicit context is sent to Microsoft 365 Copilot.</value></data>
+  <data name="AskRequiresContextStatus" xml:space="preserve"><value>Pin one or more snippets, add a pending file attachment, mention a local file with #path, or enable active-editor attachment before using /ask. Explicit context is sent to Microsoft 365 Copilot.</value></data>
   <data name="FileMentionPromptEmptyStatus" xml:space="preserve"><value>Prompt is empty after removing # file mentions.</value></data>
   <data name="FilePickerWorkspaceUnavailableStatus" xml:space="preserve"><value>Open a solution or workspace file before adding local files.</value></data>
   <data name="FilePickerNoFilesSelectedStatus" xml:space="preserve"><value>No files were selected.</value></data>
@@ -92,10 +98,10 @@
   <data name="AskReplyShownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} pinned snippet(s) as context.</value></data>
   <data name="AskReplyShownWithContextBreakdownStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} pinned snippet(s) and {1} local file context item(s).</value></data>
   <data name="ChatReplyShownWithContextStatus_Format" xml:space="preserve"><value>Microsoft 365 Copilot response shown in the panel. Used {0} explicit ContextRelay context item(s).</value></data>
-  <data name="CopilotResponseMayBeIncompleteStatus_Format" xml:space="preserve"><value>{0} The response may still be incomplete after automatic continuation.</value></data>
-  <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>Added {0} file mention(s) to the query.</value></data>
-  <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>Added {0} file mention(s); skipped {1} file(s) due to duplicates, workspace bounds, or mention limit.</value></data>
-  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>You can reference up to {0} files per message.</value></data>
+  <data name="CopilotResponseMayBeIncompleteStatus_Format" xml:space="preserve"><value>{0} The response may be incomplete. Use Fetch continuation to request more.</value></data>
+  <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>Attached {0} file(s) to the next chat request.</value></data>
+  <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>Attached {0} file(s); skipped {1} file(s) due to duplicates, workspace bounds, unsupported file types, or the attachment limit.</value></data>
+  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>You can include up to {0} files per message.</value></data>
   <data name="LocalFileContextLabel_Format" xml:space="preserve"><value>Local file: {0}</value></data>
   <data name="FileMentionNotFoundStatus_Format" xml:space="preserve"><value>File not found for #{0}.</value></data>
   <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>File #{0} is outside the opened workspace.</value></data>

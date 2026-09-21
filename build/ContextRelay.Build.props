@@ -260,7 +260,7 @@
     - SourceManifestPath: Full path to source.extension.vsixmanifest.
     - PackageDllPath: Full path to the in-proc package DLL.
     - PackagePkgdefPath: Full path to the generated package pkgdef.
-    - SupportingAssemblies: Optional semicolon-separated list of supporting assemblies (e.g., Community.VisualStudio.Toolkit.dll) to copy into the VSIX.
+    - SupportingAssemblies: Optional semicolon-separated list of supporting assemblies to copy into the VSIX. Use source|relative/path for satellite assemblies.
   -->
   <UsingTask TaskName="PatchVsixForInProcPackage" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
@@ -281,6 +281,20 @@
         <![CDATA[
         const string Ns = "http://schemas.microsoft.com/developer/vsx-schema/2011";
         const string NsDesign = "http://schemas.microsoft.com/developer/vsx-schema-design/2011";
+
+        string GetSupportingAssemblySource(string specification)
+        {
+            int separator = specification.IndexOf('|');
+            return (separator >= 0 ? specification.Substring(0, separator) : specification).Trim();
+        }
+
+        string GetSupportingAssemblyDestination(string specification)
+        {
+            int separator = specification.IndexOf('|');
+            string source = GetSupportingAssemblySource(specification);
+            string destination = separator >= 0 ? specification.Substring(separator + 1).Trim() : Path.GetFileName(source);
+            return destination.Replace('\\', '/').TrimStart('/');
+        }
 
         try
         {
@@ -411,13 +425,13 @@
                 {
                     foreach (string supportingAssembly in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
                     {
-                        string assemblyPath = supportingAssembly.Trim();
+                        string assemblyPath = GetSupportingAssemblySource(supportingAssembly);
                         if (string.IsNullOrEmpty(assemblyPath))
                         {
                             continue;
                         }
 
-                        EnsureAsset("Microsoft.VisualStudio.Assembly", Path.GetFileName(assemblyPath));
+                        EnsureAsset("Microsoft.VisualStudio.Assembly", GetSupportingAssemblyDestination(supportingAssembly));
                     }
                 }
 
@@ -518,13 +532,13 @@
                     {
                         foreach (string supportingAssembly in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
                         {
-                            string supportingAssemblyPath = supportingAssembly.Trim();
+                            string supportingAssemblyPath = GetSupportingAssemblySource(supportingAssembly);
                             if (string.IsNullOrEmpty(supportingAssemblyPath))
                             {
                                 continue;
                             }
 
-                            injectedManifestFiles.Add(Path.GetFileName(supportingAssemblyPath));
+                            injectedManifestFiles.Add(GetSupportingAssemblyDestination(supportingAssembly));
                         }
                     }
 
@@ -744,10 +758,12 @@
                 {
                     foreach (string sa in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
                     {
-                        string trimmed = sa.Trim();
-                        if (string.IsNullOrEmpty(trimmed) || !File.Exists(trimmed)) continue;
-                        string destSa = Path.Combine(workDir, Path.GetFileName(trimmed));
-                        File.Copy(trimmed, destSa, overwrite: true);
+                        string sourcePath = GetSupportingAssemblySource(sa);
+                        string relativeDestination = GetSupportingAssemblyDestination(sa);
+                        if (string.IsNullOrEmpty(sourcePath) || string.IsNullOrEmpty(relativeDestination) || !File.Exists(sourcePath)) continue;
+                        string destSa = Path.Combine(workDir, relativeDestination.Replace('/', Path.DirectorySeparatorChar));
+                        Directory.CreateDirectory(Path.GetDirectoryName(destSa));
+                        File.Copy(sourcePath, destSa, overwrite: true);
                     }
                 }
 

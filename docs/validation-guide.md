@@ -37,7 +37,9 @@ $vsDevCmd = 'C:\Program Files\Microsoft Visual Studio\2026\Enterprise\Common7\ID
 ### 2. Settings Properties
 Verify all settings are displayed in the Options page:
 - [ ] **General**: Max Results, Output Directory, Enable Chat Preview, UI Language
+- [ ] **Chat**: Maximum attached files (default 5), Attach active editor (default off), Stream chat responses (default on)
 - [ ] **Diagnostics**: Enable Graph Debug Logging, Enable Work IQ Debug Logging
+- [ ] **Privacy**: Allow local file context for Work IQ
 - [ ] **Authentication**: Client ID, Tenant ID, Cloud Environment, Custom Endpoints, Use Broker
 - [ ] **Caching**: Cache TTL, Cache Max Entries, Persist Workspace State
 - [ ] **Features**: Mail, Teams, SharePoint, OneDrive, Connectors, OneNote, Planner, Todo enabled/disabled toggles

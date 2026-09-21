@@ -2,8 +2,11 @@
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using ContextRelay.Core.Settings;
+using Microsoft.VisualStudio.Extensibility;
 
 namespace ContextRelay.VSExtension.Services;
+
+internal sealed record ActiveEditorSnapshot(string FilePath, int? SelectionStartLine, int? SelectionEndLine);
 
 internal interface IContextRelayPackageServices
 {
@@ -20,4 +23,7 @@ internal interface IContextRelayPackageServices
     Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default);
     Task CopyTextToClipboardAsync(string text, CancellationToken cancellationToken = default);
     Task UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default);
+    Task<ActiveEditorSnapshot?> GetActiveEditorSnapshotAsync(
+        IClientContext clientContext,
+        CancellationToken cancellationToken = default);
 }

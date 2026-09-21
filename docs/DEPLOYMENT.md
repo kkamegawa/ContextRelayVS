@@ -65,7 +65,7 @@ For production or direct validation in the main VS instance.
    - UI Language (current: ja)
    - And 14 additional settings
 
-**Expected Result**: Options page displays all 18 settings with proper categorization
+**Expected Result**: Options page displays all 27 settings with proper categorization
 
 ### Step 2: Verify Options Search
 1. Go to **Tools** > **Options**

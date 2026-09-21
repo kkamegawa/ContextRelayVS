@@ -2,14 +2,96 @@
 using System.ComponentModel;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.SharedStore;
 using Xunit;
 
 namespace ContextRelay.Core.Tests.ToolWindows;
 
 public sealed class SlashCommandSuggestionInteractionTests
 {
+    [Fact]
+    public void StreamingStateUpdate_PreservesUnchangedCollectionsAndCommands()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        var search = new[] { new ContextItem { Title = "title", Snippet = "snippet", Source = ContextSource.Mail, Timestamp = "time", Url = "url" } };
+        var snippets = new[] { new SharedSnippetItem { Id = "snippet-id", Name = "name", Snippet = "text", Source = "source" } };
+        var history = new[] { new SharedChatHistoryItem { Id = "history-id", Role = "assistant", Text = "reply", Timestamp = "time" } };
+        var pending = new[] { new ResolvedAttachment { Id = "pending-id", RelativePath = "file.md" } };
+        SetState(stateType, state, "SearchResults", search);
+        SetState(stateType, state, "Snippets", snippets);
+        SetState(stateType, state, "ChatHistory", history);
+        SetState(stateType, state, "PendingAttachments", pending);
+        applyState.Invoke(viewModel, new[] { state });
+
+        var searchProperty = viewModelType.GetProperty("SearchResults")!;
+        var snippetsProperty = viewModelType.GetProperty("Snippets")!;
+        var historyProperty = viewModelType.GetProperty("ChatHistory")!;
+        var pendingProperty = viewModelType.GetProperty("PendingAttachments")!;
+        var commandProperty = viewModelType.GetProperty("SearchCommand")!;
+        var firstSearch = searchProperty.GetValue(viewModel);
+        var firstSnippets = snippetsProperty.GetValue(viewModel);
+        var firstHistory = historyProperty.GetValue(viewModel);
+        var firstPending = pendingProperty.GetValue(viewModel);
+        var command = commandProperty.GetValue(viewModel);
+
+        SetState(stateType, state, "IsStreaming", true);
+        SetState(stateType, state, "StreamingResponseText", "partial response");
+        applyState.Invoke(viewModel, new[] { state });
+
+        Assert.Same(firstSearch, searchProperty.GetValue(viewModel));
+        Assert.Same(firstSnippets, snippetsProperty.GetValue(viewModel));
+        Assert.Same(firstHistory, historyProperty.GetValue(viewModel));
+        Assert.Same(firstPending, pendingProperty.GetValue(viewModel));
+        Assert.Same(command, commandProperty.GetValue(viewModel));
+        Assert.Equal("partial response", viewModelType.GetProperty("StreamingResponseText")!.GetValue(viewModel));
+
+        SetState(stateType, state, "PendingAttachments", new[] { new ResolvedAttachment { Id = "replacement-id", RelativePath = "file.md" } });
+        applyState.Invoke(viewModel, new[] { state });
+        Assert.NotSame(firstPending, pendingProperty.GetValue(viewModel));
+    }
+
+    [Fact]
+    public void OnHostStateChanged_StreamingOnlyUpdate_NotifiesOnlyStreamingProperties()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var eventArgsType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayStateChangedEventArgs", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var onHostStateChanged = viewModelType.GetMethod("OnHostStateChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        SetState(stateType, state, "SearchResults", new[] { new ContextItem { Title = "title", Snippet = "snippet", Source = ContextSource.Mail, Timestamp = "time", Url = "url" } });
+        SetState(stateType, state, "PendingAttachments", new[] { new ResolvedAttachment { Id = "pending-id", RelativePath = "file.md" } });
+        applyState.Invoke(viewModel, new[] { state });
+
+        var notifyPropertyChanged = Assert.IsAssignableFrom<INotifyPropertyChanged>(viewModel);
+        var raisedProperties = new System.Collections.Generic.List<string?>();
+        notifyPropertyChanged.PropertyChanged += (_, e) => raisedProperties.Add(e.PropertyName);
+
+        SetState(stateType, state, "IsStreaming", true);
+        SetState(stateType, state, "StreamingResponseText", "partial response");
+        var streamingArgs = Activator.CreateInstance(eventArgsType, new object[] { state, true })!;
+        onHostStateChanged.Invoke(viewModel, new object?[] { null, streamingArgs });
+
+        Assert.Equal("partial response", viewModelType.GetProperty("StreamingResponseText")!.GetValue(viewModel));
+        Assert.True((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
+        Assert.Equal(new[] { "IsStreaming", "StreamingResponseText" }, raisedProperties);
+    }
+
     [Fact]
     public void SlashCommandSuggestion_IsSelected_RaisesPropertyChangedOnlyWhenValueChanges()
     {
@@ -120,6 +202,7 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("x:Name=\"QueryTextBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding AddFilesCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"{Binding AddFilesButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{Binding AddFilesToolTipText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ToolTip=\"{Binding AddFilesToolTipText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ToolWindowTextBrushKey", xaml, StringComparison.Ordinal);
         Assert.Contains("Focusable\" Value=\"False\"", xaml, StringComparison.Ordinal);
@@ -160,7 +243,16 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("SelectionBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionTextBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
-        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"1\" Grid.Column=\"2\" Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"2\" Grid.Column=\"2\" Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding PendingAttachments}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalContentAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding StreamingResponseText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"180\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{Binding RemoveAutomationName}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<Setter Property=\"ScrollViewer.CanContentScroll\" Value=\"False\" />", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("StretchListBoxItemStyle", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Background=\"#", xaml, StringComparison.Ordinal);
@@ -296,6 +388,58 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.Equal("/onedrive", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("Name")!.GetValue(firstSuggestion)));
         Assert.Equal("/mail /onedrive ", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("CommittedQuery")!.GetValue(firstSuggestion)));
+    }
+
+    [Fact]
+    public void LocalizedStrings_GetChatResponseFailedStatus_FormatsConfiguredLanguage()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var stringsType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true)!;
+        var setLanguage = stringsType.GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)!;
+        var formatFailure = stringsType.GetMethod("GetChatResponseFailedStatus", BindingFlags.Static | BindingFlags.Public)!;
+
+        setLanguage.Invoke(null, new object?[] { "ja" });
+        var japanese = Assert.IsType<string>(formatFailure.Invoke(null, new object?[] { "detail" }));
+        setLanguage.Invoke(null, new object?[] { "en" });
+
+        Assert.Contains("応答の生成に失敗しました", japanese, StringComparison.Ordinal);
+        Assert.Contains("detail", japanese, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LocalizedStrings_AskRequiresContextStatus_MentionsAllSupportedContextSources()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var stringsType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true)!;
+        var setLanguage = stringsType.GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)!;
+        var status = stringsType.GetProperty("AskRequiresContextStatus", BindingFlags.Static | BindingFlags.Public)!;
+
+        setLanguage.Invoke(null, new object?[] { "en" });
+        var english = Assert.IsType<string>(status.GetValue(null));
+        Assert.Contains("pending file attachment", english, StringComparison.Ordinal);
+        Assert.Contains("#path", english, StringComparison.Ordinal);
+        Assert.Contains("active-editor attachment", english, StringComparison.Ordinal);
+
+        setLanguage.Invoke(null, new object?[] { "ja" });
+        var japanese = Assert.IsType<string>(status.GetValue(null));
+        Assert.Contains("保留中のファイル添付", japanese, StringComparison.Ordinal);
+        Assert.Contains("#path", japanese, StringComparison.Ordinal);
+        Assert.Contains("アクティブ エディターの添付", japanese, StringComparison.Ordinal);
+
+        setLanguage.Invoke(null, new object?[] { "en" });
+    }
+
+    [Fact]
+    public void ContextRelayVsServices_SelectionEndingAtNextLineStart_UsesLastSelectedCharacter()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var servicesType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayVsServices", throwOnError: true);
+        var method = servicesType!.GetMethod("GetInclusiveSelectionEndOffset", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, new object[] { 2, 10, (Func<int, int>)(offset => offset / 10) });
+
+        Assert.Equal(9, Assert.IsType<int>(result));
     }
 
     [Fact]
@@ -443,5 +587,10 @@ public sealed class SlashCommandSuggestionInteractionTests
     {
         var assemblyPath = BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.dll");
         return Assembly.LoadFrom(assemblyPath);
+    }
+
+    private static void SetState(Type stateType, object state, string propertyName, object value)
+    {
+        stateType.GetProperty(propertyName)!.SetValue(state, value);
     }
 }

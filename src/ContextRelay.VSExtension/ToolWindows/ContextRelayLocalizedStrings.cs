@@ -50,6 +50,12 @@ internal static class ContextRelayLocalizedStrings
     public static string OpenHandoffButtonText => GetString("OpenHandoffButtonText");
     public static string OpenCopilotButtonText => GetString("OpenCopilotButtonText");
     public static string AddFilesButtonText => GetString("AddFilesButtonText");
+    public static string AttachFileToChatButtonText => GetString("AttachFileToChatButtonText");
+    public static string RemoveAttachmentButtonText => GetString("RemoveAttachmentButtonText");
+    public static string GetRemoveAttachmentAutomationName(string label) => Format("RemoveAttachmentAutomationName_Format", label);
+    public static string StopGenerationButtonText => GetString("StopGenerationButtonText");
+    public static string ChatResponseCancelledStatus => GetString("ChatResponseCancelledStatus");
+    public static string GetChatResponseFailedStatus(string detail) => Format("ChatResponseFailedStatus", detail);
     public static string AddFilesToolTip => GetString("AddFilesToolTip");
     public static string ClearChatButtonText => GetString("ClearChatButtonText");
     public static string ClearSnippetsButtonText => GetString("ClearSnippetsButtonText");
@@ -76,7 +82,7 @@ internal static class ContextRelayLocalizedStrings
     public static string RequestedSourceDisabledStatus => GetString("RequestedSourceDisabledStatus");
     public static string AskDisabledStatus => GetString("AskDisabledStatus");
     public static string ChatPreviewDisabledStatus => GetString("ChatPreviewDisabledStatus");
-    public static string AskRequiresPinnedContextStatus => GetString("AskRequiresPinnedContextStatus");
+    public static string AskRequiresContextStatus => GetString("AskRequiresContextStatus");
     public static string FileMentionPromptEmptyStatus => GetString("FileMentionPromptEmptyStatus");
     public static string FilePickerWorkspaceUnavailableStatus => GetString("FilePickerWorkspaceUnavailableStatus");
     public static string FilePickerNoFilesSelectedStatus => GetString("FilePickerNoFilesSelectedStatus");

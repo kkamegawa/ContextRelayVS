@@ -9,10 +9,12 @@ The ContextRelay Visual Studio extension now includes a fully integrated Tools >
 
 ### 1. **Visual Studio Tools > Options Integration**
 - New unified options page: **Tools > Options > ContextRelay > General**
-- 18 settings properties organized into 5 categories:
+- 27 settings properties organized into 7 categories:
   - **General** (4): Max Results, Output Directory, Enable Chat Preview, UI Language
+  - **Chat** (3): Maximum attached files, Attach active editor, Stream chat responses
   - **Diagnostics** (2): Enable Graph Debug Logging, Enable Work IQ Debug Logging
-  - **Authentication** (7): Client ID, Tenant ID, Cloud Environment, Custom Endpoints, Use Broker
+  - **Privacy** (1): Allow local file context for Work IQ
+  - **Authentication** (6): Client ID, Tenant ID, Cloud Environment, Custom Endpoints, Use Broker
   - **Caching** (3): Cache TTL, Cache Max Entries, Persist Workspace State
   - **Features** (8): Mail, Teams, SharePoint, OneDrive, Connectors, OneNote, Planner, To Do
 
@@ -26,7 +28,7 @@ The ContextRelay Visual Studio extension now includes a fully integrated Tools >
 - Human-readable, indented JSON format
 - Atomic writes with crash-safe temporary file pattern
 - Settings survive Visual Studio crashes and restarts
-- All 18 properties persisted automatically
+- All 27 properties persisted automatically
 
 ### 4. **Language Localization**
 - UI Language setting with support for English ("en"), Japanese ("ja"), and Auto ("auto")
@@ -64,7 +66,7 @@ See `docs/DEPLOYMENT.md` for detailed installation and verification procedures.
 src/ContextRelay.Core/
 ├── ContextRelay.Core.csproj (netstandard2.0)
 └── Settings/
-    ├── ContextRelaySettingsSnapshot.cs (18 properties DTO)
+    ├── ContextRelaySettingsSnapshot.cs (27 properties DTO)
     └── ContextRelaySettingsStore.cs (JSON I/O with atomic writes)
 
 src/ContextRelay.VSExtension.Package/
@@ -72,7 +74,7 @@ src/ContextRelay.VSExtension.Package/
 ├── GlobalUsings.cs
 ├── Options/
 │   ├── ContextRelayOptionsPackage.cs (AsyncPackage with registration)
-│   ├── ContextRelayOptionsPage.cs (DialogPage with 18 properties)
+│   ├── ContextRelayOptionsPage.cs (DialogPage with 27 properties)
 │   └── ContextRelayPackageGuids.cs (GUIDs for package and options page)
 └── Properties/AssemblyInfo.cs
 
@@ -125,7 +127,7 @@ src/ContextRelay.VSExtension/Options/ContextRelaySettingsSnapshot.cs (moved to C
 
 After installation, verify:
 - [ ] **Tools > Options > ContextRelay > General** appears in the Options tree
-- [ ] All 18 settings properties display with correct names and descriptions
+- [ ] All 27 settings properties display with correct names and descriptions
 - [ ] Searching for "contextrelay" in **Tools > Options** search finds the page
 - [ ] Changing a setting value and clicking OK persists the value
 - [ ] Checking `%AppData%\ContextRelay\settings.json` shows the updated value
@@ -137,16 +139,20 @@ See `docs/validation-guide.md` for complete verification procedures.
 
 ## Settings Schema
 
-The `%AppData%\ContextRelay\settings.json` file contains all 18 settings:
+The `%AppData%\ContextRelay\settings.json` file contains all 27 settings:
 
 ```json
 {
   "MaxResults": 10,
   "OutputDirectory": ".contextrelay",
   "EnableChatPreview": true,
+  "ChatMaxAttachedFiles": 5,
+  "ChatAttachActiveEditor": false,
+  "ChatStreamResponses": true,
   "UiLanguage": "auto",
   "EnableGraphDebugLogging": false,
   "EnableWorkIqDebugLogging": false,
+  "AllowLocalFileContextForWorkIq": false,
   "ClientId": "",
   "TenantId": "organizations",
   "CloudEnvironment": 0,

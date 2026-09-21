@@ -1,4 +1,18 @@
-# Architecture Decision Records
+﻿# Architecture Decision Records
+
+## 2026-09-19 — Issue #184: Ground explicit-context chat requests and disable web context
+
+- Context: Plain chat and `/ask` share one payload builder, and the same explicit context (pinned snippets, queued attachments, `#file` mentions, active editor) can now reach both routes. Copilot could still answer from web results instead of the attached material.
+- Decision: When a request carries explicit context, append `ChatContextPayloadBuilder.GroundingInstructionText` to the outbound message and set `CopilotWebContext.IsWebEnabled` to `false` for that request. Requests without explicit context are sent unchanged, with no grounding instruction and no web context override.
+- Reason: Attached files and pinned snippets are the reason the user attached them, so they must be the primary sources; turning off web context for grounded requests keeps the answer inside the material the user chose to share.
+- Consequence: Grounded prompts differ from the literal user input, so history normalization and diagnostics operate on the composed request message. Documentation must state that a grounded request does not use Copilot web results. The `/ask` context check runs before the Copilot token is acquired, so a request with no explicit context is rejected without authentication, and trusted workspace roots are compared through their final directory targets so a redirected directory cannot widen the trusted set.
+
+## 2026-09-15 — Issue #184: Align Visual Studio `/ask` settings with VS Code
+
+- Context: The Visual Studio extension must apply the same explicit-context rules as the VS Code extension while retaining one shared settings file for all hosts.
+- Decision: Persist `ChatMaxAttachedFiles` (default `5`, clamped to a non-negative value), `ChatAttachActiveEditor` (default `false`), and `ChatStreamResponses` (default `true`) in the existing settings object. `/ask` uses bounded pinned, pending-file, and optionally saved active-editor context and is rejected when no usable explicit context exists; plain chat remains context-optional. A submitted request claims its included pending attachments atomically and removes them from the visible pending queue before generation starts.
+- Reason: A single additive JSON contract lets existing settings files continue to load while making the `/ask` behavior and user controls consistent across editors.
+- Consequence: The Options page exposes the three Chat settings, and callers must honor the persisted attachment limit and streaming preference when constructing `/ask` requests. Files added during generation remain queued for the next request without sharing the limit with attachments already in flight.
 
 ## 2026-08-02 — Issue #164: Synchronize Remote UI suggestion selection by index
 
