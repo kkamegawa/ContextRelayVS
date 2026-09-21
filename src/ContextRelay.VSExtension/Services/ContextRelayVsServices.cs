@@ -323,7 +323,11 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         var selection = textView.Selection;
         int? startLine = null;
         int? endLine = null;
-        if (!selection.IsEmpty)
+
+        // Selection offsets come from the live buffer, but the attachment is read from the saved file.
+        // With unsaved edits the line numbers no longer match on disk, so attach the whole saved file
+        // instead of a range that would point at unrelated lines.
+        if (!selection.IsEmpty && !textView.Document.IsDirty)
         {
             startLine = textView.Document.GetLineNumberFromPosition(selection.Start.Offset) + 1;
             // Selection.End is exclusive. When it lands at column zero, the selected

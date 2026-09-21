@@ -18,6 +18,9 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [DataContract]
 internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject, IDisposable
 {
+    private const int StreamingPreviewMaxChars = 1200;
+    private const int StreamingPreviewMaxLines = 12;
+
     private const int MaxVisibleCommandSuggestions = 4;
     private readonly ContextRelayHost host;
     private bool isBusy;
@@ -418,12 +421,42 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         try
         {
             IsStreaming = state.IsStreaming;
-            StreamingResponseText = state.StreamingResponseText;
+            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
         }
         finally
         {
             isApplyingState = false;
         }
+    }
+
+    /// <summary>
+    /// Returns the tail of a streamed response for the height-bounded preview. A bound text block
+    /// cannot scroll a Remote UI scroll viewer to the new extent, so showing the end of the text keeps
+    /// the latest output visible while the response is still arriving. The full reply is stored in
+    /// chat history when the request completes.
+    /// </summary>
+    /// <param name="text">The cumulative streamed text.</param>
+    /// <returns>The text to display in the streaming preview.</returns>
+    private static string TrimStreamingPreview(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var tail = text;
+        if (tail.Length > StreamingPreviewMaxChars)
+        {
+            tail = tail.Substring(tail.Length - StreamingPreviewMaxChars);
+        }
+
+        var lines = tail.Split('\n');
+        if (lines.Length > StreamingPreviewMaxLines)
+        {
+            tail = string.Join("\n", lines, lines.Length - StreamingPreviewMaxLines, StreamingPreviewMaxLines);
+        }
+
+        return tail.Length == text.Length ? text : "…" + tail;
     }
 
     private void ApplyState(ContextRelayHostState state)
@@ -443,7 +476,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
             SearchSummary = state.SearchSummary;
             IsStreaming = state.IsStreaming;
-            StreamingResponseText = state.StreamingResponseText;
+            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
             if (collectionLanguageChanged || !PendingAttachmentsEqual(state.PendingAttachments))
             {
                 PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();

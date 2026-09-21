@@ -116,17 +116,13 @@ public sealed class CopilotChatAdapterTests
     [Fact]
     public async Task SendMessageAsync_DoesNotRequestContinuationForRepeatedContent()
     {
-        // The continuation repeats the tail of the existing response verbatim (full overlap),
-        // so stitching adds nothing. Automatic continuation must stop after one attempt instead
-        // of retrying up to MaxContinuationRounds while resending the same stateful request.
+        // Automatic continuation was removed, so a response that looks truncated is reported as
+        // possibly incomplete and left for the manual Fetch continuation action. Queue one extra
+        // response to prove the adapter never reaches for it.
         var cancellationToken = TestContext.Current.CancellationToken;
         const string repeatedTail = "This exact sentence recurs verbatim across every turn.";
         var handler = new RecordingQueueHttpMessageHandler(
             CreateUnclosedFenceResponse(repeatedTail),
-            CreatePlainPartResponse(repeatedTail),
-            CreatePlainPartResponse(repeatedTail),
-            CreatePlainPartResponse(repeatedTail),
-            CreatePlainPartResponse(repeatedTail),
             CreatePlainPartResponse(repeatedTail));
         using var httpClient = new HttpClient(handler);
         var adapter = new CopilotChatAdapter(new GraphHttpClient(httpClient));

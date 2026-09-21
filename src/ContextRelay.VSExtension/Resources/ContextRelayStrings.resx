@@ -101,7 +101,7 @@
   <data name="CopilotResponseMayBeIncompleteStatus_Format" xml:space="preserve"><value>{0} The response may be incomplete. Use Fetch continuation to request more.</value></data>
   <data name="FilePickerFilesAddedStatus_Format" xml:space="preserve"><value>Attached {0} file(s) to the next chat request.</value></data>
   <data name="FilePickerFilesAddedPartialStatus_Format" xml:space="preserve"><value>Attached {0} file(s); skipped {1} file(s) due to duplicates, workspace bounds, unsupported file types, or the attachment limit.</value></data>
-  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>You can attach up to {0} files per message.</value></data>
+  <data name="FilePickerMentionLimitReachedStatus_Format" xml:space="preserve"><value>You can include up to {0} files per message.</value></data>
   <data name="LocalFileContextLabel_Format" xml:space="preserve"><value>Local file: {0}</value></data>
   <data name="FileMentionNotFoundStatus_Format" xml:space="preserve"><value>File not found for #{0}.</value></data>
   <data name="FileMentionOutsideWorkspaceStatus_Format" xml:space="preserve"><value>File #{0} is outside the opened workspace.</value></data>

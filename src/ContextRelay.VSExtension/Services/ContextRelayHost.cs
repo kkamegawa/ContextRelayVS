@@ -443,7 +443,7 @@ internal sealed class ContextRelayHost : IDisposable
                 input?.Trim() ?? string.Empty,
                 cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || disposeCancellation.IsCancellationRequested)
         {
             throw;
         }
@@ -1372,8 +1372,14 @@ internal sealed class ContextRelayHost : IDisposable
             var response = await sendAsync(requestState.CancellationToken, progress).ConfigureAwait(false);
             return new ActiveChatResponse(response, requestState);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && requestState.CancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (
+            !cancellationToken.IsCancellationRequested &&
+            !disposeCancellation.IsCancellationRequested &&
+            requestState.CancellationToken.IsCancellationRequested)
         {
+            // Only a user Stop becomes a stopped-generation result. Cancellation from extension
+            // shutdown must stay an OperationCanceledException so no state refresh runs while
+            // Dispose is tearing down the store, watcher, and gate.
             throw new ChatGenerationStoppedException();
         }
         finally

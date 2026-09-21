@@ -520,7 +520,9 @@
                 </StackPanel>
             </Border>
 
-            <ItemsControl Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" ItemsSource="{Binding PendingAttachments}" Margin="0,0,0,8" HorizontalContentAlignment="Stretch">
+            <ScrollViewer Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,8" MaxHeight="96"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding PendingAttachments}" HorizontalContentAlignment="Stretch">
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -536,7 +538,8 @@
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ItemsControl>
+            </ScrollViewer>
 
             <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="2" Grid.Column="0"
                     Margin="0,0,8,0"
