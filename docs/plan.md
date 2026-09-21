@@ -120,7 +120,7 @@ The same context selection applies to plain chat, so an input without a slash co
 - **Grounding**: when a request carries explicit context, `ChatContextPayloadBuilder.GroundingInstructionText` is appended to the outbound message and `CopilotWebContext.IsWebEnabled` is set to `false` so the answer is built from the attached files and pinned snippets instead of web results. Requests without explicit context send no grounding instruction and no web context override.
 - **Search summary**: the latest search summary is added to `additionalContext` as orientation when one exists, but it is not grounding context. It does not satisfy the `/ask` check and does not disable web context.
 - **Validation order**: `/ask` builds and validates its payload before acquiring a Copilot token, so a request with no explicit context is rejected locally without authentication or network work.
-- **Request lifecycle**: a request is cancellable from the tool window while it streams, and a stopped request reports cancellation without issuing an automatic continuation. Continuation stays manual.
+- **Request lifecycle**: the composer's send button becomes the stop action while a request is running, so a request is cancellable from the tool window while it streams, and a stopped request reports cancellation without issuing an automatic continuation. Continuation stays manual.
 
 ## 9. Handoff docs
 

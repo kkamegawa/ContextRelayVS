@@ -46,7 +46,7 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 4. Click the **+** (attach file) button, select a supported workspace file, and confirm a pending attachment chip appears. Remove the chip and confirm it is no longer included in the next request.
 5. Add pending local files and pinned snippets, send `/ask`, and confirm the request uses the bounded attachment set and the response displays the context labels.
 6. Start a chat request with **Stream chat responses** enabled and confirm the response text is updated incrementally while the request is in progress, rather than appearing only after completion.
-7. While a request is generating, add another attachment. Stop the request with **Stop**, then start a new chat request and confirm the attachment added during generation is still present and is included in that next request.
+7. While a request is generating, confirm the send button is replaced by **Stop** and that the streaming text uses the tool window foreground color in every theme. Add another attachment, stop the request with **Stop**, then start a new chat request and confirm the attachment added during generation is still present and is included in that next request.
 8. After stopping a request, send a fresh query and confirm it succeeds; no automatic continuation request is made after the stop.
 9. Toggle **Stream chat responses** and confirm both settings persist in `%AppData%\ContextRelay\settings.json`; verify an existing JSON file with none of the three properties loads with defaults `5`, disabled, and enabled.
 10. Open **Tools > ContextRelay > Attach File to Chat**, select a supported workspace file, and confirm it produces the same pending attachment chip as the **+** button in the tool window.

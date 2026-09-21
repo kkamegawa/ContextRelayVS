@@ -102,8 +102,25 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     public bool IsStreaming
     {
         get => isStreaming;
-        private set { if (isStreaming != value) { isStreaming = value; RaiseNotifyPropertyChangedEvent(nameof(IsStreaming)); } }
+        private set
+        {
+            if (isStreaming == value)
+            {
+                return;
+            }
+
+            isStreaming = value;
+            RaiseNotifyPropertyChangedEvent(nameof(IsStreaming));
+            RaiseNotifyPropertyChangedEvent(nameof(IsNotStreaming));
+        }
     }
+
+    /// <summary>
+    /// Gets a value indicating whether no chat request is running. The composer shows the send
+    /// button in that state and the stop button while a response is being generated.
+    /// </summary>
+    [DataMember]
+    public bool IsNotStreaming => !isStreaming;
 
     [DataMember]
     public string StreamingResponseText

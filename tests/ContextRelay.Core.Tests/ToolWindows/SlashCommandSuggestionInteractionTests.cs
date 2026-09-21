@@ -89,7 +89,7 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.Equal("partial response", viewModelType.GetProperty("StreamingResponseText")!.GetValue(viewModel));
         Assert.True((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
-        Assert.Equal(new[] { "IsStreaming", "StreamingResponseText" }, raisedProperties);
+        Assert.Equal(new[] { "IsStreaming", "IsNotStreaming", "StreamingResponseText" }, raisedProperties);
     }
 
     [Fact]
@@ -176,6 +176,27 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void EmbeddedXaml_TogglesSendAndStopAndThemesStreamingText()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        using var stream = assembly.GetManifestResourceStream("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowContent.xaml");
+
+        Assert.NotNull(stream);
+
+        using var reader = new StreamReader(stream!);
+        var xaml = reader.ReadToEnd();
+
+        // Send and Stop share the composer cell and swap on IsStreaming.
+        Assert.Contains("Visibility=\"{Binding IsNotStreaming, Converter={StaticResource BoolToVisConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{Binding StopGenerationButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
+
+        // The streaming preview is outside the chat list, so its text needs an explicit themed brush.
+        Assert.Contains("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource BodyTextStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource CardBodyTextStyle}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EmbeddedXaml_WiresSuggestionApplyAndConfirmBindings()
     {
         var assembly = LoadBuiltExtensionAssembly();
@@ -243,7 +264,8 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("SelectionBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionTextBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
-        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"2\" Grid.Column=\"2\" Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"2\" Grid.Column=\"2\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding PendingAttachments}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("HorizontalContentAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
         Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
