@@ -559,16 +559,11 @@
 
             </TextBox>
             <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="2" Grid.Column="2"
-                    Content="{Binding SearchButtonText}"
+                    Content="{Binding PrimaryActionButtonText}"
+                    ToolTip="{Binding PrimaryActionButtonText}"
+                    AutomationProperties.Name="{Binding PrimaryActionButtonText}"
                     Command="{Binding SearchCommand}"
-                    IsEnabled="{Binding IsNotBusy}"
-                    Visibility="{Binding IsNotStreaming, Converter={StaticResource BoolToVisConverter}}" />
-            <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="2" Grid.Column="2"
-                    Content="{Binding StopGenerationButtonText}"
-                    ToolTip="{Binding StopGenerationButtonText}"
-                    AutomationProperties.Name="{Binding StopGenerationButtonText}"
-                    Command="{Binding StopGenerationCommand}"
-                    Visibility="{Binding IsStreaming, Converter={StaticResource BoolToVisConverter}}" />
+                    IsEnabled="{Binding IsPrimaryActionEnabled}" />
         </Grid>
     </Grid>
 </DataTemplate>

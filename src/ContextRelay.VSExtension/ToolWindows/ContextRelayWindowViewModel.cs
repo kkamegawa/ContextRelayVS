@@ -52,7 +52,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         RefreshLocalizedUiTexts();
 
-        SearchCommand = new AsyncCommand(async (_, context, ct) => await SubmitAsync(context, ct).ConfigureAwait(false));
+        SearchCommand = new AsyncCommand(async (_, context, ct) =>
+        {
+            // The composer keeps one primary button so keyboard focus survives the switch
+            // between sending and stopping.
+            if (IsStreaming)
+            {
+                host.StopGeneration();
+                return;
+            }
+
+            await SubmitAsync(context, ct).ConfigureAwait(false);
+        });
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
         CopyPromptCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.CopyHandoffPromptAsync(ct)).ConfigureAwait(false));
         OpenHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.OpenHandoffDocumentAsync(ct)).ConfigureAwait(false));
@@ -111,16 +122,24 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
             isStreaming = value;
             RaiseNotifyPropertyChangedEvent(nameof(IsStreaming));
-            RaiseNotifyPropertyChangedEvent(nameof(IsNotStreaming));
+            RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
         }
     }
 
     /// <summary>
-    /// Gets a value indicating whether no chat request is running. The composer shows the send
-    /// button in that state and the stop button while a response is being generated.
+    /// Gets the label of the composer's primary button, which sends a query and becomes the
+    /// stop action while a response is being generated.
     /// </summary>
     [DataMember]
-    public bool IsNotStreaming => !isStreaming;
+    public string PrimaryActionButtonText => isStreaming ? StopGenerationButtonText : SearchButtonText;
+
+    /// <summary>
+    /// Gets a value indicating whether the composer's primary button is enabled. Stopping stays
+    /// available while the request that made the view model busy is still running.
+    /// </summary>
+    [DataMember]
+    public bool IsPrimaryActionEnabled => isStreaming || !isBusy;
 
     [DataMember]
     public string StreamingResponseText
@@ -595,6 +614,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         isBusy = true;
         RaiseNotifyPropertyChangedEvent(nameof(IsNotBusy));
+        RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
         try
         {
             await action().ConfigureAwait(false);
@@ -603,6 +623,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             isBusy = false;
             RaiseNotifyPropertyChangedEvent(nameof(IsNotBusy));
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
         }
     }
 
@@ -691,6 +712,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(ClearCacheButtonText));
         SearchButtonText = ContextRelayLocalizedStrings.SearchButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchButtonText));
+        RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
         SearchResultsHeaderText = ContextRelayLocalizedStrings.SearchResultsHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchResultsHeaderText));
         SearchSummaryHeaderText = ContextRelayLocalizedStrings.SearchSummaryHeaderText;

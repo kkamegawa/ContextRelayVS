@@ -89,7 +89,9 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.Equal("partial response", viewModelType.GetProperty("StreamingResponseText")!.GetValue(viewModel));
         Assert.True((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
-        Assert.Equal(new[] { "IsStreaming", "IsNotStreaming", "StreamingResponseText" }, raisedProperties);
+        Assert.Equal(
+            new[] { "IsStreaming", "PrimaryActionButtonText", "IsPrimaryActionEnabled", "StreamingResponseText" },
+            raisedProperties);
     }
 
     [Fact]
@@ -186,14 +188,43 @@ public sealed class SlashCommandSuggestionInteractionTests
         using var reader = new StreamReader(stream!);
         var xaml = reader.ReadToEnd();
 
-        // Send and Stop share the composer cell and swap on IsStreaming.
-        Assert.Contains("Visibility=\"{Binding IsNotStreaming, Converter={StaticResource BoolToVisConverter}}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Content=\"{Binding StopGenerationButtonText}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
+        // One primary button switches label and behavior, so keyboard focus survives the change.
+        Assert.Contains("Content=\"{Binding PrimaryActionButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsEnabled=\"{Binding IsPrimaryActionEnabled}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding IsNotStreaming", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
 
         // The streaming preview is outside the chat list, so its text needs an explicit themed brush.
         Assert.Contains("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource BodyTextStyle}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource CardBodyTextStyle}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PrimaryAction_SwitchesToStopWhileStreamingAndStaysEnabled()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        applyState.Invoke(viewModel, new[] { state });
+
+        var primaryText = viewModelType.GetProperty("PrimaryActionButtonText")!;
+        var primaryEnabled = viewModelType.GetProperty("IsPrimaryActionEnabled")!;
+        var searchText = viewModelType.GetProperty("SearchButtonText")!.GetValue(viewModel);
+        var stopText = viewModelType.GetProperty("StopGenerationButtonText")!.GetValue(viewModel);
+
+        Assert.Equal(searchText, primaryText.GetValue(viewModel));
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+
+        SetState(stateType, state, "IsStreaming", true);
+        applyState.Invoke(viewModel, new[] { state });
+
+        Assert.Equal(stopText, primaryText.GetValue(viewModel));
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
     }
 
     [Fact]
@@ -265,12 +296,12 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("SelectionTextBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"2\" Grid.Column=\"2\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{Binding PrimaryActionButtonText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding PendingAttachments}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("HorizontalContentAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
         Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<ColumnDefinition Width=\"Auto\" />", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding SearchCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding StreamingResponseText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"180\"", xaml, StringComparison.Ordinal);
         Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
