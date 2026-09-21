@@ -125,6 +125,7 @@ internal sealed class ContextRelayHost : IDisposable
 
     private FileSystemWatcher? settingsWatcher;
     private int settingsReloadRunning;
+    private int settingsReloadPending;
 
     public event EventHandler<ContextRelayStateChangedEventArgs>? StateChanged;
 
@@ -254,28 +255,38 @@ internal sealed class ContextRelayHost : IDisposable
         {
             // Saves arrive as several file events; wait so only one reload runs per save.
             await Task.Delay(300, disposeCancellation.Token).ConfigureAwait(false);
+            Volatile.Write(ref settingsReloadPending, 1);
             if (Interlocked.Exchange(ref settingsReloadRunning, 1) == 1)
             {
+                // The active worker re-checks the pending flag, so this save is not lost.
                 return;
             }
 
-            try
+            do
             {
-                var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
-                if (!string.Equals(
-                        ContextRelaySettingsStore.NormalizeUiLanguage(configured),
-                        ContextRelayLocalizedStrings.CurrentUiLanguage,
-                        StringComparison.Ordinal))
+                try
                 {
-                    // GetStateAsync reloads the full language state (including the host locale for auto)
-                    // and raises StateChanged so the open view model refreshes its labels.
-                    await GetStateAsync().ConfigureAwait(false);
+                    while (Interlocked.Exchange(ref settingsReloadPending, 0) == 1)
+                    {
+                        var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
+                        if (!string.Equals(
+                                ContextRelaySettingsStore.NormalizeUiLanguage(configured),
+                                ContextRelayLocalizedStrings.CurrentUiLanguage,
+                                StringComparison.Ordinal))
+                        {
+                            // GetStateAsync reloads the full language state (including the host locale for auto)
+                            // and raises StateChanged so the open view model refreshes its labels.
+                            await GetStateAsync().ConfigureAwait(false);
+                        }
+                    }
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref settingsReloadRunning, 0);
                 }
             }
-            finally
-            {
-                Interlocked.Exchange(ref settingsReloadRunning, 0);
-            }
+            while (Volatile.Read(ref settingsReloadPending) == 1 &&
+                   Interlocked.Exchange(ref settingsReloadRunning, 1) == 0);
         }
         catch (OperationCanceledException)
         {
