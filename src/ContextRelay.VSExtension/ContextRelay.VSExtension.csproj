@@ -110,8 +110,11 @@
     Visual Studio UI language (the installed language pack) and falling back to the
     default English file. The generated extension.json therefore keeps every
     %ContextRelay.*% token instead of baking in English text. This task only
-    validates the metadata: every token must be defined in both the English and the
-    Japanese resource file, so no language can fall through to a raw token.
+    validates the metadata. The set of tokens in extension.json, the keys of the
+    English file, and the keys of the Japanese file must all be identical, and the
+    same must hold for the copies that ship inside the VSIX, because Visual Studio
+    reads the packaged files. That leaves no language a raw token to fall through to
+    and no resource that nothing references.
   -->
   <UsingTask TaskName="ValidateContextRelayMenuMetadata" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
@@ -131,55 +134,34 @@
         <![CDATA[
         try
         {
-            HashSet<string> english = ReadResourceKeys(Path.Combine(ResourcesDirectory, "string-resources.json"));
-            HashSet<string> japanese = ReadResourceKeys(Path.Combine(ResourcesDirectory, "ja", "string-resources.json"));
-
-            foreach (string key in english)
-            {
-                if (!japanese.Contains(key))
-                {
-                    Log.LogError("ja/string-resources.json is missing '{0}', so it would fall back to English under a Japanese language pack.", key);
-                }
-            }
-
-            foreach (string key in japanese)
-            {
-                if (!english.Contains(key))
-                {
-                    Log.LogError("string-resources.json (default) is missing '{0}', which only the Japanese file defines.", key);
-                }
-            }
+            // Source files: the two languages must define exactly the same keys.
+            HashSet<string> english = ReadResourceKeys(File.ReadAllText(Path.Combine(ResourcesDirectory, "string-resources.json"), Encoding.UTF8), "string-resources.json");
+            HashSet<string> japanese = ReadResourceKeys(File.ReadAllText(Path.Combine(ResourcesDirectory, "ja", "string-resources.json"), Encoding.UTF8), "ja/string-resources.json");
+            RequireSameKeys(english, "string-resources.json", japanese, "ja/string-resources.json");
 
             if (!string.IsNullOrWhiteSpace(ExtensionJsonPath) && File.Exists(ExtensionJsonPath))
             {
-                ValidateTokens(File.ReadAllText(ExtensionJsonPath, Encoding.UTF8), english, ExtensionJsonPath);
+                // Build output: every token the manifest references must be defined, and every key defined must be used.
+                RequireSameKeys(FindTokens(File.ReadAllText(ExtensionJsonPath, Encoding.UTF8)), "extension.json tokens", english, "string-resources.json");
             }
 
             if (!string.IsNullOrWhiteSpace(VsixPath) && File.Exists(VsixPath))
             {
                 using (ZipArchive zip = ZipFile.Open(VsixPath, ZipArchiveMode.Read))
                 {
-                    ZipArchiveEntry entry = zip.GetEntry(".vsextension/extension.json");
-                    if (entry == null)
+                    // Visual Studio reads the packaged copies, not the source files, so validate those.
+                    string manifestText = ReadEntry(zip, ".vsextension/extension.json");
+                    string englishText = ReadEntry(zip, ".vsextension/string-resources.json");
+                    string japaneseText = ReadEntry(zip, ".vsextension/ja/string-resources.json");
+                    if (manifestText == null || englishText == null || japaneseText == null)
                     {
-                        Log.LogError("VSIX is missing .vsextension/extension.json: {0}", VsixPath);
                         return false;
                     }
 
-                    using (var stream = entry.Open())
-                    using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
-                    {
-                        ValidateTokens(reader.ReadToEnd(), english, VsixPath);
-                    }
-
-                    // Visual Studio can only pick a language from files that ship in the package.
-                    foreach (string required in new[] { ".vsextension/string-resources.json", ".vsextension/ja/string-resources.json" })
-                    {
-                        if (zip.GetEntry(required) == null)
-                        {
-                            Log.LogError("VSIX is missing {0}: {1}", required, VsixPath);
-                        }
-                    }
+                    HashSet<string> packagedEnglish = ReadResourceKeys(englishText, "packaged .vsextension/string-resources.json");
+                    HashSet<string> packagedJapanese = ReadResourceKeys(japaneseText, "packaged .vsextension/ja/string-resources.json");
+                    RequireSameKeys(packagedEnglish, "packaged string-resources.json", packagedJapanese, "packaged ja/string-resources.json");
+                    RequireSameKeys(FindTokens(manifestText), "packaged extension.json tokens", packagedEnglish, "packaged string-resources.json");
                 }
             }
         }
@@ -191,31 +173,68 @@
 
         return !Log.HasLoggedErrors;
 
-        HashSet<string> ReadResourceKeys(string path)
+        string ReadEntry(ZipArchive zip, string name)
         {
-            var keys = new HashSet<string>(StringComparer.Ordinal);
-            if (!File.Exists(path))
+            ZipArchiveEntry entry = zip.GetEntry(name);
+            if (entry == null)
             {
-                Log.LogError("Resource file not found: {0}", path);
-                return keys;
+                Log.LogError("VSIX is missing {0}: {1}", name, VsixPath);
+                return null;
             }
 
-            // The files are flat string maps, so a key is a quoted name followed by a colon.
-            foreach (Match match in Regex.Matches(File.ReadAllText(path, Encoding.UTF8), "\"(ContextRelay\\.[^\"]+)\"\\s*:"))
+            using (var stream = entry.Open())
+            using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+            {
+                return reader.ReadToEnd();
+            }
+        }
+
+        HashSet<string> ReadResourceKeys(string json, string label)
+        {
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+
+            // The files are flat string maps. A quoted key followed by a colon is a key, and a value
+            // that itself contains such text cannot be mistaken for one because values never start a
+            // line with a quoted name.
+            foreach (Match match in Regex.Matches(json, "^\\s*\"([^\"]+)\"\\s*:", RegexOptions.Multiline))
             {
                 keys.Add(match.Groups[1].Value);
+            }
+
+            if (keys.Count == 0)
+            {
+                Log.LogError("{0} defines no resource keys; it is empty or malformed.", label);
             }
 
             return keys;
         }
 
-        void ValidateTokens(string manifestText, HashSet<string> defined, string location)
+        HashSet<string> FindTokens(string manifestText)
         {
+            var tokens = new HashSet<string>(StringComparer.Ordinal);
             foreach (Match match in Regex.Matches(manifestText, "%(ContextRelay\\.[A-Za-z0-9_.]+)%"))
             {
-                if (!defined.Contains(match.Groups[1].Value))
+                tokens.Add(match.Groups[1].Value);
+            }
+
+            return tokens;
+        }
+
+        void RequireSameKeys(HashSet<string> left, string leftName, HashSet<string> right, string rightName)
+        {
+            foreach (string key in left)
+            {
+                if (!right.Contains(key))
                 {
-                    Log.LogError("extension.json references token '{0}' that string-resources.json does not define: {1}", match.Value, location);
+                    Log.LogError("'{0}' is in {1} but missing from {2}.", key, leftName, rightName);
+                }
+            }
+
+            foreach (string key in right)
+            {
+                if (!left.Contains(key))
+                {
+                    Log.LogError("'{0}' is in {1} but missing from {2}.", key, rightName, leftName);
                 }
             }
         }

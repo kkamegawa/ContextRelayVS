@@ -44,17 +44,15 @@ public sealed class InProcPackageVsixPackagingTests
             extensionJson = reader.ReadToEnd();
         }
 
-        // Tokens must survive packaging so Visual Studio can resolve them for its UI language, and
-        // each one must be defined by both language files that ship in the same package.
+        // Tokens must survive packaging so Visual Studio can resolve them for its UI language. The
+        // packaged manifest tokens and both packaged language files must be the same set, because
+        // Visual Studio reads these copies and not the source files.
         var tokens = ContextRelayResourceTokens.FindTokens(extensionJson);
         Assert.NotEmpty(tokens);
         var packagedEnglish = ContextRelayResourceTokens.ReadResourceMap(archive.GetEntry(".vsextension/string-resources.json")!);
         var packagedJapanese = ContextRelayResourceTokens.ReadResourceMap(archive.GetEntry(".vsextension/ja/string-resources.json")!);
-        foreach (var token in tokens)
-        {
-            Assert.True(packagedEnglish.ContainsKey(token), $"Packaged default resources do not define '{token}'.");
-            Assert.True(packagedJapanese.ContainsKey(token), $"Packaged Japanese resources do not define '{token}'.");
-        }
+        Assert.Equal(tokens, packagedEnglish.Keys.OrderBy(key => key, StringComparer.Ordinal));
+        Assert.Equal(tokens, packagedJapanese.Keys.OrderBy(key => key, StringComparer.Ordinal));
 
         var manifestEntry = archive.GetEntry("extension.vsixmanifest");
         Assert.NotNull(manifestEntry);

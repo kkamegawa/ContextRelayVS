@@ -310,8 +310,8 @@ If panel initialization depends on those transient tokens, cancellation can occu
 - Visual Studio Tools menu shows literal resource tokens such as:
   - `%ContextRelay.Menu.DisplayName%`
   - `%ContextRelay.Command.<Name>.DisplayName%`
-- The affected extension's `.vsextension/extension.json` contains those `%...%` strings in `controlContainers[].displayName`, `tooltipText`, or `commandSets[].commands[]`.
-- `.vsextension/string-resources.json` may still be present in the VSIX, so the package looks correct at first glance.
+- The generated `.vsextension/extension.json` contains those `%...%` strings in `controlContainers[].displayName`, `tooltipText`, and `commandSets[].commands[]`. **That is intended.** The tokens belong in the manifest, and the symptom is only that Visual Studio failed to resolve them at runtime.
+- `.vsextension/string-resources.json` and `.vsextension/ja/string-resources.json` are present in the VSIX, so the package looks correct at first glance.
 
 ### Why this happens
 
@@ -327,10 +327,11 @@ If panel initialization depends on those transient tokens, cancellation can occu
 
 ### Verification
 
-1. Build the extension.
-2. Inspect bin output `.vsextension/extension.json` for unresolved extension-owned tokens.
-3. Inspect VSIX `.vsextension/extension.json` for unresolved extension-owned tokens.
+1. Build the extension. `ValidateContextRelayMenuMetadata` fails the build if the token set and the resource keys differ.
+2. Confirm the bin output `.vsextension/extension.json` still contains every `%ContextRelay.*%` token, and that its token set equals the keys of `string-resources.json` and `ja/string-resources.json`. A token that is missing from the manifest means a display name was baked into text, which defeats localization.
+3. Confirm the same for the VSIX: the packaged `.vsextension/extension.json` tokens, `.vsextension/string-resources.json` keys, and `.vsextension/ja/string-resources.json` keys are one identical set. Visual Studio reads the packaged copies, not the source files.
 4. Reinstall the VSIX into a clean Visual Studio instance or clear the target instance's extension metadata cache before checking Tools menu UI.
+5. Check the menu under the Visual Studio UI language you care about (**Tools > Options > Environment > International Settings**). Names must be readable and follow that language, with English as the fallback. Raw `%...%` text means that channel did not resolve the metadata; record the Visual Studio version and channel.
 
 ---
 

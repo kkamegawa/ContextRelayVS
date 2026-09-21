@@ -34,11 +34,12 @@ public sealed class ExtensionHostConfigurationTests
         var controlPlacements = document.RootElement.GetProperty("controlPlacements").EnumerateArray().ToArray();
 
         // Display names stay resource tokens so Visual Studio picks the string-resources.json that
-        // matches its UI language. Baking English text into the manifest would defeat that.
+        // matches its UI language. Baking English text into the manifest would defeat that, and a
+        // baked-in name would simply vanish from the token set, so compare against every resource key.
         var manifestTokens = ContextRelayResourceTokens.FindTokens(manifestText);
-        Assert.NotEmpty(manifestTokens);
-        Assert.Contains("ContextRelay.Command.AttachFileToChat.DisplayName", manifestTokens);
-        Assert.Contains("ContextRelay.Menu.DisplayName", manifestTokens);
+        var resourceKeys = ContextRelayResourceTokens.ReadResourceMap(
+            Path.Combine(Path.GetDirectoryName(extensionAssemblyPath)!, ".vsextension", "string-resources.json")).Keys;
+        Assert.Equal(resourceKeys.OrderBy(key => key, StringComparer.Ordinal), manifestTokens);
         Assert.NotEmpty(services);
         Assert.Contains(
             services,
@@ -113,15 +114,12 @@ public sealed class ExtensionHostConfigurationTests
         var japanese = ContextRelayResourceTokens.ReadResourceMap(japaneseResource);
         var manifestText = File.ReadAllText(Path.Combine(extensionOutputDirectory!, ".vsextension", "extension.json"));
 
-        // A token missing from a language file would surface as raw %...% text or silently fall back.
-        foreach (var token in ContextRelayResourceTokens.FindTokens(manifestText))
-        {
-            Assert.True(english.ContainsKey(token), $"Default resources do not define '{token}'.");
-            Assert.True(japanese.ContainsKey(token), $"Japanese resources do not define '{token}'.");
-        }
-
-        // The two files must stay in lockstep so no key exists in only one language.
-        Assert.Equal(english.Keys.OrderBy(key => key), japanese.Keys.OrderBy(key => key));
+        // The manifest tokens, the default resources, and the Japanese resources must be the same
+        // set. A token missing from a language file would surface as raw %...% text or silently fall
+        // back, and a key that no token references is a name that was baked into the manifest.
+        var manifestTokens = ContextRelayResourceTokens.FindTokens(manifestText);
+        Assert.Equal(manifestTokens, english.Keys.OrderBy(key => key, StringComparer.Ordinal));
+        Assert.Equal(manifestTokens, japanese.Keys.OrderBy(key => key, StringComparer.Ordinal));
     }
 
     [Fact]
