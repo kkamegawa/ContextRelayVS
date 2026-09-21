@@ -230,17 +230,9 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Equal(stopText, primaryText.GetValue(viewModel));
         Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
 
-        // Between submit and the first streaming update the view model is busy but not yet
-        // streaming. The button must stay enabled there, because disabling it loses keyboard focus.
-        SetState(stateType, state, "IsStreaming", false);
-        applyState.Invoke(viewModel, new[] { state });
-        var busyField = viewModelType.GetField("isBusy", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var chatRequestField = viewModelType.GetField("isChatRequestActive", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        busyField.SetValue(viewModel, true);
-        Assert.False((bool)primaryEnabled.GetValue(viewModel)!);
-
-        chatRequestField.SetValue(viewModel, true);
-        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+        // The enabled state across the submit-to-streaming gap is covered by
+        // PrimaryAction_WhileSubmittingAChatQuery_StaysEnabledBeforeStreamingStarts, which drives
+        // the real command instead of setting the fields it maintains.
     }
 
     [Fact]
@@ -297,6 +289,58 @@ public sealed class SlashCommandSuggestionInteractionTests
         refresh.Invoke(viewModel, null);
 
         Assert.True((bool)canExecute.GetValue(applyCommand)!);
+    }
+
+    [Fact]
+    public async Task PrimaryAction_WhileSubmittingAChatQuery_StaysEnabledBeforeStreamingStarts()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var loggerType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayOutputLogger", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+
+        // Give the bare host what the submit path touches, and hold its gate closed so the request
+        // stays in flight in exactly the window between submit and the first streaming update.
+        using var submitGate = new SemaphoreSlim(0, 1);
+        hostType.GetField("logger", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(host, RuntimeHelpers.GetUninitializedObject(loggerType));
+        hostType.GetField("gate", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, submitGate);
+        hostType.GetField("draftQuerySync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        viewModelType.GetField("queryText", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(viewModel, "explain this");
+        var primaryEnabled = viewModelType.GetProperty("IsPrimaryActionEnabled")!;
+        var busyField = viewModelType.GetField("isBusy", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var command = viewModelType.GetProperty("SearchCommand")!.GetValue(viewModel)!;
+        var execute = command.GetType().GetMethods()
+            .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
+        using var cancellation = new CancellationTokenSource();
+        var execution = (Task)execute.Invoke(command, new object?[] { null, null, cancellation.Token })!;
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!(bool)busyField.GetValue(viewModel)! && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((bool)busyField.GetValue(viewModel)!);
+
+        // Busy but not streaming yet: the button must stay enabled, because disabling a focused
+        // control moves keyboard focus away and WPF does not restore it.
+        Assert.False((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+
+        cancellation.Cancel();
+        try
+        {
+            await execution;
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: the held gate is released only by cancelling the request.
+        }
     }
 
     [Fact]

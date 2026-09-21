@@ -773,10 +773,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     }
 
     /// <summary>
-    /// Enables the suggestion key bindings only while the slash-command popup is open, so the
-    /// query box does not consume Tab, Up, Down, or Escape when there is nothing to navigate.
-    /// </summary>
-    /// <summary>
     /// Returns whether a query routes to a Copilot chat turn, which is the only kind of request
     /// that streams and can be stopped from the composer.
     /// </summary>
@@ -793,6 +789,10 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         return target is RouteTarget.Chat or RouteTarget.Ask;
     }
 
+    /// <summary>
+    /// Enables the suggestion key bindings only while the slash-command popup is open, so the
+    /// query box does not consume Tab, Up, Down, or Escape when there is nothing to navigate.
+    /// </summary>
     private void UpdateSuggestionKeyBindingAvailability()
     {
         var popupOpen = isCommandPopupOpen;
