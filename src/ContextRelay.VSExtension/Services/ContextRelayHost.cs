@@ -123,6 +123,9 @@ internal sealed class ContextRelayHost : IDisposable
         handoffDocumentGenerator = new HandoffDocumentGenerator(sharedStore);
     }
 
+    private FileSystemWatcher? settingsWatcher;
+    private int settingsReloadRunning;
+
     public event EventHandler<ContextRelayStateChangedEventArgs>? StateChanged;
 
     public void UpdateDraftQueryText(string queryText)
@@ -211,6 +214,73 @@ internal sealed class ContextRelayHost : IDisposable
         await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
         return state;
+    }
+
+    /// <summary>
+    /// Watches the shared settings file so a language change saved from the Options page reaches an
+    /// already-open tool window; the Options page runs in another process and cannot call the host.
+    /// </summary>
+    public void StartSettingsLanguageWatcher()
+    {
+        if (settingsWatcher is not null || disposeCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(ContextRelaySettingsStore.SettingsFilePath);
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        var created = new FileSystemWatcher(directory, Path.GetFileName(ContextRelaySettingsStore.SettingsFilePath))
+        {
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+        };
+        FileSystemEventHandler handler = (_, _) => _ = OnSettingsFileChangedAsync();
+        created.Changed += handler;
+        created.Created += handler;
+        created.Renamed += (_, _) => _ = OnSettingsFileChangedAsync();
+        created.EnableRaisingEvents = true;
+        settingsWatcher = created;
+    }
+
+    private async Task OnSettingsFileChangedAsync()
+    {
+        try
+        {
+            // Saves arrive as several file events; wait so only one reload runs per save.
+            await Task.Delay(300, disposeCancellation.Token).ConfigureAwait(false);
+            if (Interlocked.Exchange(ref settingsReloadRunning, 1) == 1)
+            {
+                return;
+            }
+
+            try
+            {
+                var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
+                if (!string.Equals(
+                        ContextRelaySettingsStore.NormalizeUiLanguage(configured),
+                        ContextRelayLocalizedStrings.CurrentUiLanguage,
+                        StringComparison.Ordinal))
+                {
+                    // GetStateAsync reloads the full language state (including the host locale for auto)
+                    // and raises StateChanged so the open view model refreshes its labels.
+                    await GetStateAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref settingsReloadRunning, 0);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogError("Unable to apply a UI language change from the shared settings file.", ex);
+        }
     }
 
     public void StartDeferredSignedInUserResolution()
@@ -914,6 +984,7 @@ internal sealed class ContextRelayHost : IDisposable
         workIqAdapter.Dispose();
         snippetRepository.Dispose();
         watcher.Dispose();
+        settingsWatcher?.Dispose();
         gate.Dispose();
         disposeCancellation.Dispose();
     }

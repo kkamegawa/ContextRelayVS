@@ -67,6 +67,7 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
             await hostInstance.InitializeAsync(cancellationToken).ConfigureAwait(false);
             await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
             hostInstance.StartDeferredSignedInUserResolution();
+            hostInstance.StartSettingsLanguageWatcher();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

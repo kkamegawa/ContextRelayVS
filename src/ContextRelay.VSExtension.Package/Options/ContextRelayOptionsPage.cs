@@ -132,8 +132,8 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     /// Gets or sets the preferred ContextRelay UI language.
     /// </summary>
     [Category("General")]
-    [DisplayName("UI language")]
-    [Description("Selects the ContextRelay UI language. Choose Auto to follow the Visual Studio display language, or pick English or Japanese explicitly.")]
+    [LocalizedDisplayName("UiLanguage.DisplayName")]
+    [LocalizedDescription("UiLanguage.Description")]
     [DefaultValue("auto")]
     [TypeConverter(typeof(UiLanguageConverter))]
     public string UiLanguage
