@@ -70,18 +70,27 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             }
 
             // Authentication and conversation setup run before the first streaming update.
-            // Keep the button enabled across that gap; disabling it would move keyboard focus
-            // away, and WPF does not restore it when the control is enabled again.
-            isChatRequestActive = true;
-            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+            // Keep the button enabled across that gap for routes that can stream and be stopped;
+            // disabling it would move keyboard focus away, and WPF does not restore it when the
+            // control is enabled again. Other routes keep the ordinary disabled-while-busy state.
+            var stoppable = IsStoppableRoute(QueryText);
+            if (stoppable)
+            {
+                isChatRequestActive = true;
+                RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+            }
+
             try
             {
                 await SubmitAsync(context, ct).ConfigureAwait(false);
             }
             finally
             {
-                isChatRequestActive = false;
-                RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+                if (stoppable)
+                {
+                    isChatRequestActive = false;
+                    RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+                }
             }
         });
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
@@ -767,6 +776,23 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     /// Enables the suggestion key bindings only while the slash-command popup is open, so the
     /// query box does not consume Tab, Up, Down, or Escape when there is nothing to navigate.
     /// </summary>
+    /// <summary>
+    /// Returns whether a query routes to a Copilot chat turn, which is the only kind of request
+    /// that streams and can be stopped from the composer.
+    /// </summary>
+    /// <param name="query">The query text about to be submitted.</param>
+    /// <returns><see langword="true"/> for non-empty plain chat and <c>/ask</c> submissions.</returns>
+    private static bool IsStoppableRoute(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        var target = SlashCommandRouter.Parse(query.Trim()).Target;
+        return target is RouteTarget.Chat or RouteTarget.Ask;
+    }
+
     private void UpdateSuggestionKeyBindingAvailability()
     {
         var popupOpen = isCommandPopupOpen;

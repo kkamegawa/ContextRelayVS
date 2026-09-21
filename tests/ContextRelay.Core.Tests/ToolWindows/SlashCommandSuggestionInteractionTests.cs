@@ -2,7 +2,11 @@
 using System.ComponentModel;
 using System.IO;
 using System.Reflection;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using ContextRelay.Core.Chat;
 using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
@@ -293,6 +297,43 @@ public sealed class SlashCommandSuggestionInteractionTests
         refresh.Invoke(viewModel, null);
 
         Assert.True((bool)canExecute.GetValue(applyCommand)!);
+    }
+
+    [Fact]
+    public async Task PrimaryAction_WhileStreaming_RequestsCancellationInsteadOfSubmitting()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+
+        // StopGeneration cancels through the request state machine, so give the bare host the two
+        // fields it touches and start a request that the command is expected to cancel.
+        var stateMachine = new ChatRequestStateMachine();
+        hostType.GetField("chatRequestStateMachine", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, stateMachine);
+        hostType.GetField("activeChatRequestSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+        using var requestCancellation = new CancellationTokenSource();
+        Assert.True(stateMachine.TryBegin(Array.Empty<string>(), requestCancellation.Token, out var request));
+
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        SetState(stateType, state, "IsStreaming", true);
+        applyState.Invoke(viewModel, new[] { state });
+
+        var command = viewModelType.GetProperty("SearchCommand")!.GetValue(viewModel)!;
+        // The client context type lives in the extensibility SDK, which this project does not
+        // reference, so resolve the overload by shape and pass no context; the stop path ignores it.
+        var execute = command.GetType().GetMethods()
+            .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
+        await (Task)execute.Invoke(command, new object?[] { null, null, TestContext.Current.CancellationToken })!;
+
+        Assert.True(request!.CancellationToken.IsCancellationRequested);
+
+        // A second submission must not start: the submit path would flag an active chat request.
+        var chatRequestField = viewModelType.GetField("isChatRequestActive", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.False((bool)chatRequestField.GetValue(viewModel)!);
     }
 
     [Fact]
