@@ -141,8 +141,13 @@
 
             if (!string.IsNullOrWhiteSpace(ExtensionJsonPath) && File.Exists(ExtensionJsonPath))
             {
-                // Build output: every token the manifest references must be defined, and every key defined must be used.
-                RequireSameKeys(FindTokens(File.ReadAllText(ExtensionJsonPath, Encoding.UTF8)), "extension.json tokens", english, "string-resources.json");
+                // Build output: validate the deployed resource copies, because those are what the built
+                // manifest sits beside and what Visual Studio reads from the build output.
+                string outputResourcesDirectory = Path.GetDirectoryName(ExtensionJsonPath);
+                HashSet<string> outputEnglish = ReadResourceKeys(File.ReadAllText(Path.Combine(outputResourcesDirectory, "string-resources.json"), Encoding.UTF8), "output string-resources.json");
+                HashSet<string> outputJapanese = ReadResourceKeys(File.ReadAllText(Path.Combine(outputResourcesDirectory, "ja", "string-resources.json"), Encoding.UTF8), "output ja/string-resources.json");
+                RequireSameKeys(outputEnglish, "output string-resources.json", outputJapanese, "output ja/string-resources.json");
+                RequireSameKeys(FindTokens(File.ReadAllText(ExtensionJsonPath, Encoding.UTF8)), "output extension.json tokens", outputEnglish, "output string-resources.json");
             }
 
             if (!string.IsNullOrWhiteSpace(VsixPath) && File.Exists(VsixPath))
