@@ -24,6 +24,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private const int MaxVisibleCommandSuggestions = 4;
     private readonly ContextRelayHost host;
     private bool isBusy;
+    private bool isChatRequestActive;
     private bool isCommandPopupOpen;
     private int commandSuggestionWindowStart;
     private string queryText = string.Empty;
@@ -62,7 +63,26 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 return;
             }
 
-            await SubmitAsync(context, ct).ConfigureAwait(false);
+            if (isBusy)
+            {
+                host.LogUiDiagnostic("Submit ignored because the view model is already busy.");
+                return;
+            }
+
+            // Authentication and conversation setup run before the first streaming update.
+            // Keep the button enabled across that gap; disabling it would move keyboard focus
+            // away, and WPF does not restore it when the control is enabled again.
+            isChatRequestActive = true;
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+            try
+            {
+                await SubmitAsync(context, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                isChatRequestActive = false;
+                RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+            }
         });
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
         CopyPromptCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.CopyHandoffPromptAsync(ct)).ConfigureAwait(false));
@@ -139,7 +159,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     /// available while the request that made the view model busy is still running.
     /// </summary>
     [DataMember]
-    public bool IsPrimaryActionEnabled => isStreaming || !isBusy;
+    public bool IsPrimaryActionEnabled => isChatRequestActive || isStreaming || !isBusy;
 
     [DataMember]
     public string StreamingResponseText

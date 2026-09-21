@@ -225,6 +225,18 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.Equal(stopText, primaryText.GetValue(viewModel));
         Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+
+        // Between submit and the first streaming update the view model is busy but not yet
+        // streaming. The button must stay enabled there, because disabling it loses keyboard focus.
+        SetState(stateType, state, "IsStreaming", false);
+        applyState.Invoke(viewModel, new[] { state });
+        var busyField = viewModelType.GetField("isBusy", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var chatRequestField = viewModelType.GetField("isChatRequestActive", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        busyField.SetValue(viewModel, true);
+        Assert.False((bool)primaryEnabled.GetValue(viewModel)!);
+
+        chatRequestField.SetValue(viewModel, true);
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
     }
 
     [Fact]

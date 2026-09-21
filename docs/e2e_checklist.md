@@ -27,7 +27,7 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 
 1. Repeat this section on Visual Studio 2022 and Visual Studio 2026 / Insider with the Light, Dark, Blue, and High Contrast themes.
 2. Confirm the tool window background, panel surfaces, cards, list items, text, and borders use Visual Studio theme resources without default WPF white or black surfaces.
-3. Confirm neutral buttons show distinct rest, pointer-over, pressed, keyboard-focus, and disabled states while the composer's primary button is the only primary action. That one button reads Search while idle and Stop while a response is generating.
+3. Confirm neutral buttons show distinct rest, pointer-over, pressed, keyboard-focus, and disabled states while the composer's primary button is the only primary action. That one button reads **Send** (送信) while idle and **Stop** (停止) while a response is generating.
 4. Use Tab and Shift+Tab to reach each regular action button, then activate it with Enter and Space. Confirm slash-command suggestion items remain outside the Tab order and continue to follow the query input keyboard behavior.
 5. Confirm every focus indicator is visible in Light, Dark, Blue, and High Contrast themes and is not communicated by color alone.
 6. Select query text by mouse drag, Shift+Arrow, and Ctrl+A. Confirm the selection foreground and background remain readable, and confirm the caret stays visible when the selection is collapsed.
