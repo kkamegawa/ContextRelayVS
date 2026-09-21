@@ -1,4 +1,11 @@
-﻿# Architecture Decision Records
+# Architecture Decision Records
+
+## 2026-09-22 — Issue #192: Follow the Visual Studio UI locale in automatic mode
+
+- Context: The user confirmed that automatic language selection must follow the Visual Studio display language. The extension process culture can instead follow Windows and produce Japanese UI inside English Visual Studio.
+- Decision: The existing in-process package obtains the UI locale from the Visual Studio shell and exposes it through a local-session brokered service. The out-of-process tool window resolves the language before creating its view model. Explicit English/Japanese choices remain immediate; unsupported or unavailable host languages fall back to English. Options use the same shell locale. The host language is not persisted in shared user settings.
+- Reason: This implements the user-confirmed language contract and supersedes the process-culture limitation recorded for Issue #191. A session-local service keeps concurrently running Visual Studio instances independent.
+- Verification: Cover English/Japanese host locales, unsupported and unavailable locales, opposing process cultures, explicit overrides, initial labels, broker registration, and packaged resources. Verify the actual tool window in Visual Studio.
 
 ## 2026-09-21 — Issue #191: Localize command and menu names from the Visual Studio language pack
 

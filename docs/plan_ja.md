@@ -33,6 +33,13 @@ Tools > Options > ContextRelay > General の `Chat` カテゴリで次を設定�
 
 設定は `%AppData%\ContextRelay\settings.json` に既存項目と同じ JSON オブジェクトとして保存します。新しい項目がない既存ファイルは上記の既定値で読み込むため、既存設定との互換性を維持します。
 
+## UI 言語
+
+- Options ページまたはツール ウィンドウの言語切り替えで指定した明示的な英語・日本語は、共有設定の値として正規化して適用します。
+- `auto` では、インプロセス パッケージが Visual Studio シェルから表示言語を取得し、セッション内のブローカー サービスを通じてアウトオブプロセスのツール ウィンドウへ渡します。拡張機能プロセスや Windows のスレッド カルチャは判定に使用しません。
+- Visual Studio の表示言語が未対応、または取得できない場合は英語へフォールバックします。言語解決は初期ツール ウィンドウの ViewModel 作成前に完了します。
+- Options のラベルも同じ Visual Studio の表示言語を使用し、設定変更時はプロパティ ディスクリプターを更新します。Visual Studio の表示言語自体は共有ユーザー設定には保存しません。
+
 ## 検証
 
 [docs/e2e_checklist.md](e2e_checklist.md) で、Options の保存、添付上限、アクティブ エディター添付、コンテキストなし `/ask` の拒否、ストリーミング切り替えを Visual Studio 2022 と Visual Studio 2026 の Experimental Instance で確認します。

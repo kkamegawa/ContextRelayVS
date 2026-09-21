@@ -1,4 +1,4 @@
-﻿_See the session plan at the project root (`plan.md` snapshot)._
+_See the session plan at the project root (`plan.md` snapshot)._
 
 This file mirrors the design plan stored during planning so that downstream work can reference it from the repository. Keep it in sync with session notes when major decisions change.
 
@@ -106,7 +106,7 @@ Registered by an in-proc VSSDK `AsyncPackage` and persisted to the shared JSON s
 
 - **Integrated page**: one `ContextRelay > General` property grid that contains General, Authentication, Diagnostics, Caching, and Feature toggles.
 - **Shared persistence**: the in-proc Options page writes to the same JSON file consumed by the out-of-proc extension.
-- **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value. Option labels resolve from that persisted value rather than the Visual Studio process culture, and the property descriptors refresh when it changes.
+- **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value. Explicit English/Japanese choices take precedence. In automatic mode, the existing in-process package reads the Visual Studio UI locale and exposes it through a session-local brokered service to the out-of-process tool window. Unsupported or unavailable host languages resolve to English, independently of the operating system and extension thread cultures. Language resolution completes before the initial tool window view model is created. Option labels use the same host locale and the property descriptors refresh when the shared setting changes.
 - **Chat settings**: the `Chat` category exposes `ChatMaxAttachedFiles` (default `5`, non-negative; `0` disables attachments), `ChatAttachActiveEditor` (default `false`), and `ChatStreamResponses` (default `true`). These values are persisted in the same JSON object and missing properties retain these defaults for existing settings files.
 
 ## 8.1 Chat context rules and parity settings (Issue #184)
