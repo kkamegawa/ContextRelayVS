@@ -732,7 +732,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(ClearCacheButtonText));
         SearchButtonText = ContextRelayLocalizedStrings.SearchButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchButtonText));
-        RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
         SearchResultsHeaderText = ContextRelayLocalizedStrings.SearchResultsHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchResultsHeaderText));
         SearchSummaryHeaderText = ContextRelayLocalizedStrings.SearchSummaryHeaderText;
@@ -752,6 +751,10 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         StopGenerationButtonText = ContextRelayLocalizedStrings.StopGenerationButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(StopGenerationButtonText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+
+        // Notify the derived caption last. It reads whichever label matches the current state,
+        // so notifying before both labels are assigned would publish the previous language.
+        RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
     }
 
     private void CloseCommandPopup()

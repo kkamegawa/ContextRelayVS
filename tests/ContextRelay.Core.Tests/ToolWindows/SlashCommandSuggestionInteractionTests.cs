@@ -240,6 +240,36 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void PrimaryActionCaption_IsNotifiedAfterBothLabelsAreRefreshed()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        SetState(stateType, state, "IsStreaming", true);
+        applyState.Invoke(viewModel, new[] { state });
+
+        var notifyPropertyChanged = Assert.IsAssignableFrom<INotifyPropertyChanged>(viewModel);
+        var raised = new System.Collections.Generic.List<string?>();
+        notifyPropertyChanged.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        applyState.Invoke(viewModel, new[] { state });
+
+        // The derived caption reads whichever label matches the current state, so it must be
+        // notified after both labels have been reassigned for the current UI language.
+        var caption = raised.LastIndexOf("PrimaryActionButtonText");
+        var stopLabel = raised.LastIndexOf("StopGenerationButtonText");
+        var sendLabel = raised.LastIndexOf("SearchButtonText");
+        Assert.True(caption >= 0);
+        Assert.True(caption > stopLabel);
+        Assert.True(caption > sendLabel);
+    }
+
+    [Fact]
     public void EmbeddedXaml_WiresSuggestionApplyAndConfirmBindings()
     {
         var assembly = LoadBuiltExtensionAssembly();
