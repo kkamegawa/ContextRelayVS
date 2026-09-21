@@ -40,6 +40,10 @@
   <Import Project="..\..\build\ContextRelay.Build.props" />
 
   <ItemGroup>
+    <Compile Include="..\Shared\VisualStudioLanguageService.cs" Link="Services\VisualStudioLanguageService.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="icon.png" />
   </ItemGroup>
 

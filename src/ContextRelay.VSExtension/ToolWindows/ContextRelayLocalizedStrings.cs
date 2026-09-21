@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Resources;
 using ContextRelay.Core.Router;
+using ContextRelay.VisualStudio;
 
 namespace ContextRelay.VSExtension.ToolWindows;
 
@@ -19,6 +20,10 @@ internal static class ContextRelayLocalizedStrings
         "ContextRelay.VSExtension.Resources.ContextRelayStrings",
         typeof(ContextRelayLocalizedStrings).Assembly);
     private static string configuredUiLanguage = UiLanguageAuto;
+    private static int? visualStudioUiLocale;
+
+    /// <summary>Applies the locale reported by the owning Visual Studio session.</summary>
+    public static void SetVisualStudioUiLocale(int? locale) => visualStudioUiLocale = locale;
 
     private static readonly IReadOnlyDictionary<string, string> CommandDescriptionKeys =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -439,15 +444,7 @@ internal static class ContextRelayLocalizedStrings
 
     private static string ResolveLanguageCode(string language)
     {
-        var normalized = NormalizeUiLanguage(language);
-        if (!normalized.Equals(UiLanguageAuto, StringComparison.OrdinalIgnoreCase))
-        {
-            return normalized;
-        }
-
-        return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals(UiLanguageJapanese, StringComparison.OrdinalIgnoreCase)
-            ? UiLanguageJapanese
-            : UiLanguageEnglish;
+        return VisualStudioLanguageService.ResolveLanguage(language, visualStudioUiLocale);
     }
 
     private static string NormalizeUiLanguage(string? language)

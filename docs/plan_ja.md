@@ -38,6 +38,7 @@ Tools > Options > ContextRelay > General の `Chat` カテゴリで次を設定�
 - Options ページまたはツール ウィンドウの言語切り替えで指定した明示的な英語・日本語は、共有設定の値として正規化して適用します。
 - `auto` では、インプロセス パッケージが Visual Studio シェルから表示言語を取得し、セッション内のブローカー サービスを通じてアウトオブプロセスのツール ウィンドウへ渡します。拡張機能プロセスや Windows のスレッド カルチャは判定に使用しません。
 - Visual Studio の表示言語が未対応、または取得できない場合は英語へフォールバックします。言語解決は初期ツール ウィンドウの ViewModel 作成前に完了します。
+- Options の UI language は自由入力ではなく固定のドロップダウンで、サポートする言語 `Auto (follow Visual Studio)`（`auto`）、`English (en)`（`en`）、`日本語 (ja)`（`ja`）から選択します。保存値は `auto` / `en` / `ja` で、既定は `auto` です。明示的な選択が常に優先されるため、保存済みの `en` / `ja` は `Auto` に戻すまで Visual Studio の表示言語より優先されます。
 - Options のラベルも同じ Visual Studio の表示言語を使用し、設定変更時はプロパティ ディスクリプターを更新します。Visual Studio の表示言語自体は共有ユーザー設定には保存しません。
 
 ## 検証

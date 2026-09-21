@@ -24,6 +24,45 @@ internal partial class OptionsProvider
 }
 
 /// <summary>
+/// Presents the supported UI languages as a fixed drop-down list; the stored values remain auto, en and ja.
+/// </summary>
+internal sealed class UiLanguageConverter : StringConverter
+{
+    private static readonly string[] Values = { "auto", "en", "ja" };
+
+    public override bool GetStandardValuesSupported(ITypeDescriptorContext? context) => true;
+
+    public override bool GetStandardValuesExclusive(ITypeDescriptorContext? context) => true;
+
+    public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context) => new(Values);
+
+    public override object? ConvertTo(ITypeDescriptorContext? context, System.Globalization.CultureInfo? culture, object? value, Type destinationType)
+    {
+        if (destinationType == typeof(string) && value is string text)
+        {
+            return ContextRelaySettingsStore.NormalizeUiLanguage(text) switch
+            {
+                "en" => "English (en)",
+                "ja" => "日本語 (ja)",
+                _ => "Auto (follow Visual Studio)",
+            };
+        }
+
+        return base.ConvertTo(context, culture, value, destinationType);
+    }
+
+    public override object? ConvertFrom(ITypeDescriptorContext? context, System.Globalization.CultureInfo? culture, object value)
+    {
+        if (value is string text)
+        {
+            return text.Contains("(en)") ? "en" : text.Contains("(ja)") ? "ja" : text.StartsWith("Auto", StringComparison.OrdinalIgnoreCase) ? "auto" : ContextRelaySettingsStore.NormalizeUiLanguage(text);
+        }
+
+        return base.ConvertFrom(context, culture, value);
+    }
+}
+
+/// <summary>
 /// Represents the editable ContextRelay settings shown in the Visual Studio options UI.
 /// </summary>
 public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptionsModel>
@@ -94,8 +133,9 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     /// </summary>
     [Category("General")]
     [DisplayName("UI language")]
-    [Description("Selects the ContextRelay UI language. Use 'auto' to follow the Visual Studio language.")]
+    [Description("Selects the ContextRelay UI language. Choose Auto to follow the Visual Studio display language, or pick English or Japanese explicitly.")]
     [DefaultValue("auto")]
+    [TypeConverter(typeof(UiLanguageConverter))]
     public string UiLanguage
     {
         get => uiLanguage;

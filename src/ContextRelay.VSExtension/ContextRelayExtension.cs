@@ -31,6 +31,7 @@ internal sealed class ContextRelayExtension : Extension
     {
         base.InitializeServices(serviceCollection);
         serviceCollection.AddSingleton<ContextRelaySettingsService>();
+        serviceCollection.AddSingleton<VisualStudioUiLanguageProvider>();
         serviceCollection.AddSingleton<ContextRelayOutputLogger>();
         serviceCollection.AddSingleton<IContextRelayPackageServices, ContextRelayVsServices>();
         serviceCollection.AddSingleton<ContextRelayHost>();

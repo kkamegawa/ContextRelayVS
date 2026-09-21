@@ -18,21 +18,24 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
 {
     private readonly VisualStudioExtensibility extensibility;
     private readonly ContextRelaySettingsService settingsService;
+    private readonly VisualStudioUiLanguageProvider uiLanguageProvider;
     private readonly object selectedWorkspaceRootsGate = new();
     private readonly object workspaceFileCacheGate = new();
     private string[] selectedWorkspaceRoots = Array.Empty<string>();
     private string[] cachedWorkspaceFileRoots = Array.Empty<string>();
     private string[] cachedWorkspaceFiles = Array.Empty<string>();
 
-    public ContextRelayVsServices(VisualStudioExtensibility extensibility, ContextRelaySettingsService settingsService)
+    public ContextRelayVsServices(VisualStudioExtensibility extensibility, ContextRelaySettingsService settingsService, VisualStudioUiLanguageProvider uiLanguageProvider)
     {
         this.extensibility = extensibility;
         this.settingsService = settingsService;
+        this.uiLanguageProvider = uiLanguageProvider;
     }
 
     public async Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        ContextRelayLocalizedStrings.SetVisualStudioUiLocale(await uiLanguageProvider.GetUiLocaleAsync(cancellationToken).ConfigureAwait(false));
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         return settings;
     }

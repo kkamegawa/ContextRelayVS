@@ -13,6 +13,53 @@ namespace ContextRelay.Core.Tests.ToolWindows;
 
 public sealed class SlashCommandSuggestionInteractionTests
 {
+    [Theory]
+    [InlineData("auto", 1033, "ja-JP", false)]
+    [InlineData("auto", 1041, "en-US", true)]
+    [InlineData("auto", 1031, "ja-JP", false)]
+    [InlineData("auto", null, "ja-JP", false)]
+    [InlineData("auto", -1, "ja-JP", false)]
+    [InlineData("en", 1041, "ja-JP", false)]
+    [InlineData("ja", 1033, "en-US", true)]
+    [InlineData("ja-JP", 1033, "en-US", true)]
+    public void AutomaticLanguage_UsesVisualStudioLocaleInsteadOfProcessCulture(
+        string configuredLanguage, int? hostLocale, string processCulture, bool expectedJapanese)
+    {
+        var assembly = Assembly.LoadFrom(BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.dll"));
+        var strings = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", true)!;
+        var setLanguage = strings.GetMethod("SetUiLanguage", BindingFlags.Public | BindingFlags.Static)!;
+        var setLocale = strings.GetMethod("SetVisualStudioUiLocale", BindingFlags.Public | BindingFlags.Static)!;
+        var originalCulture = System.Globalization.CultureInfo.CurrentUICulture;
+        var originalLanguage = strings.GetProperty("CurrentUiLanguage")!.GetValue(null);
+        var localeField = strings.GetField("visualStudioUiLocale", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var originalLocale = localeField.GetValue(null);
+        try
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.GetCultureInfo(processCulture);
+            setLocale.Invoke(null, new object?[] { hostLocale });
+            setLanguage.Invoke(null, new object?[] { configuredLanguage });
+            Assert.Equal(expectedJapanese, strings.GetProperty("UseJapanese")!.GetValue(null));
+            Assert.Equal(expectedJapanese ? "検索結果" : "Search results", strings.GetProperty("SearchResultsHeaderText")!.GetValue(null));
+
+            var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", true)!;
+            var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", true)!;
+            var host = RuntimeHelpers.GetUninitializedObject(hostType);
+            using var viewModel = (IDisposable)Activator.CreateInstance(viewModelType,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+            Assert.Equal(expectedJapanese ? "検索結果" : "Search results", viewModelType.GetProperty("SearchResultsHeaderText")!.GetValue(viewModel));
+
+            // Changing worker-thread culture cannot change already selected host-language labels.
+            System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+            Assert.Equal(expectedJapanese, strings.GetProperty("UseJapanese")!.GetValue(null));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = originalCulture;
+            setLocale.Invoke(null, new[] { originalLocale });
+            setLanguage.Invoke(null, new[] { originalLanguage });
+        }
+    }
+
     [Fact]
     public void StreamingStateUpdate_PreservesUnchangedCollectionsAndCommands()
     {
