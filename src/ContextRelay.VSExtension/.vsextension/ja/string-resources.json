@@ -1,3 +1,17 @@
 ﻿{
-  "ContextRelay.Command.AttachFileToChat.DisplayName": "チャットにファイルを添付"
+  "ContextRelay.Menu.DisplayName": "ContextRelay",
+  "ContextRelay.Menu.Language.DisplayName": "言語",
+  "ContextRelay.Command.AttachFileToChat.DisplayName": "チャットにファイルを添付",
+  "ContextRelay.Command.ClearCache.DisplayName": "キャッシュをクリア",
+  "ContextRelay.Command.ClearChat.DisplayName": "チャットをクリア",
+  "ContextRelay.Command.ClearSnippets.DisplayName": "スニペットをクリア",
+  "ContextRelay.Command.CopyHandoffPrompt.DisplayName": "ハンドオフ プロンプトをコピー",
+  "ContextRelay.Command.GenerateHandoff.DisplayName": "ハンドオフを生成",
+  "ContextRelay.Command.OpenCopilotChat.DisplayName": "Copilot Chat を開く",
+  "ContextRelay.Command.OpenHandoffDoc.DisplayName": "ハンドオフ文書を開く",
+  "ContextRelay.Command.OpenWindow.DisplayName": "ContextRelay",
+  "ContextRelay.Command.Search.DisplayName": "ContextRelay を開く",
+  "ContextRelay.Command.ShowDebugLog.DisplayName": "デバッグ ログ",
+  "ContextRelay.Command.SetLanguageEnglish.DisplayName": "English",
+  "ContextRelay.Command.SetLanguageJapanese.DisplayName": "日本語"
 }

@@ -320,11 +320,10 @@ If panel initialization depends on those transient tokens, cancellation can occu
 ### Remediation
 
 - Keep source `CommandConfiguration` and `MenuConfiguration` strings in `%string-resource-key%` form so the SDK analyzer remains satisfied.
-- Patch the generated `.vsextension/extension.json` after the SDK emits it, replacing only known extension-owned display tokens with stable display text.
-- Patch both:
-  - the bin output `.vsextension/extension.json`, for local build/test reflection checks
-  - the produced VSIX `.vsextension/extension.json`, for installer/runtime metadata
-- Add tests and build assertions that fail if produced extension metadata still contains `%ContextRelay.` tokens.
+- The generated `.vsextension/extension.json` intentionally keeps every `%ContextRelay.*%` token. Visual Studio resolves them from `.vsextension/string-resources.json` (default English) and `.vsextension/ja/string-resources.json`, choosing by the Visual Studio UI language (the installed language pack), not the operating system language.
+- Do not bake English text into `extension.json`. That was the earlier workaround; it showed readable names on every channel but made the menu impossible to localize.
+- The `ValidateContextRelayMenuMetadata` build task fails the build when a token in the bin output or the VSIX is not defined in both resource files, or when either resource file is missing from the VSIX. The tests in `ExtensionHostConfigurationTests` and `InProcPackageVsixPackagingTests` assert the same contract.
+- If a specific Visual Studio channel still shows raw tokens, record its version and channel before changing the approach. Restoring a per-token English fallback trades localization for reliability, so it needs an explicit decision.
 
 ### Verification
 

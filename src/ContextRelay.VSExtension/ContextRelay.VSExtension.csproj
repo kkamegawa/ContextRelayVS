@@ -105,47 +105,59 @@
   </ItemGroup>
 
   <!--
-    VisualStudio.Extensibility resolves command metadata through the localized
-    .vsextension/string-resources.json files. Legacy menu metadata is still
-    patched to stable display text, while the Attach File command intentionally
-    remains a resource token so Visual Studio can select the UI language.
+    VisualStudio.Extensibility resolves command and menu display names from the
+    .vsextension/string-resources.json files, choosing the file that matches the
+    Visual Studio UI language (the installed language pack) and falling back to the
+    default English file. The generated extension.json therefore keeps every
+    %ContextRelay.*% token instead of baking in English text. This task only
+    validates the metadata: every token must be defined in both the English and the
+    Japanese resource file, so no language can fall through to a raw token.
   -->
-  <UsingTask TaskName="PatchContextRelayMenuMetadata" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+  <UsingTask TaskName="ValidateContextRelayMenuMetadata" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <ExtensionJsonPath ParameterType="System.String" Required="false" />
       <VsixPath ParameterType="System.String" Required="false" />
+      <ResourcesDirectory ParameterType="System.String" Required="true" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
       <Using Namespace="System.IO" />
       <Using Namespace="System.IO.Compression" />
       <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
       <Using Namespace="Microsoft.Build.Framework" />
       <Code>
         <![CDATA[
         try
         {
-            bool patched = false;
+            HashSet<string> english = ReadResourceKeys(Path.Combine(ResourcesDirectory, "string-resources.json"));
+            HashSet<string> japanese = ReadResourceKeys(Path.Combine(ResourcesDirectory, "ja", "string-resources.json"));
+
+            foreach (string key in english)
+            {
+                if (!japanese.Contains(key))
+                {
+                    Log.LogError("ja/string-resources.json is missing '{0}', so it would fall back to English under a Japanese language pack.", key);
+                }
+            }
+
+            foreach (string key in japanese)
+            {
+                if (!english.Contains(key))
+                {
+                    Log.LogError("string-resources.json (default) is missing '{0}', which only the Japanese file defines.", key);
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(ExtensionJsonPath) && File.Exists(ExtensionJsonPath))
             {
-                string text = File.ReadAllText(ExtensionJsonPath, Encoding.UTF8);
-                string replaced = ReplaceContextRelayDisplayTokens(text);
-                if (!string.Equals(text, replaced, StringComparison.Ordinal))
-                {
-                    File.WriteAllText(ExtensionJsonPath, replaced, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                    patched = true;
-                }
-
-                string unresolved = replaced.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
-                if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
-                {
-                    Log.LogError("Generated extension.json still contains unresolved ContextRelay display token: {0}", ExtensionJsonPath);
-                }
+                ValidateTokens(File.ReadAllText(ExtensionJsonPath, Encoding.UTF8), english, ExtensionJsonPath);
             }
 
             if (!string.IsNullOrWhiteSpace(VsixPath) && File.Exists(VsixPath))
             {
-                using (ZipArchive zip = ZipFile.Open(VsixPath, ZipArchiveMode.Update))
+                using (ZipArchive zip = ZipFile.Open(VsixPath, ZipArchiveMode.Read))
                 {
                     ZipArchiveEntry entry = zip.GetEntry(".vsextension/extension.json");
                     if (entry == null)
@@ -154,75 +166,69 @@
                         return false;
                     }
 
-                    string text;
                     using (var stream = entry.Open())
                     using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
                     {
-                        text = reader.ReadToEnd();
+                        ValidateTokens(reader.ReadToEnd(), english, VsixPath);
                     }
 
-                    string replaced = ReplaceContextRelayDisplayTokens(text);
-                    if (!string.Equals(text, replaced, StringComparison.Ordinal))
+                    // Visual Studio can only pick a language from files that ship in the package.
+                    foreach (string required in new[] { ".vsextension/string-resources.json", ".vsextension/ja/string-resources.json" })
                     {
-                        entry.Delete();
-                        ZipArchiveEntry replacementEntry = zip.CreateEntry(".vsextension/extension.json", CompressionLevel.Optimal);
-                        using (var stream = replacementEntry.Open())
-                        using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+                        if (zip.GetEntry(required) == null)
                         {
-                            writer.Write(replaced);
+                            Log.LogError("VSIX is missing {0}: {1}", required, VsixPath);
                         }
-
-                        patched = true;
-                    }
-
-                    string unresolved = replaced.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
-                    if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
-                    {
-                        Log.LogError("VSIX .vsextension/extension.json still contains unresolved ContextRelay display token: {0}", VsixPath);
                     }
                 }
-            }
-
-            if (patched)
-            {
-                Log.LogMessage(MessageImportance.High, "Patched ContextRelay menu metadata display names.");
             }
         }
         catch (Exception ex)
         {
-            Log.LogError("PatchContextRelayMenuMetadata failed: {0}", ex.ToString());
+            Log.LogError("ValidateContextRelayMenuMetadata failed: {0}", ex.ToString());
             return false;
         }
 
         return !Log.HasLoggedErrors;
 
-        static string ReplaceContextRelayDisplayTokens(string text)
+        HashSet<string> ReadResourceKeys(string path)
         {
-            return text
-                .Replace("%ContextRelay.Menu.DisplayName%", "ContextRelay")
-                .Replace("%ContextRelay.Menu.Language.DisplayName%", "Language")
-                .Replace("%ContextRelay.Command.ClearCache.DisplayName%", "Clear Cache")
-                .Replace("%ContextRelay.Command.ClearChat.DisplayName%", "Clear Chat")
-                .Replace("%ContextRelay.Command.ClearSnippets.DisplayName%", "Clear Snippets")
-                .Replace("%ContextRelay.Command.CopyHandoffPrompt.DisplayName%", "Copy Handoff Prompt")
-                .Replace("%ContextRelay.Command.GenerateHandoff.DisplayName%", "Generate Handoff")
-                .Replace("%ContextRelay.Command.OpenCopilotChat.DisplayName%", "Open Copilot Chat")
-                .Replace("%ContextRelay.Command.OpenHandoffDoc.DisplayName%", "Open Handoff Doc")
-                .Replace("%ContextRelay.Command.OpenWindow.DisplayName%", "ContextRelay")
-                .Replace("%ContextRelay.Command.Search.DisplayName%", "Open ContextRelay")
-                .Replace("%ContextRelay.Command.SetLanguageEnglish.DisplayName%", "English")
-                .Replace("%ContextRelay.Command.SetLanguageJapanese.DisplayName%", "Japanese")
-                .Replace("%ContextRelay.Command.ShowDebugLog.DisplayName%", "Debug Log");
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            if (!File.Exists(path))
+            {
+                Log.LogError("Resource file not found: {0}", path);
+                return keys;
+            }
+
+            // The files are flat string maps, so a key is a quoted name followed by a colon.
+            foreach (Match match in Regex.Matches(File.ReadAllText(path, Encoding.UTF8), "\"(ContextRelay\\.[^\"]+)\"\\s*:"))
+            {
+                keys.Add(match.Groups[1].Value);
+            }
+
+            return keys;
+        }
+
+        void ValidateTokens(string manifestText, HashSet<string> defined, string location)
+        {
+            foreach (Match match in Regex.Matches(manifestText, "%(ContextRelay\\.[A-Za-z0-9_.]+)%"))
+            {
+                if (!defined.Contains(match.Groups[1].Value))
+                {
+                    Log.LogError("extension.json references token '{0}' that string-resources.json does not define: {1}", match.Value, location);
+                }
+            }
         }
         ]]>
       </Code>
     </Task>
   </UsingTask>
 
-  <Target Name="PatchContextRelayMenuMetadataInOutput"
+  <Target Name="ValidateContextRelayMenuMetadataInOutput"
           AfterTargets="Build"
           Condition="Exists('$(TargetDir).vsextension\extension.json')">
-    <PatchContextRelayMenuMetadata ExtensionJsonPath="$(TargetDir).vsextension\extension.json" />
+    <ValidateContextRelayMenuMetadata ExtensionJsonPath="$(TargetDir).vsextension\extension.json"
+                                      ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
   </Target>
 
   <!--
@@ -263,10 +269,11 @@
     <Message Importance="High" Text="Patched VSIX $(TargetVsixContainer) with in-proc package payload and hybrid manifest." />
   </Target>
 
-  <Target Name="PatchContextRelayMenuMetadataInVsix"
+  <Target Name="ValidateContextRelayMenuMetadataInVsix"
           AfterTargets="PatchVsixContainerAfterCreation"
           Condition="Exists('$(TargetVsixContainer)')">
-    <PatchContextRelayMenuMetadata VsixPath="$(TargetVsixContainer)" />
+    <ValidateContextRelayMenuMetadata VsixPath="$(TargetVsixContainer)"
+                                      ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
   </Target>
 
   <!--
@@ -354,19 +361,6 @@
                 {
                     Log.LogError("Produced VSIX is missing .vsextension/extension.json");
                     return false;
-                }
-
-                string extensionJsonText;
-                using (var stream = extensionJsonEntry.Open())
-                using (var reader = new StreamReader(stream))
-                {
-                    extensionJsonText = reader.ReadToEnd();
-                }
-
-                string unresolved = extensionJsonText.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
-                if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
-                {
-                    Log.LogError(".vsextension/extension.json in produced VSIX contains unresolved ContextRelay display token.");
                 }
 
                 ZipArchiveEntry setupManifestEntry = zip.Entries.FirstOrDefault(en => string.Equals(en.FullName, "manifest.json", StringComparison.OrdinalIgnoreCase));
@@ -502,7 +496,7 @@
   </UsingTask>
 
   <Target Name="AssertVsixContentsAfterPatch"
-          AfterTargets="PatchContextRelayMenuMetadataInVsix"
+          AfterTargets="ValidateContextRelayMenuMetadataInVsix"
           Condition="Exists('$(TargetVsixContainer)')">
     <AssertVsixContents
       VsixPath="$(TargetVsixContainer)"

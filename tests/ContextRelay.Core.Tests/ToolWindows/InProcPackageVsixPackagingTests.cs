@@ -44,12 +44,17 @@ public sealed class InProcPackageVsixPackagingTests
             extensionJson = reader.ReadToEnd();
         }
 
-        const string attachFileDisplayToken = "%ContextRelay.Command.AttachFileToChat.DisplayName%";
-        Assert.Contains(attachFileDisplayToken, extensionJson, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "%ContextRelay.",
-            extensionJson.Replace(attachFileDisplayToken, string.Empty, StringComparison.Ordinal),
-            StringComparison.Ordinal);
+        // Tokens must survive packaging so Visual Studio can resolve them for its UI language, and
+        // each one must be defined by both language files that ship in the same package.
+        var tokens = ContextRelayResourceTokens.FindTokens(extensionJson);
+        Assert.NotEmpty(tokens);
+        var packagedEnglish = ContextRelayResourceTokens.ReadResourceMap(archive.GetEntry(".vsextension/string-resources.json")!);
+        var packagedJapanese = ContextRelayResourceTokens.ReadResourceMap(archive.GetEntry(".vsextension/ja/string-resources.json")!);
+        foreach (var token in tokens)
+        {
+            Assert.True(packagedEnglish.ContainsKey(token), $"Packaged default resources do not define '{token}'.");
+            Assert.True(packagedJapanese.ContainsKey(token), $"Packaged Japanese resources do not define '{token}'.");
+        }
 
         var manifestEntry = archive.GetEntry("extension.vsixmanifest");
         Assert.NotNull(manifestEntry);

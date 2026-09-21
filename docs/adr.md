@@ -1,5 +1,12 @@
 ﻿# Architecture Decision Records
 
+## 2026-09-21 — Issue #184: Localize command and menu names from the Visual Studio language pack
+
+- Context: A build step replaced every `%ContextRelay.*%` display token in `extension.json` with English text, because some Visual Studio channels showed unresolved tokens literally. That made the Tools > ContextRelay menu impossible to localize, and the Japanese resource file existed for one command only.
+- Decision: Keep every display token in `extension.json` and define all 15 in both `.vsextension/string-resources.json` (English, the fallback) and `.vsextension/ja/string-resources.json`. Visual Studio resolves them by its own UI language, meaning the installed and selected language pack, so the menu follows the Visual Studio language rather than the operating system language, and any other language falls back to English. The replacement patch is removed. The `ValidateContextRelayMenuMetadata` build task fails the build when a token is undefined in either file or a resource file is missing from the VSIX.
+- Reason: The user switches the Visual Studio language pack, not the operating system language, and expects the menu to follow it. Only token resolution by Visual Studio can do that.
+- Consequence: On a Visual Studio channel that does not resolve the metadata, the menu shows raw tokens. This is verified in the Experimental Instance before release, and restoring a per-token English fallback would give up localization, so it needs an explicit decision. The tool window language is a separate setting: `UiLanguage` = `auto` follows the culture of the extension process, which is not guaranteed to match the Visual Studio language pack, so an explicit choice remains available.
+
 ## 2026-09-19 — Issue #184: Ground explicit-context chat requests and disable web context
 
 - Context: Plain chat and `/ask` share one payload builder, and the same explicit context (pinned snippets, queued attachments, `#file` mentions, active editor) can now reach both routes. Copilot could still answer from web results instead of the attached material.
