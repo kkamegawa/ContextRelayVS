@@ -348,31 +348,52 @@ public sealed class SlashCommandSuggestionInteractionTests
     {
         var assembly = LoadBuiltExtensionAssembly();
         var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var loggerType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayOutputLogger", throwOnError: true)!;
         var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
         var host = RuntimeHelpers.GetUninitializedObject(hostType);
+
+        // An active request that only the stop branch may cancel.
         var stateMachine = new ChatRequestStateMachine();
         hostType.GetField("chatRequestStateMachine", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, stateMachine);
         hostType.GetField("activeChatRequestSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
         using var requestCancellation = new CancellationTokenSource();
         Assert.True(stateMachine.TryBegin(Array.Empty<string>(), requestCancellation.Token, out var request));
 
+        // Hold the host's gate closed so SubmitQueryAsync blocks at a boundary the test can observe.
+        // Reaching the busy state proves the send branch entered the submission path; there is no
+        // catch-all, so an unexpected failure surfaces instead of being read as success.
+        using var submitGate = new SemaphoreSlim(0, 1);
+        hostType.GetField("logger", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(host, RuntimeHelpers.GetUninitializedObject(loggerType));
+        hostType.GetField("gate", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, submitGate);
+        hostType.GetField("draftQuerySync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+
         var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        viewModelType.GetField("queryText", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(viewModel, "explain this");
         Assert.False((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
+        var busyField = viewModelType.GetField("isBusy", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         var command = viewModelType.GetProperty("SearchCommand")!.GetValue(viewModel)!;
         var execute = command.GetType().GetMethods()
             .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
-        try
+        using var cancellation = new CancellationTokenSource();
+        var execution = (Task)execute.Invoke(command, new object?[] { null, null, cancellation.Token })!;
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!(bool)busyField.GetValue(viewModel)! && DateTime.UtcNow < deadline)
         {
-            await (Task)execute.Invoke(command, new object?[] { null, null, TestContext.Current.CancellationToken })!;
-        }
-        catch
-        {
-            // The bare host cannot complete a real submission; this test only checks which branch ran.
+            await Task.Delay(10, TestContext.Current.CancellationToken);
         }
 
-        // The send branch must not cancel the active request; only the stop branch does that.
+        // The command entered the submission path and is waiting on the host, so it sent.
+        Assert.True((bool)busyField.GetValue(viewModel)!);
+        Assert.False(execution.IsCompleted);
+
+        // ...and it did not take the stop branch, which is the only thing that cancels the request.
         Assert.False(request!.CancellationToken.IsCancellationRequested);
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
     }
 
     [Fact]
