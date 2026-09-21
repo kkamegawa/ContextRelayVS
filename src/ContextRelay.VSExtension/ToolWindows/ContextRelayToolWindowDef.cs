@@ -64,10 +64,11 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
     {
         try
         {
+            // Register the watcher before the final settings read so either that read or the watcher sees every save.
+            hostInstance.StartSettingsLanguageWatcher();
             await hostInstance.InitializeAsync(cancellationToken).ConfigureAwait(false);
             await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
             hostInstance.StartDeferredSignedInUserResolution();
-            hostInstance.StartSettingsLanguageWatcher();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

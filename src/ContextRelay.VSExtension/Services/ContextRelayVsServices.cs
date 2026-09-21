@@ -39,6 +39,9 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         {
             // Only automatic mode depends on the host locale; explicit choices apply without the broker.
             ContextRelayLocalizedStrings.SetVisualStudioUiLocale(await uiLanguageProvider.GetUiLocaleAsync(cancellationToken).ConfigureAwait(false));
+
+            // The broker call can take a while; re-read so a save made meanwhile is not overwritten by the stale value.
+            settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
         }
 
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
