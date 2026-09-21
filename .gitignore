@@ -38,3 +38,11 @@ Thumbs.db
 artifacts/
 
 build.log
+
+# APM dependencies
+apm_modules/
+.agents/
+.claude/
+.codex/
+.github/agents/
+.github/skills/
