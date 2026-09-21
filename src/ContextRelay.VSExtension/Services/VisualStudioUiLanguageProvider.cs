@@ -34,7 +34,7 @@ internal sealed class VisualStudioUiLanguageProvider
             // VS applies display-language changes on restart, so cache per extension instance.
             // A missing/unresponsive package must not block opening the tool window.
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            timeout.CancelAfter(TimeSpan.FromMilliseconds(1500));
             IVisualStudioLanguageService? proxy = null;
             try
             {

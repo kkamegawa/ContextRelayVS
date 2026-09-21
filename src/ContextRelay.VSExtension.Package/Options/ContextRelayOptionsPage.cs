@@ -44,7 +44,7 @@ internal sealed class UiLanguageConverter : StringConverter
             {
                 "en" => "English (en)",
                 "ja" => "日本語 (ja)",
-                _ => "Auto (follow Visual Studio)",
+                _ => OptionsLocalization.Get("UiLanguage.Auto"),
             };
         }
 
@@ -55,7 +55,7 @@ internal sealed class UiLanguageConverter : StringConverter
     {
         if (value is string text)
         {
-            return text.Contains("(en)") ? "en" : text.Contains("(ja)") ? "ja" : text.StartsWith("Auto", StringComparison.OrdinalIgnoreCase) ? "auto" : ContextRelaySettingsStore.NormalizeUiLanguage(text);
+            return text.Contains("(en)") ? "en" : text.Contains("(ja)") ? "ja" : text == OptionsLocalization.Get("UiLanguage.Auto") ? "auto" : ContextRelaySettingsStore.NormalizeUiLanguage(text);
         }
 
         return base.ConvertFrom(context, culture, value);

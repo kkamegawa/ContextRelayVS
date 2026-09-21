@@ -35,7 +35,12 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     public async Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
-        ContextRelayLocalizedStrings.SetVisualStudioUiLocale(await uiLanguageProvider.GetUiLocaleAsync(cancellationToken).ConfigureAwait(false));
+        if (ContextRelaySettingsService.NormalizeUiLanguage(settings.UiLanguage) == "auto")
+        {
+            // Only automatic mode depends on the host locale; explicit choices apply without the broker.
+            ContextRelayLocalizedStrings.SetVisualStudioUiLocale(await uiLanguageProvider.GetUiLocaleAsync(cancellationToken).ConfigureAwait(false));
+        }
+
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         return settings;
     }

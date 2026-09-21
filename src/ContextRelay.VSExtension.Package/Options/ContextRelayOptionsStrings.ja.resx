@@ -11,4 +11,7 @@
   <data name="ChatAttachActiveEditor.Description" xml:space="preserve"><value>対象となる保存済みのアクティブエディターファイルを各チャット要求に自動添付します。</value></data>
   <data name="ChatStreamResponses.DisplayName" xml:space="preserve"><value>チャット応答をストリーミング</value></data>
   <data name="ChatStreamResponses.Description" xml:space="preserve"><value>受信中のチャット応答を段階的に表示します。</value></data>
+  <data name="UiLanguage.DisplayName" xml:space="preserve"><value>UI 言語</value></data>
+  <data name="UiLanguage.Description" xml:space="preserve"><value>自動を選ぶと Visual Studio の表示言語に従います。英語または日本語を明示的に選ぶこともできます。</value></data>
+  <data name="UiLanguage.Auto" xml:space="preserve"><value>自動 (Visual Studio に従う)</value></data>
 </root>
