@@ -200,14 +200,22 @@
 
         HashSet<string> ReadResourceKeys(string json, string label)
         {
+            // Parses the file as real JSON instead of scanning for key-looking lines, so a structurally
+            // malformed file (for example a missing comma between two properties) is rejected here
+            // instead of letting the build succeed with a resource file Visual Studio cannot load. The
+            // parser is self-contained (no assembly reference resolvable from this inline task) and is
+            // intentionally narrow: it accepts only the shape these files are defined to have, a single
+            // flat JSON object of string values, and treats anything else (nesting, a non-string value, a
+            // duplicate key, trailing content) as a failure.
             var keys = new HashSet<string>(StringComparer.Ordinal);
-
-            // The files are flat string maps. A quoted key followed by a colon is a key, and a value
-            // that itself contains such text cannot be mistaken for one because values never start a
-            // line with a quoted name.
-            foreach (Match match in Regex.Matches(json, "^\\s*\"([^\"]+)\"\\s*:", RegexOptions.Multiline))
+            try
             {
-                keys.Add(match.Groups[1].Value);
+                ParseFlatStringObjectKeys(json, keys);
+            }
+            catch (FormatException ex)
+            {
+                Log.LogError("{0} is not a valid flat JSON object of string values: {1}", label, ex.Message);
+                return keys;
             }
 
             if (keys.Count == 0)
@@ -216,6 +224,166 @@
             }
 
             return keys;
+        }
+
+        void ParseFlatStringObjectKeys(string json, HashSet<string> keys)
+        {
+            int pos = 0;
+
+            SkipWhitespace();
+            Expect('{');
+            SkipWhitespace();
+            if (TryConsume('}'))
+            {
+                SkipWhitespace();
+                RequireEndOfInput();
+                return;
+            }
+
+            while (true)
+            {
+                SkipWhitespace();
+                string key = ParseString();
+                if (!keys.Add(key))
+                {
+                    throw new FormatException(string.Format("duplicate key '{0}' at position {1}", key, pos));
+                }
+
+                SkipWhitespace();
+                Expect(':');
+                SkipWhitespace();
+                if (Peek() != '"')
+                {
+                    throw new FormatException(string.Format("value for key '{0}' at position {1} must be a JSON string", key, pos));
+                }
+
+                ParseString();
+                SkipWhitespace();
+
+                if (TryConsume(','))
+                {
+                    continue;
+                }
+
+                Expect('}');
+                break;
+            }
+
+            SkipWhitespace();
+            RequireEndOfInput();
+
+            char Peek()
+            {
+                if (pos >= json.Length)
+                {
+                    throw new FormatException("unexpected end of input");
+                }
+
+                return json[pos];
+            }
+
+            bool TryConsume(char c)
+            {
+                if (pos < json.Length && json[pos] == c)
+                {
+                    pos++;
+                    return true;
+                }
+
+                return false;
+            }
+
+            void Expect(char c)
+            {
+                if (Peek() != c)
+                {
+                    throw new FormatException(string.Format("expected '{0}' at position {1}", c, pos));
+                }
+
+                pos++;
+            }
+
+            void SkipWhitespace()
+            {
+                // JSON (RFC 8259) permits only these four characters between tokens. char.IsWhiteSpace
+                // also accepts other Unicode separators (e.g. NBSP, U+2028), which would let this
+                // validator accept a file the runtime JSON parser rejects.
+                while (pos < json.Length && IsJsonWhitespace(json[pos]))
+                {
+                    pos++;
+                }
+            }
+
+            bool IsJsonWhitespace(char c) => c == ' ' || c == '\t' || c == '\n' || c == '\r';
+
+            void RequireEndOfInput()
+            {
+                if (pos != json.Length)
+                {
+                    throw new FormatException(string.Format("unexpected content at position {0} after the closing '}}'", pos));
+                }
+            }
+
+            string ParseString()
+            {
+                Expect('"');
+                var builder = new StringBuilder();
+                while (true)
+                {
+                    if (pos >= json.Length)
+                    {
+                        throw new FormatException("unterminated string");
+                    }
+
+                    char c = json[pos++];
+                    if (c == '"')
+                    {
+                        break;
+                    }
+
+                    if (c == '\\')
+                    {
+                        if (pos >= json.Length)
+                        {
+                            throw new FormatException("unterminated escape sequence");
+                        }
+
+                        char escape = json[pos++];
+                        switch (escape)
+                        {
+                            case '"': builder.Append('"'); break;
+                            case '\\': builder.Append('\\'); break;
+                            case '/': builder.Append('/'); break;
+                            case 'b': builder.Append('\b'); break;
+                            case 'f': builder.Append('\f'); break;
+                            case 'n': builder.Append('\n'); break;
+                            case 'r': builder.Append('\r'); break;
+                            case 't': builder.Append('\t'); break;
+                            case 'u':
+                                if (pos + 4 > json.Length)
+                                {
+                                    throw new FormatException("truncated unicode escape");
+                                }
+
+                                builder.Append((char)Convert.ToInt32(json.Substring(pos, 4), 16));
+                                pos += 4;
+                                break;
+                            default:
+                                throw new FormatException(string.Format("invalid escape '\\{0}'", escape));
+                        }
+                    }
+                    else if (char.IsControl(c))
+                    {
+                        throw new FormatException("unescaped control character in string");
+                    }
+                    else
+                    {
+                        builder.Append(c);
+                    }
+                }
+
+                return builder.ToString();
+            }
         }
 
         HashSet<string> FindTokens(string manifestText)

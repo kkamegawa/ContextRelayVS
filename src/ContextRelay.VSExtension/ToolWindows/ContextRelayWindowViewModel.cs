@@ -24,6 +24,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private const int MaxVisibleCommandSuggestions = 4;
     private readonly ContextRelayHost host;
     private bool isBusy;
+    private bool isChatRequestActive;
     private bool isCommandPopupOpen;
     private int commandSuggestionWindowStart;
     private string queryText = string.Empty;
@@ -52,7 +53,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         RefreshLocalizedUiTexts();
 
-        SearchCommand = new AsyncCommand(async (_, context, ct) => await SubmitAsync(context, ct).ConfigureAwait(false));
+        SearchCommand = new AsyncCommand(async (_, context, ct) =>
+        {
+            // The composer keeps one primary button so keyboard focus survives the switch
+            // between sending and stopping.
+            if (IsStreaming)
+            {
+                host.StopGeneration();
+                return;
+            }
+
+            await SubmitAsync(context, ct).ConfigureAwait(false);
+        });
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
         CopyPromptCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.CopyHandoffPromptAsync(ct)).ConfigureAwait(false));
         OpenHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.OpenHandoffDocumentAsync(ct)).ConfigureAwait(false));
@@ -71,6 +83,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
         ConfirmQueryInputCommand = new AsyncCommand(async (_, context, ct) => await ConfirmQueryInputAsync(context, ct).ConfigureAwait(false));
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
+        UpdateSuggestionKeyBindingAvailability();
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -102,8 +115,33 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     public bool IsStreaming
     {
         get => isStreaming;
-        private set { if (isStreaming != value) { isStreaming = value; RaiseNotifyPropertyChangedEvent(nameof(IsStreaming)); } }
+        private set
+        {
+            if (isStreaming == value)
+            {
+                return;
+            }
+
+            isStreaming = value;
+            RaiseNotifyPropertyChangedEvent(nameof(IsStreaming));
+            RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+        }
     }
+
+    /// <summary>
+    /// Gets the label of the composer's primary button, which sends a query and becomes the
+    /// stop action while a response is being generated.
+    /// </summary>
+    [DataMember]
+    public string PrimaryActionButtonText => isStreaming ? StopGenerationButtonText : SearchButtonText;
+
+    /// <summary>
+    /// Gets a value indicating whether the composer's primary button is enabled. Stopping stays
+    /// available while the request that made the view model busy is still running.
+    /// </summary>
+    [DataMember]
+    public bool IsPrimaryActionEnabled => isChatRequestActive || isStreaming || !isBusy;
 
     [DataMember]
     public string StreamingResponseText
@@ -241,6 +279,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             {
                 isCommandPopupOpen = value;
                 RaiseNotifyPropertyChangedEvent(nameof(IsCommandPopupOpen));
+
+                // The query box binds Tab, Up, Down, and Escape to these commands. While the
+                // popup is closed the key bindings must not handle the key, so Tab keeps moving
+                // focus to the next control instead of being swallowed by the input.
+                UpdateSuggestionKeyBindingAvailability();
             }
         }
     }
@@ -526,8 +569,41 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     {
         var query = QueryText;
         host.LogUiDiagnostic($"SubmitAsync invoked queryLength={query.Length} startsWithSlash={query.StartsWith("/", StringComparison.Ordinal)}");
+
+        // Both the primary button and Enter in the query box submit through here, so the enabled
+        // state has to be maintained here rather than in either caller. Checking busy first keeps
+        // a second submission from clearing the flag of the request that is already running.
+        if (isBusy)
+        {
+            host.LogUiDiagnostic("Submit ignored because the view model is already busy.");
+            return;
+        }
+
         CloseCommandPopup();
-        await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, clientContext, ct).ConfigureAwait(false); }).ConfigureAwait(false);
+
+        // Authentication and conversation setup run before the first streaming update. Keep the
+        // button enabled across that gap for routes that can stream and be stopped; disabling it
+        // would move keyboard focus away, and WPF does not restore it when the control is enabled
+        // again. Other routes keep the ordinary disabled-while-busy state.
+        var stoppable = IsStoppableRoute(query);
+        if (stoppable)
+        {
+            isChatRequestActive = true;
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+        }
+
+        try
+        {
+            await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, clientContext, ct).ConfigureAwait(false); }).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (stoppable)
+            {
+                isChatRequestActive = false;
+                RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+            }
+        }
     }
 
     private bool PendingAttachmentsEqual(IReadOnlyList<ResolvedAttachment> items) =>
@@ -584,6 +660,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         isBusy = true;
         RaiseNotifyPropertyChangedEvent(nameof(IsNotBusy));
+        RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
         try
         {
             await action().ConfigureAwait(false);
@@ -592,6 +669,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             isBusy = false;
             RaiseNotifyPropertyChangedEvent(nameof(IsNotBusy));
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
         }
     }
 
@@ -738,6 +816,40 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         StopGenerationButtonText = ContextRelayLocalizedStrings.StopGenerationButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(StopGenerationButtonText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+
+        // Notify the derived caption last. It reads whichever label matches the current state,
+        // so notifying before both labels are assigned would publish the previous language.
+        RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
+    }
+
+    /// <summary>
+    /// Returns whether a query routes to a Copilot chat turn, which is the only kind of request
+    /// that streams and can be stopped from the composer.
+    /// </summary>
+    /// <param name="query">The query text about to be submitted.</param>
+    /// <returns><see langword="true"/> for non-empty plain chat and <c>/ask</c> submissions.</returns>
+    private static bool IsStoppableRoute(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        var target = SlashCommandRouter.Parse(query.Trim()).Target;
+        return target is RouteTarget.Chat or RouteTarget.Ask;
+    }
+
+    /// <summary>
+    /// Enables the suggestion key bindings only while the slash-command popup is open, so the
+    /// query box does not consume Tab, Up, Down, or Escape when there is nothing to navigate.
+    /// </summary>
+    private void UpdateSuggestionKeyBindingAvailability()
+    {
+        var popupOpen = isCommandPopupOpen;
+        ApplyCommandSelectionCommand.CanExecute = popupOpen;
+        MoveSelectionDownCommand.CanExecute = popupOpen;
+        MoveSelectionUpCommand.CanExecute = popupOpen;
+        CloseCommandPopupCommand.CanExecute = popupOpen;
     }
 
     private void CloseCommandPopup()

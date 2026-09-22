@@ -342,15 +342,11 @@
                     <Border Grid.Row="0" Style="{StaticResource StreamingPreviewBorderStyle}"
                             Visibility="{Binding IsStreaming, Converter={StaticResource BoolToVisConverter}}">
                         <StackPanel>
-                            <DockPanel>
-                                <TextBlock DockPanel.Dock="Left" Text="{Binding ChatHistoryHeaderText}" Style="{StaticResource CardTitleTextStyle}" />
-                                <Button DockPanel.Dock="Right"
-                                        Style="{StaticResource ThemedButtonStyle}"
-                                        Content="{Binding StopGenerationButtonText}"
-                                        Command="{Binding StopGenerationCommand}" />
-                            </DockPanel>
+                            <TextBlock Text="{Binding ChatHistoryHeaderText}"
+                                       Style="{StaticResource CardTitleTextStyle}"
+                                       Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
                             <ScrollViewer Margin="0,6,0,0" MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                <TextBlock Text="{Binding StreamingResponseText}" Style="{StaticResource CardBodyTextStyle}" />
+                                <TextBlock Text="{Binding StreamingResponseText}" Style="{StaticResource BodyTextStyle}" />
                             </ScrollViewer>
                         </StackPanel>
                     </Border>
@@ -562,7 +558,13 @@
                 </TextBox.InputBindings>
 
             </TextBox>
-            <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="2" Grid.Column="2" Content="{Binding SearchButtonText}" Command="{Binding SearchCommand}" IsEnabled="{Binding IsNotBusy}" />
+            <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="2" Grid.Column="2"
+                    MinWidth="96"
+                    Content="{Binding PrimaryActionButtonText}"
+                    ToolTip="{Binding PrimaryActionButtonText}"
+                    AutomationProperties.Name="{Binding PrimaryActionButtonText}"
+                    Command="{Binding SearchCommand}"
+                    IsEnabled="{Binding IsPrimaryActionEnabled}" />
         </Grid>
     </Grid>
 </DataTemplate>
