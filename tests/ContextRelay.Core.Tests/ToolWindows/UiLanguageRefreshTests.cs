@@ -22,10 +22,10 @@ public sealed class UiLanguageRefreshTests
         {
             // First trigger enters the reload and blocks on 'release' so a second trigger arrives while it
             // is still running, exercising the "another call already owns the drain loop" path.
-            var first = (Task)trigger.Invoke(instance, null)!;
+            var first = (Task)trigger.Invoke(instance, new object?[] { CancellationToken.None })!;
             await WaitUntilAsync(() => callLog.Count >= 1);
 
-            var second = (Task)trigger.Invoke(instance, null)!;
+            var second = (Task)trigger.Invoke(instance, new object?[] { CancellationToken.None })!;
 
             release.Set();
             await first;
@@ -42,15 +42,16 @@ public sealed class UiLanguageRefreshTests
     }
 
     [Fact]
-    public async Task ReloadCoalescer_FailedReload_StillDrainsALaterPendingTrigger()
+    public async Task ReloadCoalescer_FailedReload_RetriesWithBackoffInsteadOfDroppingTheTrigger()
     {
         var callCount = 0;
         var failures = new ConcurrentBag<Exception>();
+        var requestedDelays = new ConcurrentQueue<TimeSpan>();
         var type = LoadType("ContextRelay.VSExtension.Services.ReloadCoalescer");
         Func<Task> reload = () =>
         {
             var attempt = Interlocked.Increment(ref callCount);
-            if (attempt == 1)
+            if (attempt <= 3)
             {
                 throw new InvalidOperationException("Simulated reload failure.");
             }
@@ -58,16 +59,52 @@ public sealed class UiLanguageRefreshTests
             return Task.CompletedTask;
         };
         Action<Exception> onFailed = ex => failures.Add(ex);
-        var instance = Activator.CreateInstance(type, reload, onFailed)!;
+
+        // A fake delay that records the requested backoff but completes immediately keeps this
+        // deterministic and fast while still verifying the coalescer never gives up on the trigger.
+        Func<TimeSpan, CancellationToken, Task> fakeDelay = (delay, _) =>
+        {
+            requestedDelays.Enqueue(delay);
+            return Task.CompletedTask;
+        };
+        var instance = Activator.CreateInstance(type, reload, onFailed, fakeDelay)!;
         var trigger = type.GetMethod("TriggerAsync", BindingFlags.Public | BindingFlags.Instance)!;
 
-        // A single trigger call drains its own failure; a second logical save queued behind it (simulated
-        // here by the reload itself failing once) must still be observed on a later call.
-        await (Task)trigger.Invoke(instance, null)!;
-        Assert.Single(failures);
+        // A single trigger call must retry through every failure on its own, never depending on an
+        // unrelated later trigger to happen to arrive and pick the save back up.
+        await (Task)trigger.Invoke(instance, new object?[] { CancellationToken.None })!;
 
-        await (Task)trigger.Invoke(instance, null)!;
-        Assert.Equal(2, callCount);
+        Assert.Equal(4, callCount);
+        Assert.Equal(3, failures.Count);
+        Assert.Equal(
+            new[] { TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1) },
+            requestedDelays.ToArray());
+    }
+
+    [Fact]
+    public async Task ReloadCoalescer_CancelledDuringBackoff_LeavesTriggerPendingForALaterCall()
+    {
+        var callCount = 0;
+        var type = LoadType("ContextRelay.VSExtension.Services.ReloadCoalescer");
+        Func<Task> reload = () =>
+        {
+            Interlocked.Increment(ref callCount);
+            throw new InvalidOperationException("Simulated reload failure.");
+        };
+        using var cancellation = new CancellationTokenSource();
+        Func<TimeSpan, CancellationToken, Task> fakeDelay = (_, token) =>
+        {
+            cancellation.Cancel();
+            token.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        };
+        var instance = Activator.CreateInstance(type, reload, null, fakeDelay)!;
+        var trigger = type.GetMethod("TriggerAsync", BindingFlags.Public | BindingFlags.Instance)!;
+
+        // Dispose-time cancellation must stop the backoff loop rather than retry forever in the background.
+        var invoke = () => (Task)trigger.Invoke(instance, new object?[] { cancellation.Token })!;
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await invoke());
+        Assert.Equal(1, callCount);
     }
 
     [Theory]
@@ -145,7 +182,7 @@ public sealed class UiLanguageRefreshTests
                 await Task.Run(() => releaseEvent.Wait(TimeSpan.FromSeconds(5)));
             }
         };
-        var instance = Activator.CreateInstance(type, reload, null)!;
+        var instance = Activator.CreateInstance(type, reload, null, null)!;
         var trigger = type.GetMethod("TriggerAsync", BindingFlags.Public | BindingFlags.Instance)!;
 
         callLog = log;

@@ -270,8 +270,9 @@ internal sealed class ContextRelayHost : IDisposable
             await Task.Delay(300, disposeCancellation.Token).ConfigureAwait(false);
 
             // settingsReloadCoalescer guarantees a save that arrives while a reload is already running is
-            // not lost, and that a failed reload does not abandon a save queued behind it.
-            await settingsReloadCoalescer.TriggerAsync().ConfigureAwait(false);
+            // not lost, and that a failed reload retries with backoff instead of abandoning it. The dispose
+            // token stops that retry loop (rather than letting it run forever) once the host is disposed.
+            await settingsReloadCoalescer.TriggerAsync(disposeCancellation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
