@@ -77,7 +77,7 @@ ContextRelayVS/
 
 ## 6. Graph calls
 
-- `Microsoft.Graph` v5 for REST SDK. `Microsoft.Graph.Beta` for `/beta` (Chat, Retrieval where needed).
+- `Microsoft.Graph` v6 for REST SDK. `Microsoft.Graph.Beta` for `/beta` (Chat, Retrieval where needed).
 - Retrieval API (`POST /v1.0/copilot/retrieval`) and Chat API (`/beta/copilot/conversations`) called directly via `HttpClient`.
 
 ## 7. Commands (.vsct)
