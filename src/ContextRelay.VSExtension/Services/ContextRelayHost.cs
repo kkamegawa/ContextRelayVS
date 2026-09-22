@@ -212,14 +212,6 @@ internal sealed class ContextRelayHost : IDisposable
         // is left as-is rather than risk showing a wrong or malformed value.
         ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
 
-        if (lastSearchRoute is not null)
-        {
-            // lastSearchSummary was formatted in whatever language was active when the search ran, and is
-            // reused as-is for the visible summary and for later chat/handoff context; rebuild it so both
-            // follow a UI language change instead of keeping old-language headers and source labels.
-            lastSearchSummary = BuildSearchSummary(lastSearchRoute, currentSearchResults);
-        }
-
         await RefreshStateAsync(statusMessage).ConfigureAwait(false);
         return state;
     }
@@ -529,7 +521,8 @@ internal sealed class ContextRelayHost : IDisposable
 
             currentSearchResults = results;
             lastSearchRoute = route;
-            lastSearchSummary = BuildSearchSummary(route, results);
+            // RefreshStateCoreAsync rebuilds lastSearchSummary from lastSearchRoute/currentSearchResults
+            // below, in the current UI language, under the same gate hold as this assignment.
             await AppendSearchHistoryAsync(trimmed, results, cancellationToken).ConfigureAwait(false);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation($"Search completed with {results.Length} result(s).");
@@ -1900,6 +1893,18 @@ internal sealed class ContextRelayHost : IDisposable
         {
             shouldResolveSignedInUser = false;
             signedInUser = await TryGetSignedInUserAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (lastSearchRoute is not null)
+        {
+            // Every state publish rebuilds the summary from the cached route/results (always consistent
+            // with each other here, since both are only ever mutated together while gate is held, the same
+            // as this read). This keeps it cheap to reason about correctness-wise — it is always current —
+            // at the cost of some redundant recomputation on state changes unrelated to language, and it is
+            // what makes the summary follow a UI language change regardless of which caller (automatic
+            // refresh, an explicit English/Japanese choice, or an Options save reaching an open tool
+            // window) triggered this publish.
+            lastSearchSummary = BuildSearchSummary(lastSearchRoute, currentSearchResults);
         }
 
         state = new ContextRelayHostState
