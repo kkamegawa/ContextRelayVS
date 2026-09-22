@@ -301,11 +301,16 @@
 
             void SkipWhitespace()
             {
-                while (pos < json.Length && char.IsWhiteSpace(json[pos]))
+                // JSON (RFC 8259) permits only these four characters between tokens. char.IsWhiteSpace
+                // also accepts other Unicode separators (e.g. NBSP, U+2028), which would let this
+                // validator accept a file the runtime JSON parser rejects.
+                while (pos < json.Length && IsJsonWhitespace(json[pos]))
                 {
                     pos++;
                 }
             }
+
+            bool IsJsonWhitespace(char c) => c == ' ' || c == '\t' || c == '\n' || c == '\r';
 
             void RequireEndOfInput()
             {
