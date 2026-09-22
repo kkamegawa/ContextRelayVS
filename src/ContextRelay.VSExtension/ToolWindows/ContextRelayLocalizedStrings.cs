@@ -142,10 +142,81 @@ internal static class ContextRelayLocalizedStrings
     public static string AddFilesDialogFilter => GetString("AddFilesDialogFilter");
     public static string CreatedFilesFolderDialogTitle => GetString("CreatedFilesFolderDialogTitle");
 
-    public static bool IsReadyStatus(string? statusMessage)
+    /// <summary>
+    /// Resource keys behind every status property that carries no captured arguments (no count, path, or
+    /// exception detail). These are the only status messages that can be safely reproduced in a different
+    /// language purely from the resource key, without remembering the arguments that built them.
+    /// </summary>
+    private static readonly string[] StaticStatusResourceKeys =
     {
-        return string.Equals(statusMessage, GetString("ReadyStatus", EnglishCulture), StringComparison.Ordinal) ||
-            string.Equals(statusMessage, GetString("ReadyStatus", JapaneseCulture), StringComparison.Ordinal);
+        "ChatResponseCancelledStatus",
+        "DebugLogOpenedStatus",
+        "ReadyStatus",
+        "RequestedSourceDisabledStatus",
+        "AskDisabledStatus",
+        "ChatPreviewDisabledStatus",
+        "AskRequiresContextStatus",
+        "FileMentionPromptEmptyStatus",
+        "FilePickerWorkspaceUnavailableStatus",
+        "FilePickerNoFilesSelectedStatus",
+        "FilePickerNoWorkspaceFilesSelectedStatus",
+        "FilePickerAddFilesFailedStatus",
+        "CreatedFilesFolderSelectionCanceledStatus",
+        "WorkIqLocalFileContextDisabledStatus",
+        "FileMentionWorkspaceUnavailableStatus",
+        "ChatAndSnippetsClearedStatus",
+        "ResultPinnedStatus",
+        "ResultPinnedWithExcerptFallbackStatus",
+        "ResultUnpinnedStatus",
+        "SnippetRemovedStatus",
+        "SnippetsClearedStatus",
+        "ChatHistoryClearedStatus",
+        "SearchCacheClearedStatus",
+        "HandoffPromptCopiedStatus",
+        "OpenedHandoffStatus",
+        "OpenCopilotPromptReadyStatus",
+        "OpenCopilotPromptAndPaneReadyStatus",
+        "ResultCopiedStatus",
+        "SnippetCopiedStatus",
+        "AppendedToHandoffStatus",
+        "ChatReplyShownStatus",
+        "WorkIqReplyShownStatus",
+        "AssistantResponseCopiedStatus",
+        "AssistantResponseAppendedStatus",
+        "AssistantResponseReplacedStatus",
+        "NoActiveEditorStatus",
+        "AssistantResponseContinuedStatus",
+        "AssistantContinuationUnavailableStatus",
+        "AssistantContinuationEmptyStatus",
+        "AssistantContinuationNoNewContentStatus",
+        "NoResultsFoundStatus",
+        "GenericHelpText", // Also covers TypeQueryStatus, which forwards to this same resource.
+    };
+
+    /// <summary>
+    /// Attempts to reproduce <paramref name="statusMessage"/> in the currently configured UI language.
+    /// Only status text that exactly matches one of the fixed, argument-free status resources (in either
+    /// supported language) can be relocalized this way; a message that carries a captured argument (a
+    /// count, a path, an exception detail) or is not a known status resource is returned unchanged, so a
+    /// UI language change does not corrupt it.
+    /// </summary>
+    internal static bool TryRelocalizeStaticStatus(string? statusMessage, out string relocalizedStatus)
+    {
+        if (!string.IsNullOrEmpty(statusMessage))
+        {
+            foreach (var key in StaticStatusResourceKeys)
+            {
+                if (string.Equals(statusMessage, GetString(key, EnglishCulture), StringComparison.Ordinal) ||
+                    string.Equals(statusMessage, GetString(key, JapaneseCulture), StringComparison.Ordinal))
+                {
+                    relocalizedStatus = GetString(key, GetResolvedCulture());
+                    return true;
+                }
+            }
+        }
+
+        relocalizedStatus = statusMessage ?? string.Empty;
+        return false;
     }
 
     public static string GetToolWindowInitializationFailedStatus(string? detail)

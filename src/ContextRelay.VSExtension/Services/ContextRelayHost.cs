@@ -121,11 +121,13 @@ internal sealed class ContextRelayHost : IDisposable
         copilotChatAdapter = new CopilotChatAdapter(graphClient);
         workIqAdapter = new WorkIqAdapter(new System.Net.Http.HttpClient(), logger, ownsHttpClient: true);
         handoffDocumentGenerator = new HandoffDocumentGenerator(sharedStore);
+        settingsReloadCoalescer = new ReloadCoalescer(
+            ReloadSettingsLanguageAsync,
+            ex => logger.LogError("Unable to apply a UI language change from the shared settings file.", ex));
     }
 
     private FileSystemWatcher? settingsWatcher;
-    private int settingsReloadRunning;
-    private int settingsReloadPending;
+    private readonly ReloadCoalescer settingsReloadCoalescer;
 
     public event EventHandler<ContextRelayStateChangedEventArgs>? StateChanged;
 
@@ -202,9 +204,10 @@ internal sealed class ContextRelayHost : IDisposable
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
 
-        var statusMessage = ContextRelayLocalizedStrings.IsReadyStatus(state.StatusMessage)
-            ? ContextRelayLocalizedStrings.ReadyStatus
-            : state.StatusMessage;
+        // Reproduce the current status in the (possibly changed) UI language when it is one of the fixed
+        // status resources; a message built from a captured argument (a count, a path, an exception detail)
+        // is left as-is rather than risk showing a wrong or malformed value.
+        ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
 
         await RefreshStateAsync(statusMessage).ConfigureAwait(false);
         return state;
@@ -265,47 +268,10 @@ internal sealed class ContextRelayHost : IDisposable
         {
             // Saves arrive as several file events; wait so only one reload runs per save.
             await Task.Delay(300, disposeCancellation.Token).ConfigureAwait(false);
-            Volatile.Write(ref settingsReloadPending, 1);
-            if (Interlocked.Exchange(ref settingsReloadRunning, 1) == 1)
-            {
-                // The active worker re-checks the pending flag, so this save is not lost.
-                return;
-            }
 
-            do
-            {
-                try
-                {
-                    while (Interlocked.Exchange(ref settingsReloadPending, 0) == 1)
-                    {
-                        try
-                        {
-                            var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
-                            if (!string.Equals(
-                                    ContextRelaySettingsStore.NormalizeUiLanguage(configured),
-                                    ContextRelayLocalizedStrings.CurrentUiLanguage,
-                                    StringComparison.Ordinal))
-                            {
-                                // GetStateAsync reloads the full language state (including the host locale for auto)
-                                // and raises StateChanged so the open view model refreshes its labels.
-                                await GetStateAsync().ConfigureAwait(false);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            // A failed reload must not drop a pending save or abandon the watcher; log and let
-                            // the loop re-check the pending flag (or the outer retry below) pick it up again.
-                            logger.LogError("Unable to apply a UI language change from the shared settings file.", ex);
-                        }
-                    }
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref settingsReloadRunning, 0);
-                }
-            }
-            while (Volatile.Read(ref settingsReloadPending) == 1 &&
-                   Interlocked.Exchange(ref settingsReloadRunning, 1) == 0);
+            // settingsReloadCoalescer guarantees a save that arrives while a reload is already running is
+            // not lost, and that a failed reload does not abandon a save queued behind it.
+            await settingsReloadCoalescer.TriggerAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -313,6 +279,20 @@ internal sealed class ContextRelayHost : IDisposable
         catch (Exception ex)
         {
             logger.LogError("Unable to apply a UI language change from the shared settings file.", ex);
+        }
+    }
+
+    private async Task ReloadSettingsLanguageAsync()
+    {
+        var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
+        if (!string.Equals(
+                ContextRelaySettingsStore.NormalizeUiLanguage(configured),
+                ContextRelayLocalizedStrings.CurrentUiLanguage,
+                StringComparison.Ordinal))
+        {
+            // GetStateAsync reloads the full language state (including the host locale for auto)
+            // and raises StateChanged so the open view model refreshes its labels.
+            await GetStateAsync().ConfigureAwait(false);
         }
     }
 
