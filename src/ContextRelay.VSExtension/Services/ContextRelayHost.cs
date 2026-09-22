@@ -204,22 +204,49 @@ internal sealed class ContextRelayHost : IDisposable
     public async Task<ContextRelayHostState> GetStateAsync()
     {
         var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
-        ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
 
-        // Reproduce the current status in the (possibly changed) UI language when it is one of the fixed
-        // status resources; a message built from a captured argument (a count, a path, an exception detail)
-        // is left as-is rather than risk showing a wrong or malformed value.
-        ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            // ContextRelayLocalizedStrings is process-wide static state, and GetSettingsSnapshotAsync
+            // above already applied it as a side effect before this call reached gate — a concurrent
+            // caller could have changed it again in between. Re-apply it here, now that gate is held, so
+            // it cannot change again before the status/summary rebuild below reads it.
+            ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
 
-        await RefreshStateAsync(statusMessage).ConfigureAwait(false);
+            // Reproduce the current status in the (possibly changed) UI language when it is one of the
+            // fixed status resources; a message built from a captured argument (a count, a path, an
+            // exception detail) is left as-is rather than risk showing a wrong or malformed value.
+            ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
+
+            await RefreshStateCoreAsync(statusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
         return state;
     }
 
     public async Task<ContextRelayHostState> UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
     {
         await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
-        await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Mirrors GetStateAsync: re-apply under gate so a concurrent caller cannot change the
+            // language again before this explicit choice's own rebuild below reads it.
+            ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsStore.NormalizeUiLanguage(uiLanguage));
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
         return state;
     }
 
