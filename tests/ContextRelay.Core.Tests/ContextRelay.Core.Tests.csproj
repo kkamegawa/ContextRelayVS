@@ -7,6 +7,10 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>ContextRelay.Core.Tests</RootNamespace>
+    <!-- xunit.v3.core.mtp-v2 requires the test assembly to be built as an executable.
+         Microsoft.NET.Test.Sdk sets this implicitly via its own targets, but it is
+         declared explicitly here so the project's contract does not depend on that. -->
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
