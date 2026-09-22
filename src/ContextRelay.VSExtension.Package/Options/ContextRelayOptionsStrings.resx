@@ -11,4 +11,7 @@
   <data name="ChatAttachActiveEditor.Description" xml:space="preserve"><value>Automatically attaches the saved active editor file to each chat request when it is eligible.</value></data>
   <data name="ChatStreamResponses.DisplayName" xml:space="preserve"><value>Stream chat responses</value></data>
   <data name="ChatStreamResponses.Description" xml:space="preserve"><value>Displays chat response content incrementally while it is being received.</value></data>
+  <data name="UiLanguage.DisplayName" xml:space="preserve"><value>UI language</value></data>
+  <data name="UiLanguage.Description" xml:space="preserve"><value>Choose Auto to follow the Visual Studio display language, or pick English or Japanese explicitly.</value></data>
+  <data name="UiLanguage.Auto" xml:space="preserve"><value>Auto (follow Visual Studio)</value></data>
 </root>

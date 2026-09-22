@@ -547,6 +547,12 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 commandSuggestionWindowStart = 0;
                 IsCommandPopupOpen = false;
             }
+            else if (collectionLanguageChanged && IsCommandPopupOpen)
+            {
+                // The query is unchanged, so the popup would otherwise keep showing suggestion
+                // descriptions and help text built in the previous UI language.
+                RebuildCommandSuggestionsForLanguageChange();
+            }
         }
         finally
         {
@@ -725,6 +731,45 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             : ContextRelayLocalizedStrings.CommandPopupHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
         host.LogUiDiagnostic($"UpdateCommandSuggestions updated count={commandSuggestions.Count} popupOpen={IsCommandPopupOpen}");
+    }
+
+    /// <summary>
+    /// Rebuilds an already-open popup's suggestions after a UI language change, so their descriptions and
+    /// header text follow the new language instead of staying in the language they were typed in.
+    /// </summary>
+    private void RebuildCommandSuggestionsForLanguageChange()
+    {
+        // A suggestion's Name (the literal command or file token) is language-invariant, unlike its
+        // localized Description, so it identifies the same row across a rebuild.
+        var selectedName = selectedCommandSuggestion?.Name;
+
+        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles);
+        CommandSuggestions = suggestions
+            .Select(CreateInteractiveSuggestion)
+            .ToArray();
+
+        if (commandSuggestions.Count == 0)
+        {
+            VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+            SelectedCommandSuggestion = null;
+            commandSuggestionWindowStart = 0;
+            IsCommandPopupOpen = false;
+            return;
+        }
+
+        var reselected = selectedName is null
+            ? null
+            : commandSuggestions.FirstOrDefault(suggestion => string.Equals(suggestion.Name, selectedName, StringComparison.Ordinal));
+        SelectedCommandSuggestion = reselected ?? commandSuggestions[0];
+        commandSuggestionWindowStart = Math.Min(
+            commandSuggestionWindowStart,
+            Math.Max(0, commandSuggestions.Count - MaxVisibleCommandSuggestions));
+        UpdateVisibleCommandSuggestions();
+        CommandPopupHeaderText = IsFileMentionSuggestion(commandSuggestions[0])
+            ? ContextRelayLocalizedStrings.FileMentionPopupHeaderText
+            : ContextRelayLocalizedStrings.CommandPopupHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
+        host.LogUiDiagnostic($"RebuildCommandSuggestionsForLanguageChange updated count={commandSuggestions.Count}");
     }
 
     private void UpdateTransientHelpText()

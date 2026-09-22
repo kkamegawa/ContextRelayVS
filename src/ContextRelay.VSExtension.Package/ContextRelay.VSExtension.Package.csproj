@@ -31,6 +31,7 @@
   </PropertyGroup>
   <ItemGroup>
 	<ProjectReference Include="..\ContextRelay.Core\ContextRelay.Core.csproj" />
+	<Compile Include="..\Shared\VisualStudioLanguageService.cs" Link="Shared\VisualStudioLanguageService.cs" />
   </ItemGroup>
   <ItemGroup>
 	<Reference Include="System.Text.Json" />

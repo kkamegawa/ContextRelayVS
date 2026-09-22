@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Resources;
 using ContextRelay.Core.Settings;
+using ContextRelay.VisualStudio;
+using ContextRelay.VSExtension.Package.Services;
 
 namespace ContextRelay.VSExtension.Package.Options;
 
@@ -43,13 +45,12 @@ internal static class OptionsLocalization
 
     private static CultureInfo ResolveCulture()
     {
-        return configuredUiLanguage switch
-        {
-            UiLanguageEnglish => EnglishCulture,
-            UiLanguageJapanese => JapaneseCulture,
-            _ => CultureInfo.CurrentUICulture,
-        };
+        var hostLcid = VisualStudioLanguageServiceExport.CapturedUiLocale;
+        return VisualStudioLanguageService.ResolveLanguage(configuredUiLanguage, hostLcid) == UiLanguageJapanese
+            ? JapaneseCulture
+            : EnglishCulture;
     }
+
 }
 
 internal sealed class LocalizedCategoryAttribute : CategoryAttribute

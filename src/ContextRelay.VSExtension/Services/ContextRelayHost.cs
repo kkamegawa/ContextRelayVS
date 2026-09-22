@@ -121,7 +121,13 @@ internal sealed class ContextRelayHost : IDisposable
         copilotChatAdapter = new CopilotChatAdapter(graphClient);
         workIqAdapter = new WorkIqAdapter(new System.Net.Http.HttpClient(), logger, ownsHttpClient: true);
         handoffDocumentGenerator = new HandoffDocumentGenerator(sharedStore);
+        settingsReloadCoalescer = new ReloadCoalescer(
+            ReloadSettingsLanguageAsync,
+            ex => logger.LogError("Unable to apply a UI language change from the shared settings file.", ex));
     }
+
+    private FileSystemWatcher? settingsWatcher;
+    private readonly ReloadCoalescer settingsReloadCoalescer;
 
     public event EventHandler<ContextRelayStateChangedEventArgs>? StateChanged;
 
@@ -198,9 +204,10 @@ internal sealed class ContextRelayHost : IDisposable
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
 
-        var statusMessage = ContextRelayLocalizedStrings.IsReadyStatus(state.StatusMessage)
-            ? ContextRelayLocalizedStrings.ReadyStatus
-            : state.StatusMessage;
+        // Reproduce the current status in the (possibly changed) UI language when it is one of the fixed
+        // status resources; a message built from a captured argument (a count, a path, an exception detail)
+        // is left as-is rather than risk showing a wrong or malformed value.
+        ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
 
         await RefreshStateAsync(statusMessage).ConfigureAwait(false);
         return state;
@@ -211,6 +218,91 @@ internal sealed class ContextRelayHost : IDisposable
         await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
         return state;
+    }
+
+    /// <summary>
+    /// Watches the shared settings file so a language change saved from the Options page reaches an
+    /// already-open tool window; the Options page runs in another process and cannot call the host.
+    /// </summary>
+    public void StartSettingsLanguageWatcher()
+    {
+        if (settingsWatcher is not null || disposeCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        FileSystemWatcher? created = null;
+        try
+        {
+            var directory = Path.GetDirectoryName(ContextRelaySettingsStore.SettingsFilePath);
+            if (string.IsNullOrEmpty(directory))
+            {
+                return;
+            }
+
+            // A fresh profile has no settings directory yet; create it so the first save raises Created.
+            Directory.CreateDirectory(directory);
+
+            created = new FileSystemWatcher(directory, Path.GetFileName(ContextRelaySettingsStore.SettingsFilePath))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+            FileSystemEventHandler handler = (_, _) => _ = OnSettingsFileChangedAsync();
+            created.Changed += handler;
+            created.Created += handler;
+            created.Renamed += (_, _) => _ = OnSettingsFileChangedAsync();
+            created.EnableRaisingEvents = true;
+            settingsWatcher = created;
+        }
+        catch (Exception ex)
+        {
+            // Live Options refresh is auxiliary; the panel must keep working without it.
+            created?.Dispose();
+            logger.LogError("Unable to watch the shared settings file; Options language changes apply when the tool window is reopened.", ex);
+        }
+    }
+
+    private async Task OnSettingsFileChangedAsync()
+    {
+        try
+        {
+            // Saves arrive as several file events; wait so only one reload runs per save.
+            await Task.Delay(300, disposeCancellation.Token).ConfigureAwait(false);
+
+            // settingsReloadCoalescer guarantees a save that arrives while a reload is already running is
+            // not lost, and that a failed reload retries with backoff instead of abandoning it. The dispose
+            // token stops that retry loop (rather than letting it run forever) once the host is disposed.
+            await settingsReloadCoalescer.TriggerAsync(disposeCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogError("Unable to apply a UI language change from the shared settings file.", ex);
+        }
+    }
+
+    private async Task ReloadSettingsLanguageAsync()
+    {
+        if (!ContextRelaySettingsStore.TryLoadSettings(out var settings))
+        {
+            // A transient read failure (for example the file is caught mid-write by a concurrent save)
+            // must never be mistaken for "no change": LoadSettings() would silently substitute a default
+            // snapshot here, which can spuriously equal the current language and hide a real save. Throw
+            // so settingsReloadCoalescer re-arms this trigger and retries with backoff instead.
+            throw new IOException("Unable to read the shared settings file while applying a UI language change.");
+        }
+
+        if (!string.Equals(
+                ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage),
+                ContextRelayLocalizedStrings.CurrentUiLanguage,
+                StringComparison.Ordinal))
+        {
+            // GetStateAsync reloads the full language state (including the host locale for auto)
+            // and raises StateChanged so the open view model refreshes its labels.
+            await GetStateAsync().ConfigureAwait(false);
+        }
     }
 
     public void StartDeferredSignedInUserResolution()
@@ -914,6 +1006,7 @@ internal sealed class ContextRelayHost : IDisposable
         workIqAdapter.Dispose();
         snippetRepository.Dispose();
         watcher.Dispose();
+        settingsWatcher?.Dispose();
         gate.Dispose();
         disposeCancellation.Dispose();
     }

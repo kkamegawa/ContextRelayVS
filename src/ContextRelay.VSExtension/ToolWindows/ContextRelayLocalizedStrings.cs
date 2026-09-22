@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Resources;
 using ContextRelay.Core.Router;
+using ContextRelay.VisualStudio;
 
 namespace ContextRelay.VSExtension.ToolWindows;
 
@@ -19,6 +20,10 @@ internal static class ContextRelayLocalizedStrings
         "ContextRelay.VSExtension.Resources.ContextRelayStrings",
         typeof(ContextRelayLocalizedStrings).Assembly);
     private static string configuredUiLanguage = UiLanguageAuto;
+    private static int? visualStudioUiLocale;
+
+    /// <summary>Applies the locale reported by the owning Visual Studio session.</summary>
+    public static void SetVisualStudioUiLocale(int? locale) => visualStudioUiLocale = locale;
 
     private static readonly IReadOnlyDictionary<string, string> CommandDescriptionKeys =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -137,10 +142,83 @@ internal static class ContextRelayLocalizedStrings
     public static string AddFilesDialogFilter => GetString("AddFilesDialogFilter");
     public static string CreatedFilesFolderDialogTitle => GetString("CreatedFilesFolderDialogTitle");
 
-    public static bool IsReadyStatus(string? statusMessage)
+    /// <summary>
+    /// Resource keys behind every status property that carries no captured arguments (no count, path, or
+    /// exception detail). These are the only status messages that can be safely reproduced in a different
+    /// language purely from the resource key, without remembering the arguments that built them.
+    /// </summary>
+    private static readonly string[] StaticStatusResourceKeys =
     {
-        return string.Equals(statusMessage, GetString("ReadyStatus", EnglishCulture), StringComparison.Ordinal) ||
-            string.Equals(statusMessage, GetString("ReadyStatus", JapaneseCulture), StringComparison.Ordinal);
+        "ChatResponseCancelledStatus",
+        "DebugLogOpenedStatus",
+        "ReadyStatus",
+        "RequestedSourceDisabledStatus",
+        "AskDisabledStatus",
+        "ChatPreviewDisabledStatus",
+        "AskRequiresContextStatus",
+        "FileMentionPromptEmptyStatus",
+        "FilePickerWorkspaceUnavailableStatus",
+        "FilePickerNoFilesSelectedStatus",
+        "FilePickerNoWorkspaceFilesSelectedStatus",
+        "FilePickerAddFilesFailedStatus",
+        "CreatedFilesFolderSelectionCanceledStatus",
+        "WorkIqLocalFileContextDisabledStatus",
+        "FileMentionWorkspaceUnavailableStatus",
+        "ChatAndSnippetsClearedStatus",
+        "ResultPinnedStatus",
+        "ResultPinnedWithExcerptFallbackStatus",
+        "ResultUnpinnedStatus",
+        "SnippetRemovedStatus",
+        "SnippetsClearedStatus",
+        "ChatHistoryClearedStatus",
+        "SearchCacheClearedStatus",
+        "HandoffPromptCopiedStatus",
+        "OpenedHandoffStatus",
+        "OpenCopilotPromptReadyStatus",
+        "OpenCopilotPromptAndPaneReadyStatus",
+        "ResultCopiedStatus",
+        "SnippetCopiedStatus",
+        "AppendedToHandoffStatus",
+        "ChatReplyShownStatus",
+        "WorkIqReplyShownStatus",
+        "AssistantResponseCopiedStatus",
+        "AssistantResponseAppendedStatus",
+        "AssistantResponseReplacedStatus",
+        "NoActiveEditorStatus",
+        "AssistantResponseContinuedStatus",
+        "AssistantContinuationUnavailableStatus",
+        "AssistantContinuationEmptyStatus",
+        "AssistantContinuationNoNewContentStatus",
+        "NoResultsFoundStatus",
+        "GenericHelpText", // Also covers TypeQueryStatus, which forwards to this same resource.
+        "ToolWindowInitializationFailed_NoDetail", // The other branch of GetToolWindowInitializationFailedStatus
+                                                    // carries captured exception text and is excluded.
+    };
+
+    /// <summary>
+    /// Attempts to reproduce <paramref name="statusMessage"/> in the currently configured UI language.
+    /// Only status text that exactly matches one of the fixed, argument-free status resources (in either
+    /// supported language) can be relocalized this way; a message that carries a captured argument (a
+    /// count, a path, an exception detail) or is not a known status resource is returned unchanged, so a
+    /// UI language change does not corrupt it.
+    /// </summary>
+    internal static bool TryRelocalizeStaticStatus(string? statusMessage, out string relocalizedStatus)
+    {
+        if (!string.IsNullOrEmpty(statusMessage))
+        {
+            foreach (var key in StaticStatusResourceKeys)
+            {
+                if (string.Equals(statusMessage, GetString(key, EnglishCulture), StringComparison.Ordinal) ||
+                    string.Equals(statusMessage, GetString(key, JapaneseCulture), StringComparison.Ordinal))
+                {
+                    relocalizedStatus = GetString(key, GetResolvedCulture());
+                    return true;
+                }
+            }
+        }
+
+        relocalizedStatus = statusMessage ?? string.Empty;
+        return false;
     }
 
     public static string GetToolWindowInitializationFailedStatus(string? detail)
@@ -439,15 +517,7 @@ internal static class ContextRelayLocalizedStrings
 
     private static string ResolveLanguageCode(string language)
     {
-        var normalized = NormalizeUiLanguage(language);
-        if (!normalized.Equals(UiLanguageAuto, StringComparison.OrdinalIgnoreCase))
-        {
-            return normalized;
-        }
-
-        return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals(UiLanguageJapanese, StringComparison.OrdinalIgnoreCase)
-            ? UiLanguageJapanese
-            : UiLanguageEnglish;
+        return VisualStudioLanguageService.ResolveLanguage(language, visualStudioUiLocale);
     }
 
     private static string NormalizeUiLanguage(string? language)

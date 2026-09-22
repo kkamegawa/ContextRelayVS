@@ -25,20 +25,51 @@ public static class ContextRelaySettingsStore
     /// <returns>The persisted settings, or defaults if the file is absent or invalid.</returns>
     public static ContextRelaySettingsSnapshot LoadSettings()
     {
+        TryLoadSettings(out var settings);
+        return settings;
+    }
+
+    /// <summary>
+    /// Attempts to load the persisted ContextRelay settings, distinguishing a legitimate default snapshot
+    /// (the file does not exist yet) from a failed read of a file that does exist — for example because a
+    /// concurrent save is still in progress, or the content is corrupt. A caller that must not mistake a
+    /// transient read failure for "no change" (such as reacting to a file-change notification) should use
+    /// this overload instead of <see cref="LoadSettings"/>, which intentionally cannot make that
+    /// distinction.
+    /// </summary>
+    /// <param name="settings">
+    /// The persisted settings on success, or a default snapshot (not to be trusted as the persisted state)
+    /// when this method returns <see langword="false"/>.
+    /// </param>
+    /// <returns><see langword="true"/> if the file was absent or was read and parsed successfully.</returns>
+    public static bool TryLoadSettings(out ContextRelaySettingsSnapshot settings)
+    {
         if (!File.Exists(SettingsFilePath))
         {
-            return new ContextRelaySettingsSnapshot();
+            settings = new ContextRelaySettingsSnapshot();
+            return true;
         }
 
         try
         {
             using var stream = File.OpenRead(SettingsFilePath);
-            return JsonSerializer.Deserialize<ContextRelaySettingsSnapshot>(stream, JsonOptions)
-                   ?? new ContextRelaySettingsSnapshot();
+            var deserialized = JsonSerializer.Deserialize<ContextRelaySettingsSnapshot>(stream, JsonOptions);
+            if (deserialized is null)
+            {
+                // The file exists but its content is JSON null (or otherwise deserializes to null) rather
+                // than an object — not a legitimate "no settings yet" case, since that is File.Exists being
+                // false above. Report failure instead of silently substituting a default snapshot.
+                settings = new ContextRelaySettingsSnapshot();
+                return false;
+            }
+
+            settings = deserialized;
+            return true;
         }
         catch
         {
-            return new ContextRelaySettingsSnapshot();
+            settings = new ContextRelaySettingsSnapshot();
+            return false;
         }
     }
 

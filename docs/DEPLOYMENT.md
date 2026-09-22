@@ -163,7 +163,7 @@ Remove-Item "$env:APPDATA\ContextRelay\settings.json"
 **Symptoms**: Language setting changes but UI does not update
 
 **Diagnostic Steps**:
-1. Verify UI Language value is valid ("en", "ja", "auto")
+1. Verify the UI Language drop-down selection (Auto, English, or Japanese). An explicit English or Japanese choice overrides the Visual Studio display language; select Auto to follow it
 2. Check ActivityLog for language initialization errors
 3. Verify ContextRelayLocalizedStrings is being called
 
@@ -171,8 +171,8 @@ Remove-Item "$env:APPDATA\ContextRelay\settings.json"
 1. Close all Visual Studio windows
 2. Delete `settings.json` to reset to defaults (UI Language: "auto")
 3. Restart Visual Studio
-4. In Options, set UI Language to specific value ("en" or "ja")
-5. Restart Visual Studio to apply
+4. In Options, choose the language from the UI Language drop-down (Auto, English, or Japanese)
+5. Confirm an already-open tool window switches language immediately after the Options change is saved; then restart Visual Studio only to verify the selection persisted
 
 ### Issue: VSIX Installation Fails
 **Symptoms**: Installation command returns error or hangs

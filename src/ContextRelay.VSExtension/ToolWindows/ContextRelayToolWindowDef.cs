@@ -27,8 +27,12 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
         Placement = ToolWindowPlacement.DocumentWell,
     };
 
-    public override Task<IRemoteUserControl> GetContentAsync(CancellationToken cancellationToken)
+    public override async Task<IRemoteUserControl> GetContentAsync(CancellationToken cancellationToken)
     {
+        // Resolve host language before any localized view model fields are initialized. The lookup is
+        // bounded by its own timeout, so it is decoupled from the transient shell token.
+        await serviceProvider.GetRequiredService<IContextRelayPackageServices>()
+            .GetSettingsSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
         var hostInstance = host ??= serviceProvider.GetRequiredService<ContextRelayHost>();
         var viewModel = new ContextRelayWindowViewModel(hostInstance);
         var content = new ContextRelayWindowContent(viewModel);
@@ -36,7 +40,7 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
         // Keep deferred initialization independent from transient shell cancellation so
         // frame construction does not fail when the open-window command token is canceled.
         ObserveInitialization(InitializeToolWindowAsync(hostInstance, viewModel, CancellationToken.None));
-        return Task.FromResult<IRemoteUserControl>(content);
+        return content;
     }
 
     private static void ObserveInitialization(Task task)
@@ -60,6 +64,8 @@ internal sealed class ContextRelayToolWindowDef : ToolWindow
     {
         try
         {
+            // Register the watcher before the final settings read so either that read or the watcher sees every save.
+            hostInstance.StartSettingsLanguageWatcher();
             await hostInstance.InitializeAsync(cancellationToken).ConfigureAwait(false);
             await viewModel.InitializeAsync(cancellationToken).ConfigureAwait(false);
             hostInstance.StartDeferredSignedInUserResolution();
