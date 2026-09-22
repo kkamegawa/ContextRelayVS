@@ -76,6 +76,9 @@ internal sealed class ContextRelayHost : IDisposable
     private TtlLruCache<string, ContextItem[]> searchCache = new();
     private ContextRelayHostState state = new();
     private string? lastSearchSummary;
+    // Kept alongside currentSearchResults so lastSearchSummary can be rebuilt in a new UI language; it is
+    // otherwise redundant with the summary text itself.
+    private SlashCommandParseResult? lastSearchRoute;
     private string? copilotConversationId;
     private string? copilotConversationAssistantItemId;
     private string? workIqContextId;
@@ -201,22 +204,49 @@ internal sealed class ContextRelayHost : IDisposable
     public async Task<ContextRelayHostState> GetStateAsync()
     {
         var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
-        ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
 
-        // Reproduce the current status in the (possibly changed) UI language when it is one of the fixed
-        // status resources; a message built from a captured argument (a count, a path, an exception detail)
-        // is left as-is rather than risk showing a wrong or malformed value.
-        ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            // ContextRelayLocalizedStrings is process-wide static state, and GetSettingsSnapshotAsync
+            // above already applied it as a side effect before this call reached gate — a concurrent
+            // caller could have changed it again in between. Re-apply it here, now that gate is held, so
+            // it cannot change again before the status/summary rebuild below reads it.
+            ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
 
-        await RefreshStateAsync(statusMessage).ConfigureAwait(false);
+            // Reproduce the current status in the (possibly changed) UI language when it is one of the
+            // fixed status resources; a message built from a captured argument (a count, a path, an
+            // exception detail) is left as-is rather than risk showing a wrong or malformed value.
+            ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
+
+            await RefreshStateCoreAsync(statusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
         return state;
     }
 
     public async Task<ContextRelayHostState> UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
     {
         await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
-        await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Mirrors GetStateAsync: re-apply under gate so a concurrent caller cannot change the
+            // language again before this explicit choice's own rebuild below reads it.
+            ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsStore.NormalizeUiLanguage(uiLanguage));
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
         return state;
     }
 
@@ -358,6 +388,7 @@ internal sealed class ContextRelayHost : IDisposable
                 await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
                 await snippetRepository.ClearAsync(cancellationToken).ConfigureAwait(false);
                 currentSearchResults = Array.Empty<ContextItem>();
+                lastSearchRoute = null;
                 lastSearchSummary = null;
                 copilotConversationId = null;
                 copilotConversationAssistantItemId = null;
@@ -516,7 +547,9 @@ internal sealed class ContextRelayHost : IDisposable
                 .ToArray();
 
             currentSearchResults = results;
-            lastSearchSummary = BuildSearchSummary(route, results);
+            lastSearchRoute = route;
+            // RefreshStateCoreAsync rebuilds lastSearchSummary from lastSearchRoute/currentSearchResults
+            // below, in the current UI language, under the same gate hold as this assignment.
             await AppendSearchHistoryAsync(trimmed, results, cancellationToken).ConfigureAwait(false);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation($"Search completed with {results.Length} result(s).");
@@ -671,6 +704,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
             currentSearchResults = Array.Empty<ContextItem>();
+            lastSearchRoute = null;
             lastSearchSummary = null;
             copilotConversationId = null;
             copilotConversationAssistantItemId = null;
@@ -1886,6 +1920,18 @@ internal sealed class ContextRelayHost : IDisposable
         {
             shouldResolveSignedInUser = false;
             signedInUser = await TryGetSignedInUserAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (lastSearchRoute is not null)
+        {
+            // Every state publish rebuilds the summary from the cached route/results (always consistent
+            // with each other here, since both are only ever mutated together while gate is held, the same
+            // as this read). This keeps it cheap to reason about correctness-wise — it is always current —
+            // at the cost of some redundant recomputation on state changes unrelated to language, and it is
+            // what makes the summary follow a UI language change regardless of which caller (automatic
+            // refresh, an explicit English/Japanese choice, or an Options save reaching an open tool
+            // window) triggered this publish.
+            lastSearchSummary = BuildSearchSummary(lastSearchRoute, currentSearchResults);
         }
 
         state = new ContextRelayHostState
