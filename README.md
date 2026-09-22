@@ -98,6 +98,7 @@ ContextRelay applies the same security-first posture used in the VS Code extensi
 
 - Visual Studio 2022 17.8 or later, or Visual Studio 2026 (including Insider).
 - .NET Framework 4.8 runtime (bundled with Visual Studio).
+- .NET 10 SDK or later on the machine that runs `dotnet test` (the repository's `global.json` selects the Microsoft.Testing.Platform runner, which requires it).
 - A Microsoft 365 work/school account (Microsoft Entra ID). Personal Microsoft accounts are not supported.
 - Microsoft Entra app registration with public-client flow enabled, delegated Microsoft Graph permissions, and optional `WorkIQAgent.Ask` consent for `/workiq`. See [docs/tenant_admin_quickstart.md](docs/tenant_admin_quickstart.md).
 

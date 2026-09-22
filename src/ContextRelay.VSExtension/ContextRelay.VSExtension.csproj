@@ -50,7 +50,7 @@
   <PropertyGroup>
     <StartAction>Program</StartAction>
     <StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
-    <StartArguments>/rootsuffix Exp /log &quot;$(VisualStudioActivityLogPath)&quot;</StartArguments>
+    <StartArguments>/rootsuffix Exp /log "$(VisualStudioActivityLogPath)"</StartArguments>
   </PropertyGroup>
 
   <ItemGroup>
@@ -90,7 +90,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" PrivateAssets="all" ExcludeAssets="runtime" />
-    <PackageReference Include="MessagePack" Version="2.5.301" />
+    <PackageReference Include="MessagePack" Version="3.1.9" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility" Version="17.14.2098" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
@@ -420,11 +420,8 @@
     </Task>
   </UsingTask>
 
-  <Target Name="ValidateContextRelayMenuMetadataInOutput"
-          AfterTargets="Build"
-          Condition="Exists('$(TargetDir).vsextension\extension.json')">
-    <ValidateContextRelayMenuMetadata ExtensionJsonPath="$(TargetDir).vsextension\extension.json"
-                                      ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
+  <Target Name="ValidateContextRelayMenuMetadataInOutput" AfterTargets="Build" Condition="Exists('$(TargetDir).vsextension\extension.json')">
+    <ValidateContextRelayMenuMetadata ExtensionJsonPath="$(TargetDir).vsextension\extension.json" ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
   </Target>
 
   <!--
@@ -443,33 +440,18 @@
     so sidecar registration is silently ignored. The only reliable registration path is
     via a properly packaged VSIX.
   -->
-  <Target Name="PatchVsixContainerAfterCreation"
-          AfterTargets="CreateVsixContainer"
-          Condition="Exists('$(TargetVsixContainer)')">
-    <Error Condition="!Exists('$(InProcPackageDllPath)')"
-           Text="In-proc package DLL not found at $(InProcPackageDllPath). Build the package project first." />
-    <Error Condition="!Exists('$(InProcPackagePkgdefPath)')"
-           Text="In-proc package pkgdef not found at $(InProcPackagePkgdefPath). Ensure GeneratePkgDef ran during the package project build." />
-    <Error Condition="!Exists('$(InProcToolkitAssemblyPath)')"
-           Text="Community.VisualStudio.Toolkit.dll not found at $(InProcToolkitAssemblyPath); the in-proc options package will fail to load without it." />
-    <Error Condition="!Exists('$(InProcPackageJapaneseResourcesPath)')"
-           Text="Japanese options resource assembly not found at $(InProcPackageJapaneseResourcesPath)." />
-    <Error Condition="!Exists('$(SourceVsixManifestPath)')"
-           Text="Source manifest not found at $(SourceVsixManifestPath)." />
-    <PatchVsixForInProcPackage
-      VsixPath="$(TargetVsixContainer)"
-      SourceManifestPath="$(SourceVsixManifestPath)"
-      PackageDllPath="$(InProcPackageDllPath)"
-      PackagePkgdefPath="$(InProcPackagePkgdefPath)"
-      SupportingAssemblies="$(InProcToolkitAssemblyPath);$(InProcPackageJapaneseResourcesPath)|ja/ContextRelay.VSExtension.Package.resources.dll" />
+  <Target Name="PatchVsixContainerAfterCreation" AfterTargets="CreateVsixContainer" Condition="Exists('$(TargetVsixContainer)')">
+    <Error Condition="!Exists('$(InProcPackageDllPath)')" Text="In-proc package DLL not found at $(InProcPackageDllPath). Build the package project first." />
+    <Error Condition="!Exists('$(InProcPackagePkgdefPath)')" Text="In-proc package pkgdef not found at $(InProcPackagePkgdefPath). Ensure GeneratePkgDef ran during the package project build." />
+    <Error Condition="!Exists('$(InProcToolkitAssemblyPath)')" Text="Community.VisualStudio.Toolkit.dll not found at $(InProcToolkitAssemblyPath); the in-proc options package will fail to load without it." />
+    <Error Condition="!Exists('$(InProcPackageJapaneseResourcesPath)')" Text="Japanese options resource assembly not found at $(InProcPackageJapaneseResourcesPath)." />
+    <Error Condition="!Exists('$(SourceVsixManifestPath)')" Text="Source manifest not found at $(SourceVsixManifestPath)." />
+    <PatchVsixForInProcPackage VsixPath="$(TargetVsixContainer)" SourceManifestPath="$(SourceVsixManifestPath)" PackageDllPath="$(InProcPackageDllPath)" PackagePkgdefPath="$(InProcPackagePkgdefPath)" SupportingAssemblies="$(InProcToolkitAssemblyPath);$(InProcPackageJapaneseResourcesPath)|ja/ContextRelay.VSExtension.Package.resources.dll" />
     <Message Importance="High" Text="Patched VSIX $(TargetVsixContainer) with in-proc package payload and hybrid manifest." />
   </Target>
 
-  <Target Name="ValidateContextRelayMenuMetadataInVsix"
-          AfterTargets="PatchVsixContainerAfterCreation"
-          Condition="Exists('$(TargetVsixContainer)')">
-    <ValidateContextRelayMenuMetadata VsixPath="$(TargetVsixContainer)"
-                                      ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
+  <Target Name="ValidateContextRelayMenuMetadataInVsix" AfterTargets="PatchVsixContainerAfterCreation" Condition="Exists('$(TargetVsixContainer)')">
+    <ValidateContextRelayMenuMetadata VsixPath="$(TargetVsixContainer)" ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
   </Target>
 
   <!--
@@ -691,12 +673,7 @@
     </Task>
   </UsingTask>
 
-  <Target Name="AssertVsixContentsAfterPatch"
-          AfterTargets="ValidateContextRelayMenuMetadataInVsix"
-          Condition="Exists('$(TargetVsixContainer)')">
-    <AssertVsixContents
-      VsixPath="$(TargetVsixContainer)"
-      RequiredEntries="extension.vsixmanifest;.vsextension/extension.json;ContextRelay.VSExtension.Package.dll;ContextRelay.VSExtension.Package.pkgdef;Community.VisualStudio.Toolkit.dll;ja/ContextRelay.VSExtension.Package.resources.dll"
-      RequiredManifestSubstrings="Publisher=&quot;kkamegawa&quot;|Microsoft.VisualStudio.VsPackage|ContextRelay.VSExtension.Package.pkgdef|Microsoft.VisualStudio.Assembly|ContextRelay.VSExtension.Package.dll|Community.VisualStudio.Toolkit.dll|Microsoft.VisualStudio.Community|Microsoft.VisualStudio.Pro|Microsoft.VisualStudio.Enterprise|VSSDK+VisualStudio.Extensibility" />
+  <Target Name="AssertVsixContentsAfterPatch" AfterTargets="ValidateContextRelayMenuMetadataInVsix" Condition="Exists('$(TargetVsixContainer)')">
+    <AssertVsixContents VsixPath="$(TargetVsixContainer)" RequiredEntries="extension.vsixmanifest;.vsextension/extension.json;ContextRelay.VSExtension.Package.dll;ContextRelay.VSExtension.Package.pkgdef;Community.VisualStudio.Toolkit.dll;ja/ContextRelay.VSExtension.Package.resources.dll" RequiredManifestSubstrings="Publisher=&quot;kkamegawa&quot;|Microsoft.VisualStudio.VsPackage|ContextRelay.VSExtension.Package.pkgdef|Microsoft.VisualStudio.Assembly|ContextRelay.VSExtension.Package.dll|Community.VisualStudio.Toolkit.dll|Microsoft.VisualStudio.Community|Microsoft.VisualStudio.Pro|Microsoft.VisualStudio.Enterprise|VSSDK+VisualStudio.Extensibility" />
   </Target>
 </Project>
