@@ -278,15 +278,24 @@ internal sealed class ContextRelayHost : IDisposable
                 {
                     while (Interlocked.Exchange(ref settingsReloadPending, 0) == 1)
                     {
-                        var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
-                        if (!string.Equals(
-                                ContextRelaySettingsStore.NormalizeUiLanguage(configured),
-                                ContextRelayLocalizedStrings.CurrentUiLanguage,
-                                StringComparison.Ordinal))
+                        try
                         {
-                            // GetStateAsync reloads the full language state (including the host locale for auto)
-                            // and raises StateChanged so the open view model refreshes its labels.
-                            await GetStateAsync().ConfigureAwait(false);
+                            var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
+                            if (!string.Equals(
+                                    ContextRelaySettingsStore.NormalizeUiLanguage(configured),
+                                    ContextRelayLocalizedStrings.CurrentUiLanguage,
+                                    StringComparison.Ordinal))
+                            {
+                                // GetStateAsync reloads the full language state (including the host locale for auto)
+                                // and raises StateChanged so the open view model refreshes its labels.
+                                await GetStateAsync().ConfigureAwait(false);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // A failed reload must not drop a pending save or abandon the watcher; log and let
+                            // the loop re-check the pending flag (or the outer retry below) pick it up again.
+                            logger.LogError("Unable to apply a UI language change from the shared settings file.", ex);
                         }
                     }
                 }
