@@ -2,7 +2,11 @@
 using System.ComponentModel;
 using System.IO;
 using System.Reflection;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using ContextRelay.Core.Chat;
 using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
@@ -89,7 +93,9 @@ public sealed class SlashCommandSuggestionInteractionTests
 
         Assert.Equal("partial response", viewModelType.GetProperty("StreamingResponseText")!.GetValue(viewModel));
         Assert.True((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
-        Assert.Equal(new[] { "IsStreaming", "StreamingResponseText" }, raisedProperties);
+        Assert.Equal(
+            new[] { "IsStreaming", "PrimaryActionButtonText", "IsPrimaryActionEnabled", "StreamingResponseText" },
+            raisedProperties);
     }
 
     [Fact]
@@ -176,6 +182,274 @@ public sealed class SlashCommandSuggestionInteractionTests
     }
 
     [Fact]
+    public void EmbeddedXaml_TogglesSendAndStopAndThemesStreamingText()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        using var stream = assembly.GetManifestResourceStream("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowContent.xaml");
+
+        Assert.NotNull(stream);
+
+        using var reader = new StreamReader(stream!);
+        var xaml = reader.ReadToEnd();
+
+        // One primary button switches label and behavior, so keyboard focus survives the change.
+        Assert.Contains("Content=\"{Binding PrimaryActionButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsEnabled=\"{Binding IsPrimaryActionEnabled}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding IsNotStreaming", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
+
+        // The streaming preview is outside the chat list, so its text needs an explicit themed brush.
+        Assert.Contains("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource BodyTextStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource CardBodyTextStyle}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PrimaryAction_SwitchesToStopWhileStreamingAndStaysEnabled()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        applyState.Invoke(viewModel, new[] { state });
+
+        var primaryText = viewModelType.GetProperty("PrimaryActionButtonText")!;
+        var primaryEnabled = viewModelType.GetProperty("IsPrimaryActionEnabled")!;
+        var searchText = viewModelType.GetProperty("SearchButtonText")!.GetValue(viewModel);
+        var stopText = viewModelType.GetProperty("StopGenerationButtonText")!.GetValue(viewModel);
+
+        Assert.Equal(searchText, primaryText.GetValue(viewModel));
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+
+        SetState(stateType, state, "IsStreaming", true);
+        applyState.Invoke(viewModel, new[] { state });
+
+        Assert.Equal(stopText, primaryText.GetValue(viewModel));
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+
+        // The enabled state across the submit-to-streaming gap is covered by
+        // PrimaryAction_WhileSubmitting_IsEnabledOnlyForChatRoutesOnEitherSubmitPath, which drives
+        // the real command instead of setting the fields it maintains.
+    }
+
+    [Fact]
+    public void PrimaryActionCaption_IsNotifiedAfterBothLabelsAreRefreshed()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        SetState(stateType, state, "IsStreaming", true);
+        applyState.Invoke(viewModel, new[] { state });
+
+        var notifyPropertyChanged = Assert.IsAssignableFrom<INotifyPropertyChanged>(viewModel);
+        var raised = new System.Collections.Generic.List<string?>();
+        notifyPropertyChanged.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        applyState.Invoke(viewModel, new[] { state });
+
+        // The derived caption reads whichever label matches the current state, so it must be
+        // notified after both labels have been reassigned for the current UI language.
+        var caption = raised.LastIndexOf("PrimaryActionButtonText");
+        var stopLabel = raised.LastIndexOf("StopGenerationButtonText");
+        var sendLabel = raised.LastIndexOf("SearchButtonText");
+        Assert.True(caption >= 0);
+        Assert.True(caption > stopLabel);
+        Assert.True(caption > sendLabel);
+    }
+
+    [Fact]
+    public void SuggestionKeyBindings_AreDisabledWhileTheCommandPopupIsClosed()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+
+        // The query box binds Tab to the apply command. While the popup is closed the binding must
+        // not handle the key, otherwise Tab cannot move focus to the composer's primary button.
+        var applyCommand = viewModelType.GetProperty("ApplyCommandSelectionCommand")!.GetValue(viewModel)!;
+        var canExecute = applyCommand.GetType().GetProperty("CanExecute")!;
+        var popupOpen = viewModelType.GetProperty("IsCommandPopupOpen")!;
+
+        Assert.False((bool)popupOpen.GetValue(viewModel)!);
+        Assert.False((bool)canExecute.GetValue(applyCommand)!);
+
+        var popupField = viewModelType.GetField("isCommandPopupOpen", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var refresh = viewModelType.GetMethod("UpdateSuggestionKeyBindingAvailability", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        popupField.SetValue(viewModel, true);
+        refresh.Invoke(viewModel, null);
+
+        Assert.True((bool)canExecute.GetValue(applyCommand)!);
+    }
+
+    // Both the primary button (SearchCommand) and Enter in the query box (ConfirmQueryInputCommand)
+    // submit, and they must leave the primary button in the same state. Enter used to bypass the
+    // enabled-state bookkeeping, so the button was disabled and Tab could not reach Stop.
+    [Theory]
+    [InlineData("SearchCommand", "explain this", true)]
+    [InlineData("ConfirmQueryInputCommand", "explain this", true)]
+    [InlineData("SearchCommand", "/ask summarize", true)]
+    [InlineData("ConfirmQueryInputCommand", "/ask summarize", true)]
+    [InlineData("SearchCommand", "/mail budget", false)]
+    [InlineData("ConfirmQueryInputCommand", "/mail budget", false)]
+    public async Task PrimaryAction_WhileSubmitting_IsEnabledOnlyForChatRoutesOnEitherSubmitPath(
+        string commandName,
+        string query,
+        bool expectedEnabled)
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var loggerType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayOutputLogger", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+
+        // Give the bare host what the submit path touches, and hold its gate closed so the request
+        // stays in flight in exactly the window between submit and the first streaming update.
+        using var submitGate = new SemaphoreSlim(0, 1);
+        hostType.GetField("logger", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(host, RuntimeHelpers.GetUninitializedObject(loggerType));
+        hostType.GetField("gate", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, submitGate);
+        hostType.GetField("draftQuerySync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        viewModelType.GetField("queryText", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(viewModel, query);
+        var primaryEnabled = viewModelType.GetProperty("IsPrimaryActionEnabled")!;
+        var busyField = viewModelType.GetField("isBusy", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var command = viewModelType.GetProperty(commandName)!.GetValue(viewModel)!;
+        var execute = command.GetType().GetMethods()
+            .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
+        using var cancellation = new CancellationTokenSource();
+        var execution = (Task)execute.Invoke(command, new object?[] { null, null, cancellation.Token })!;
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!(bool)busyField.GetValue(viewModel)! && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((bool)busyField.GetValue(viewModel)!);
+
+        // Busy but not streaming yet. A chat request keeps the button enabled, because disabling a
+        // focused control moves keyboard focus away and WPF does not restore it. Other routes keep
+        // the ordinary disabled-while-busy state.
+        Assert.False((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
+        Assert.Equal(expectedEnabled, (bool)primaryEnabled.GetValue(viewModel)!);
+
+        cancellation.Cancel();
+        try
+        {
+            await execution;
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: the held gate is released only by cancelling the request.
+        }
+
+        // Finished requests hand the button back to its ordinary state.
+        Assert.True((bool)primaryEnabled.GetValue(viewModel)!);
+    }
+
+    [Fact]
+    public async Task PrimaryAction_WhenNotStreaming_SubmitsInsteadOfCancelling()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var loggerType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayOutputLogger", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+
+        // An active request that only the stop branch may cancel.
+        var stateMachine = new ChatRequestStateMachine();
+        hostType.GetField("chatRequestStateMachine", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, stateMachine);
+        hostType.GetField("activeChatRequestSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+        using var requestCancellation = new CancellationTokenSource();
+        Assert.True(stateMachine.TryBegin(Array.Empty<string>(), requestCancellation.Token, out var request));
+
+        // Hold the host's gate closed so SubmitQueryAsync blocks at a boundary the test can observe.
+        // Reaching the busy state proves the send branch entered the submission path; there is no
+        // catch-all, so an unexpected failure surfaces instead of being read as success.
+        using var submitGate = new SemaphoreSlim(0, 1);
+        hostType.GetField("logger", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(host, RuntimeHelpers.GetUninitializedObject(loggerType));
+        hostType.GetField("gate", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, submitGate);
+        hostType.GetField("draftQuerySync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        viewModelType.GetField("queryText", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(viewModel, "explain this");
+        Assert.False((bool)viewModelType.GetProperty("IsStreaming")!.GetValue(viewModel)!);
+        var busyField = viewModelType.GetField("isBusy", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var command = viewModelType.GetProperty("SearchCommand")!.GetValue(viewModel)!;
+        var execute = command.GetType().GetMethods()
+            .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
+        using var cancellation = new CancellationTokenSource();
+        var execution = (Task)execute.Invoke(command, new object?[] { null, null, cancellation.Token })!;
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!(bool)busyField.GetValue(viewModel)! && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        // The command entered the submission path and is waiting on the host, so it sent.
+        Assert.True((bool)busyField.GetValue(viewModel)!);
+        Assert.False(execution.IsCompleted);
+
+        // ...and it did not take the stop branch, which is the only thing that cancels the request.
+        Assert.False(request!.CancellationToken.IsCancellationRequested);
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+    }
+
+    [Fact]
+    public async Task PrimaryAction_WhileStreaming_RequestsCancellationInsteadOfSubmitting()
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var viewModelType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayWindowViewModel", throwOnError: true)!;
+        var stateType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHostState", throwOnError: true)!;
+        var host = RuntimeHelpers.GetUninitializedObject(hostType);
+
+        // StopGeneration cancels through the request state machine, so give the bare host the two
+        // fields it touches and start a request that the command is expected to cancel.
+        var stateMachine = new ChatRequestStateMachine();
+        hostType.GetField("chatRequestStateMachine", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, stateMachine);
+        hostType.GetField("activeChatRequestSync", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(host, new object());
+        using var requestCancellation = new CancellationTokenSource();
+        Assert.True(stateMachine.TryBegin(Array.Empty<string>(), requestCancellation.Token, out var request));
+
+        var viewModel = Activator.CreateInstance(viewModelType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { host }, null)!;
+        var applyState = viewModelType.GetMethod("ApplyState", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        SetState(stateType, state, "IsStreaming", true);
+        applyState.Invoke(viewModel, new[] { state });
+
+        var command = viewModelType.GetProperty("SearchCommand")!.GetValue(viewModel)!;
+        // The client context type lives in the extensibility SDK, which this project does not
+        // reference, so resolve the overload by shape and pass no context; the stop path ignores it.
+        var execute = command.GetType().GetMethods()
+            .Single(method => method.Name == "ExecuteAsync" && method.GetParameters().Length == 3);
+        await (Task)execute.Invoke(command, new object?[] { null, null, TestContext.Current.CancellationToken })!;
+
+        Assert.True(request!.CancellationToken.IsCancellationRequested);
+
+        // A second submission must not start: the submit path would flag an active chat request.
+        var chatRequestField = viewModelType.GetField("isChatRequestActive", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.False((bool)chatRequestField.GetValue(viewModel)!);
+    }
+
+    [Fact]
     public void EmbeddedXaml_WiresSuggestionApplyAndConfirmBindings()
     {
         var assembly = LoadBuiltExtensionAssembly();
@@ -243,12 +517,13 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("SelectionBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionTextBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}", xaml, StringComparison.Ordinal);
         Assert.Contains("CaretBrush\" Value=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}", xaml, StringComparison.Ordinal);
-        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"2\" Grid.Column=\"2\" Content=\"{Binding SearchButtonText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource PrimaryButtonStyle}\" Grid.Row=\"2\" Grid.Column=\"2\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{Binding PrimaryActionButtonText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding PendingAttachments}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("HorizontalContentAlignment=\"Stretch\"", xaml, StringComparison.Ordinal);
         Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<ColumnDefinition Width=\"Auto\" />", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding SearchCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding StreamingResponseText}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"180\"", xaml, StringComparison.Ordinal);
         Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
