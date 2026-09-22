@@ -4,29 +4,55 @@ updates:
     directory: "/src/ContextRelay.Core"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 3
+      semver-minor-days: 10
+      semver-patch-days: 3
     ignore:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
 
   - package-ecosystem: "nuget"
     directory: "/src/ContextRelay.VSExtension"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 3
+      semver-major-days: 20
+      semver-minor-days: 10
+      semver-patch-days: 3
     ignore:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
-
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+      
   - package-ecosystem: "nuget"
     directory: "/tests/ContextRelay.Core.Tests"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 3
+      semver-major-days: 20
+      semver-minor-days: 10
+      semver-patch-days: 3
     ignore:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
-
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+      
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
