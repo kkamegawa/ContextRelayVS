@@ -31,7 +31,9 @@ internal sealed class VisualStudioUiLanguageProvider
                 return locale;
             }
 
-            // VS applies display-language changes on restart, so cache per extension instance.
+            // VS applies display-language changes on restart, so cache a successful lookup (including the
+            // service's own "unavailable" sentinel) per extension instance. A timeout or thrown exception is
+            // treated as transient and is not cached, so a later call can retry once the service recovers.
             // A missing/unresponsive package must not block opening the tool window.
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMilliseconds(1500));
@@ -48,21 +50,26 @@ internal sealed class VisualStudioUiLanguageProvider
                 {
                     logger.LogWarning("Visual Studio UI language service is unavailable; automatic UI language falls back to English.");
                 }
+
+                initialized = true;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
+            catch (OperationCanceledException)
+            {
+                logger.LogWarning("Reading the Visual Studio UI language timed out; automatic UI language falls back to English for now and will retry.");
+            }
             catch (Exception ex)
             {
-                logger.LogError("Unable to read the Visual Studio UI language; automatic UI language falls back to English.", ex);
+                logger.LogError("Unable to read the Visual Studio UI language; automatic UI language falls back to English for now and will retry.", ex);
             }
             finally
             {
                 (proxy as IDisposable)?.Dispose();
             }
 
-            initialized = true;
             return locale;
         }
         finally
