@@ -36,6 +36,7 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 
 - Visual Studio 2022 17.8 以降、または Visual Studio 2026 (Insider 含む)
 - .NET Framework 4.8 ランタイム (Visual Studio に同梱)
+- `dotnet test` を実行するマシンには .NET 10 SDK 以降が必要 (リポジトリの `global.json` が Microsoft.Testing.Platform ランナーを選択しているため)
 - Microsoft 365 職場/学校アカウント (Microsoft Entra ID)。個人用 Microsoft アカウントは非対応
 - パブリック クライアント フローを有効化した Microsoft Entra アプリ登録、Microsoft Graph の委任アクセス許可、および `/workiq` 用の `WorkIQAgent.Ask` (任意)。設定手順は [docs/tenant_admin_quickstart.md](docs/tenant_admin_quickstart.md) を参照してください。
 

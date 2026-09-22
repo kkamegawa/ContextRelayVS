@@ -1,5 +1,12 @@
 # アーキテクチャ決定記録
 
+## 2026-09-22 — chore/packageupdate: `dotnet test` で Microsoft.Testing.Platform ランナーを選択
+
+- コンテキスト: `xunit.v3` を 3.2.2 から 4.0.1 へ（`xunit.runner.visualstudio` も 4.0.0 へ）更新した結果、テスト プロジェクトの依存関係が `xunit.v3.mtp-v1` から `xunit.v3.mtp-v2` に切り替わり、`Microsoft.Testing.Platform` 2.4.0 が引き込まれた。このバージョンの `Microsoft.Testing.Platform.MSBuild` ターゲットは、.NET 10 SDK 以降で新しい `dotnet test` ネイティブ モードに opt-in していない場合、無条件でビルド エラー（"Testing with VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and later"）を発生させる。ローカル環境（.NET 11 SDK）と CI（`windows-latest`。リポジトリに `global.json` がなかったため .NET 10 以降の SDK が解決される）の両方で、`dotnet test` が 1 件もテストを実行せずに失敗していた。
+- 決定: リポジトリ ルートに `global.json` を追加し、`"test": { "runner": "Microsoft.Testing.Platform" }` を指定した。`Microsoft.NET.Test.Sdk` は維持する（`xunit.v3.core.mtp-v2` が要求する `<OutputType>Exe</OutputType>` を引き続き供給するため）。テスト プロジェクト自体にも `<OutputType>Exe</OutputType>` を明示的に宣言し、`Microsoft.NET.Test.Sdk` のターゲットによる暗黙設定だけに依存しないようにした。これにより、実行可能ファイルであるという契約がプロジェクト ファイル自体から見えるようになり、どの SDK 提供パッケージが参照されているかに暗黙に依存しなくなる。`coverlet.collector`（VSTest 用データ コレクターで MTP では動作しない）は `coverlet.MTP` 10.0.1 に置き換えた。`.github/workflows/ci.yml` と `release.yml` も .NET 10.x SDK を 8.0.x と併せてセットアップするようにし、`ci.yml` の `Test core` ステップは VSTest 用引数（`--logger trx`、`--collect:"XPlat Code Coverage"`）を MTP 用引数（`--report-xunit-trx`、`--coverlet --coverlet-output-format cobertura`）に置き換え、`coverlet.MTP` が出力ファイル名にタイムスタンプを付与することから Codecov のグロブを `coverage.cobertura*.xml` に広げた。`global.json`・テスト プロジェクト・両ワークフロー ファイルはすべて同一コミットに含まれる。
+- 理由: `dotnet test` を MTP モードで実行（`DOTNET_TEST_RUNNER=Microsoft.Testing.Platform dotnet test ...`）したところ、既存の 318 件のテストはすべて無改修で合格した。これにより、今回の失敗が純粋にテスト ランナー選択の問題であり、テスト コードや製品コードの不具合ではないことを確認した。MSTest への移行も検討したが却下した。MSTest 4.x も同じ MTP v2 基盤の上に構築されており、同一の `global.json` opt-in が必要になるため今回の変更を回避できず、318 件全テストの属性・アサーションを書き換えるコストだけが追加で発生する。
+- 影響: ローカルで `dotnet test` を実行するには .NET 10 SDK 以降が必須となった。生成されるカバレッジ ファイル名は固定の `coverage.cobertura.xml` ではなくタイムスタンプ付きになる。`release.yml` の `Test core` ステップはビルド系引数のみを渡しているため引数変更は不要だった。`ci.yml` と `release.yml` も `global.json` と同じコミットで更新済みのため、CI が VSTest エラーで失敗し続けることはない。
+
 ## 2026-09-22 — Issue #192: 自動モードで Visual Studio の表示言語に従う
 
 - コンテキスト: ユーザーは、自動言語選択が Visual Studio の表示言語に従うことを確認した。拡張機能プロセスのカルチャは Windows の設定に従う場合があり、英語版 Visual Studio 内で日本語 UI が表示される可能性がある。

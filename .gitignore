@@ -36,6 +36,7 @@ Thumbs.db
 *.lscache
 
 artifacts/
+TestResults/
 
 build.log
 

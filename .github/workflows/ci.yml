@@ -21,7 +21,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Restore
         run: dotnet restore ContextRelayVS.sln
@@ -37,8 +39,8 @@ jobs:
         run: >-
           dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj
           -c Release --no-build -v minimal
-          --collect:"XPlat Code Coverage"
-          --logger trx
+          --report-xunit-trx
+          --coverlet --coverlet-output-format cobertura
           --results-directory ./TestResults
 
       - name: Publish test results
@@ -52,7 +54,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          files: TestResults/**/coverage.cobertura.xml
+          files: TestResults/**/coverage.cobertura*.xml
           fail_ci_if_error: false
 
       - name: Verify VSIX exists
