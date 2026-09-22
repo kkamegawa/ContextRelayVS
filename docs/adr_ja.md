@@ -1,5 +1,12 @@
 # アーキテクチャ決定記録
 
+## 2026-09-22 — Issue #200: UI 言語ブローカー サービスを Local に加え PublicSdk へも proffer する
+
+- コンテキスト: Issue #192 では `ContextRelay.VisualStudioLanguage (1.0)` を `Audience = ServiceAudience.Local` のみで proffer していた。実際には、同じ Visual Studio インスタンス上で Tools > Options > ContextRelay（インプロセスでシェルのロケールを直接読む経路）は正しくローカライズされる一方、`auto` の UI 言語は Visual Studio の表示言語に関わらず常に英語に解決されていた。2つの別々の devenv セッションの `GlobalBrokeredServiceContainer` の ServiceHub ログ（`%LOCALAPPDATA%\Temp\VSLogs\*.GlobalBrokeredServiceContainer.*.svclog`）に、要求が拒否された記録が残っていた: `Request for "ContextRelay.VisualStudioLanguage (1.0)" from Local, PublicSdk denied because the service is only exposed Local.` / `Remote request ... is declined: ServiceAudienceMismatch.` アウトオブプロセスの VisualStudio.Extensibility ツール ウィンドウは、ブローカー サービスを `Local` 単独ではなく `Local, PublicSdk` として要求するため、#192 で行った `Local` のみの proffer はそのクライアントから到達不能だった。`VisualStudioUiLanguageProvider` は `null` のプロキシを受け取るたびに一時的な障害として扱い英語へフォールバックしていたが、実際の原因（audience 不一致）は一時的なものではなく恒久的だった。
+- 決定: `[ProvideBrokeredService]` の audience を `ServiceAudience.Local | ServiceAudience.PublicSdk` に変更する。`VisualStudioLanguageService.ResolveLanguage`、プロバイダーのキャッシュ／クールダウン ロジック、ブローカーを使わない Options のローカライズには手を加えない。ビルド済み VSIX からパッケージ済み pkgdef の `BrokeredServices` エントリを読み取り、`Local`（0x3）と `PublicSdk`（0x10000000）の両ビットが立っていることを検証する `InProcPackageVsixPackagingTests.BuiltVsix_BrokeredServiceAudienceIncludesPublicSdk` を追加した。`Local` のみへ戻すミューテーションで、原因を名指しするメッセージとともにテストが失敗することを確認済み。
+- 理由: 今回の変更は、ホストの表示言語を共有ユーザー設定に保存せずセッション単位で解決するという #192 の決定と矛盾しない。既存の読み取り専用で LCID 1 値のみを返すサービスの呼び出し可能範囲を広げるだけであり、副作用もユーザー データの返却もないため、実質的な露出増加はない。
+- 影響: 今後は（この拡張機能自身のアウトオブプロセス ホストに限らず）どの Visual Studio プロセスからもこのサービスが返す LCID を照会できるようになる。回帰テストにより、将来 audience を `Local` のみへ黙って狭める変更が入るのを防ぐ。
+
 ## 2026-09-22 — chore/packageupdate: `dotnet test` で Microsoft.Testing.Platform ランナーを選択
 
 - コンテキスト: `xunit.v3` を 3.2.2 から 4.0.1 へ（`xunit.runner.visualstudio` も 4.0.0 へ）更新した結果、テスト プロジェクトの依存関係が `xunit.v3.mtp-v1` から `xunit.v3.mtp-v2` に切り替わり、`Microsoft.Testing.Platform` 2.4.0 が引き込まれた。このバージョンの `Microsoft.Testing.Platform.MSBuild` ターゲットは、.NET 10 SDK 以降で新しい `dotnet test` ネイティブ モードに opt-in していない場合、無条件でビルド エラー（"Testing with VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and later"）を発生させる。ローカル環境（.NET 11 SDK）と CI（`windows-latest`。リポジトリに `global.json` がなかったため .NET 10 以降の SDK が解決される）の両方で、`dotnet test` が 1 件もテストを実行せずに失敗していた。

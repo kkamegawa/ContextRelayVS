@@ -18,7 +18,10 @@ namespace ContextRelay.VSExtension.Package.Options;
 [InstalledProductRegistration("ContextRelay", "ContextRelay options integration.", "0.2.1")]
 [ProvideOptionPage(typeof(OptionsProvider.GeneralOptions), "ContextRelay", "General", 0, 0, true, new[] { "contextrelay", "settings", "options" }, IsInUnifiedSettings = false)]
 [ProvideProfile(typeof(OptionsProvider.GeneralOptions), "ContextRelay", "General", 0, 0, true)]
-[ProvideBrokeredService(VisualStudioLanguageService.ServiceName, VisualStudioLanguageService.ServiceVersion, Audience = ServiceAudience.Local)]
+// Audience must include PublicSdk: the out-of-process VisualStudio.Extensibility tool window
+// requests this service as "Local, PublicSdk", and the shell declines the request with
+// ServiceAudienceMismatch when the proffered audience is Local alone (Issue #200).
+[ProvideBrokeredService(VisualStudioLanguageService.ServiceName, VisualStudioLanguageService.ServiceVersion, Audience = ServiceAudience.Local | ServiceAudience.PublicSdk)]
 [Guid(ContextRelayPackageGuids.OptionsPackageString)]
 public sealed class ContextRelayOptionsPackage : ToolkitPackage
 {
