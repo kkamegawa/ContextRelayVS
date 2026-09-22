@@ -11,6 +11,9 @@ using Xunit;
 
 namespace ContextRelay.Core.Tests.ToolWindows;
 
+// Shares a non-parallel xUnit collection with UiLanguageRefreshTests: both mutate the loaded extension
+// assembly's static ContextRelayLocalizedStrings language/locale state and must never run concurrently.
+[Collection(ContextRelayLocalizedStringsStateCollection.Name)]
 public sealed class SlashCommandSuggestionInteractionTests
 {
     [Theory]

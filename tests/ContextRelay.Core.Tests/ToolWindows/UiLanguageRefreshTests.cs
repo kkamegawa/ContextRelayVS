@@ -8,10 +8,24 @@ using Xunit;
 namespace ContextRelay.Core.Tests.ToolWindows;
 
 /// <summary>
+/// Groups every test that mutates the loaded extension assembly's static
+/// <c>ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings</c> language/locale state, so xUnit
+/// never runs two of them in parallel. Each such test still saves and restores that state around its own
+/// body, but those save/restore blocks only protect against sequential leakage between tests, not against
+/// one test's assertions observing a language change made concurrently by another.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ContextRelayLocalizedStringsStateCollection
+{
+    public const string Name = "ContextRelayLocalizedStrings shared state";
+}
+
+/// <summary>
 /// Covers the cross-process language refresh path added for Issue #192: the coalescer that guarantees a
 /// shared-settings save is never lost or applied out of order, and the status-message relocalization that
 /// runs when a language change is applied to an already-open tool window.
 /// </summary>
+[Collection(ContextRelayLocalizedStringsStateCollection.Name)]
 public sealed class UiLanguageRefreshTests
 {
     [Fact]
@@ -79,6 +93,59 @@ public sealed class UiLanguageRefreshTests
         Assert.Equal(
             new[] { TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1) },
             requestedDelays.ToArray());
+    }
+
+    [Fact]
+    public async Task ReloadCoalescer_SecondTriggerArrivingDuringAFailingReload_IsNotDropped()
+    {
+        var callCount = 0;
+        var failures = new ConcurrentBag<Exception>();
+        var firstAttemptStarted = new ManualResetEventSlim(false);
+        var releaseFirstAttempt = new ManualResetEventSlim(false);
+        var type = LoadType("ContextRelay.VSExtension.Services.ReloadCoalescer");
+        Func<Task> reload = async () =>
+        {
+            var attempt = Interlocked.Increment(ref callCount);
+            if (attempt == 1)
+            {
+                // Block so a second trigger is guaranteed to arrive while this (failing) reload is active,
+                // instead of only ever being issued after it has already finished.
+                firstAttemptStarted.Set();
+                await Task.Run(() => releaseFirstAttempt.Wait(TimeSpan.FromSeconds(5)));
+                throw new InvalidOperationException("Simulated reload failure.");
+            }
+        };
+        Action<Exception> onFailed = ex => failures.Add(ex);
+        Func<TimeSpan, CancellationToken, Task> fakeDelay = (_, _) => Task.CompletedTask;
+
+        try
+        {
+            var instance = Activator.CreateInstance(type, reload, onFailed, fakeDelay)!;
+            var trigger = type.GetMethod("TriggerAsync", BindingFlags.Public | BindingFlags.Instance)!;
+
+            var first = (Task)trigger.Invoke(instance, new object?[] { CancellationToken.None })!;
+            Assert.True(firstAttemptStarted.Wait(TimeSpan.FromSeconds(5)), "First reload did not start in time.");
+
+            // Arrives while the first reload is still active and blocked: must take the "another call
+            // already owns the drain loop" path and return without waiting for the first reload to finish.
+            var second = (Task)trigger.Invoke(instance, new object?[] { CancellationToken.None })!;
+            await second;
+
+            releaseFirstAttempt.Set();
+            await first;
+
+            // A trigger arriving mid-reload must not be dropped by the reload it arrived during: the
+            // failure is reported, and a further attempt runs (via the failure's own retry, the second
+            // trigger's pending flag, or both — the coalescer only tracks one pending flag) rather than the
+            // window being left on the old language until an unrelated event happens to fire again.
+            Assert.Single(failures);
+            Assert.True(callCount >= 2, $"Expected at least 2 reload attempts, saw {callCount}.");
+        }
+        finally
+        {
+            firstAttemptStarted.Dispose();
+            releaseFirstAttempt.Dispose();
+        }
     }
 
     [Fact]

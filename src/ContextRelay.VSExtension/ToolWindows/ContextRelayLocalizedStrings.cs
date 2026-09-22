@@ -191,6 +191,8 @@ internal static class ContextRelayLocalizedStrings
         "AssistantContinuationNoNewContentStatus",
         "NoResultsFoundStatus",
         "GenericHelpText", // Also covers TypeQueryStatus, which forwards to this same resource.
+        "ToolWindowInitializationFailed_NoDetail", // The other branch of GetToolWindowInitializationFailedStatus
+                                                    // carries captured exception text and is excluded.
     };
 
     /// <summary>
