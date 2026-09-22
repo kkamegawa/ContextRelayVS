@@ -285,9 +285,17 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task ReloadSettingsLanguageAsync()
     {
-        var configured = ContextRelaySettingsStore.LoadSettings().UiLanguage;
+        if (!ContextRelaySettingsStore.TryLoadSettings(out var settings))
+        {
+            // A transient read failure (for example the file is caught mid-write by a concurrent save)
+            // must never be mistaken for "no change": LoadSettings() would silently substitute a default
+            // snapshot here, which can spuriously equal the current language and hide a real save. Throw
+            // so settingsReloadCoalescer re-arms this trigger and retries with backoff instead.
+            throw new IOException("Unable to read the shared settings file while applying a UI language change.");
+        }
+
         if (!string.Equals(
-                ContextRelaySettingsStore.NormalizeUiLanguage(configured),
+                ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage),
                 ContextRelayLocalizedStrings.CurrentUiLanguage,
                 StringComparison.Ordinal))
         {

@@ -149,14 +149,19 @@ public sealed class UiLanguageRefreshTests
     }
 
     [Fact]
-    public async Task ReloadCoalescer_CancelledDuringBackoff_LeavesTriggerPendingForALaterCall()
+    public async Task ReloadCoalescer_CancelledDuringBackoff_LaterCallWithLiveTokenStillRetriesSuccessfully()
     {
         var callCount = 0;
         var type = LoadType("ContextRelay.VSExtension.Services.ReloadCoalescer");
         Func<Task> reload = () =>
         {
-            Interlocked.Increment(ref callCount);
-            throw new InvalidOperationException("Simulated reload failure.");
+            var attempt = Interlocked.Increment(ref callCount);
+            if (attempt == 1)
+            {
+                throw new InvalidOperationException("Simulated reload failure.");
+            }
+
+            return Task.CompletedTask;
         };
         using var cancellation = new CancellationTokenSource();
         Func<TimeSpan, CancellationToken, Task> fakeDelay = (_, token) =>
@@ -168,10 +173,18 @@ public sealed class UiLanguageRefreshTests
         var instance = Activator.CreateInstance(type, reload, null, fakeDelay)!;
         var trigger = type.GetMethod("TriggerAsync", BindingFlags.Public | BindingFlags.Instance)!;
 
-        // Dispose-time cancellation must stop the backoff loop rather than retry forever in the background.
+        // Dispose-time cancellation must stop the backoff loop rather than retry forever in the background,
+        // without clearing the trigger the cancelled attempt was about to retry.
         var invoke = () => (Task)trigger.Invoke(instance, new object?[] { cancellation.Token })!;
         await Assert.ThrowsAsync<OperationCanceledException>(async () => await invoke());
         Assert.Equal(1, callCount);
+
+        // A later call with a live token must still observe the trigger left pending by the cancelled call
+        // and run the (now successful) reload, rather than the change being lost until an unrelated event
+        // happens to arrive. An implementation that cleared 'pending' before rethrowing would leave callCount
+        // at 1 here instead of advancing to 2.
+        await (Task)trigger.Invoke(instance, new object?[] { CancellationToken.None })!;
+        Assert.Equal(2, callCount);
     }
 
     [Theory]
