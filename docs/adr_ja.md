@@ -1,5 +1,26 @@
 # アーキテクチャ決定記録
 
+## 2026-09-22 — Issue #200: コールドスタート時の初回読み取りが完了できるようブローカーのタイムアウトを広げる
+
+- コンテキスト: 上記の audience 修正をエンドツーエンドで検証（ブローカー要求が `ServiceAudienceMismatch` で拒否されなくなったことを確認）し、下記の Directory プロパティ修正でツール ウィンドウがそもそも初期化できるようになった後も、修正版 VSIX を再インストールした直後の最初のツール ウィンドウ オープンでは依然として英語のままだった。同一セッションの `GlobalBrokeredServiceContainer` ログに `ContextRelay.VisualStudioLanguage` への要求が約 1.56 秒間隔で 2 回記録されており、これは `VisualStudioUiLanguageProvider` の 1500ms の `CancelAfter` 予算にオーバーヘッドを加えた値とほぼ一致する。ツール ウィンドウのタブを（VS を再起動せずに）閉じて開き直したところ、Options パッケージは既にロード・JIT 済みだったため即座に日本語で表示され、原因が解決されたロケールやブローカー修正ではなく、初回読み取り自体のタイムアウトであることが確認できた。`ContextRelayOptionsPackage` をオンデマンドで有効化する処理（アセンブリ ロード/JIT、`SwitchToMainThreadAsync`、MEF の `ToolkitPackage` コンポジション、ブローカー サービスの proffer）は、インストール・更新直後で JIT/NGen のウォーム キャッシュがない状態では 1500ms を正当に超える時間がかかり、最初の自動モード読み取りはパッケージの有効化が終わる前に諦めて英語へフォールバックしていた。
+- 決定: ブローカー呼び出しのタイムアウトを 1500ms から 5 秒に引き上げる（名前付き定数 `BrokerTimeout` として切り出し）。それ以外の挙動は変えない: タイムアウトは引き続き恒久的な失敗としてキャッシュされず（従来どおり 10 秒の `FailureRetryCooldown` のみが適用される）、タイムアウト自体は引き続き有限であるため、本当に応答しない・存在しないサービスがツール ウィンドウのオープンを無期限にブロックすることもない。
+- 理由: #200 の検証中にまさに報告された症状と、失敗した最初の要求との間の実測ギャップ（約 1.56 秒）は、(再)インストール直後のオンデマンドなパッケージ有効化によって 1500ms が日常的に失われるほど厳しいことを示している。ウォーム読み取りの遅延（再オープンの成功から見て 1 秒未満）に十分な余裕を持たせた値にすれば、短いタイムアウトが本来意図していた「ツール ウィンドウを無期限にブロックしない」という保証を弱めることなく、この誤検知を取り除ける。
+- 影響: 本当に壊れている・存在しないサービスの場合、VS セッション最初の自動モード読み取りで英語にフォールバックするまでに最大 5 秒（従来は 1.5 秒）かかるようになる。成功結果は拡張機能プロセスごとに恒久的にキャッシュされるという既存設計は変わらないため、それ以降の読み取りは引き続き即時である。
+
+## 2026-09-22 — Issue #200: ソリューション クエリで Directory プロパティを明示的に要求する
+
+- コンテキスト: 上記のブローカー サービス audience 修正を実際の Stable/Insiders/Canary インストールで検証中、ツール ウィンドウの初期化が `ContextRelay window initialization failed: データはプロパティ 'Directory' には使用できません。クエリを更新してデータを取得します。` で失敗し、その結果パネルが「Not signed in」のまま固まった。`StartDeferredSignedInUserResolution` は初期化が成功した後にしか到達しないためである。`ContextRelayVsServices.GetWorkspaceRootsAsync` は `QuerySolutionAsync(solution => solution, cancellationToken)` というプロパティを一切要求しない恒等射影でソリューションを取得していた。`Microsoft.VisualStudio.ProjectSystem.Query.ISolutionSnapshot.Directory` はオンデマンドでしか取得されず、`With()` で要求せずに読み取ると例外になる。これはブローカー サービス audience の変更とは無関係であり、今回のコールド スタートの実行順序でたまたま顕在化した既存の不具合である。
+- 決定: クエリを `solution.With(s => s.Directory)` に変更し、返されるスナップショットに `Directory` を含める。`AsyncQueryableExtensions.With<TEntity>(IAsyncQueryable<TEntity>, Expression<Func<TEntity, object>>)`（「クエリ結果に特定のプロパティを含める」）という SDK 標準の方法に従う。
+- 理由: `IAsyncQueryable` の射影からプロパティを要求する SDK 文書化済みの方法である。このメソッドは `ISolutionSnapshot` の他のプロパティを読まないため、これ以上プロパティを要求する必要はない。
+- 影響: `GetWorkspaceRootsAsync` はソリューションを照会しても例外を投げなくなり、以前のクエリが偶然 `Directory` を副作用として取得済みだったかどうかに関わらず、コールド スタート時にツール ウィンドウの初期化（延いてはサインイン状態の遅延解決）が進むようになる。
+
+## 2026-09-22 — Issue #200: UI 言語ブローカー サービスを Local に加え PublicSdk へも proffer する
+
+- コンテキスト: Issue #192 では `ContextRelay.VisualStudioLanguage (1.0)` を `Audience = ServiceAudience.Local` のみで proffer していた。実際には、同じ Visual Studio インスタンス上で Tools > Options > ContextRelay（インプロセスでシェルのロケールを直接読む経路）は正しくローカライズされる一方、`auto` の UI 言語は Visual Studio の表示言語に関わらず常に英語に解決されていた。2つの別々の devenv セッションの `GlobalBrokeredServiceContainer` の ServiceHub ログ（`%LOCALAPPDATA%\Temp\VSLogs\*.GlobalBrokeredServiceContainer.*.svclog`）に、要求が拒否された記録が残っていた: `Request for "ContextRelay.VisualStudioLanguage (1.0)" from Local, PublicSdk denied because the service is only exposed Local.` / `Remote request ... is declined: ServiceAudienceMismatch.` アウトオブプロセスの VisualStudio.Extensibility ツール ウィンドウは、ブローカー サービスを `Local` 単独ではなく `Local, PublicSdk` として要求するため、#192 で行った `Local` のみの proffer はそのクライアントから到達不能だった。`VisualStudioUiLanguageProvider` は `null` のプロキシを受け取るたびに一時的な障害として扱い英語へフォールバックしていたが、実際の原因（audience 不一致）は一時的なものではなく恒久的だった。
+- 決定: `[ProvideBrokeredService]` の audience を `ServiceAudience.Local | ServiceAudience.PublicSdk` に変更する。`VisualStudioLanguageService.ResolveLanguage`、プロバイダーのキャッシュ／クールダウン ロジック、ブローカーを使わない Options のローカライズには手を加えない。ビルド済み VSIX からパッケージ済み pkgdef の `BrokeredServices` エントリを読み取り、`Local`（0x3）と `PublicSdk`（0x10000000）の両ビットが立っていることを検証する `InProcPackageVsixPackagingTests.BuiltVsix_BrokeredServiceAudienceIncludesPublicSdk` を追加した。`Local` のみへ戻すミューテーションで、原因を名指しするメッセージとともにテストが失敗することを確認済み。
+- 理由: 今回の変更は、ホストの表示言語を共有ユーザー設定に保存せずセッション単位で解決するという #192 の決定と矛盾しない。既存の読み取り専用で LCID 1 値のみを返すサービスの呼び出し可能範囲を広げるだけであり、副作用もユーザー データの返却もないため、実質的な露出増加はない。
+- 影響: 今後は（この拡張機能自身のアウトオブプロセス ホストに限らず）どの Visual Studio プロセスからもこのサービスが返す LCID を照会できるようになる。回帰テストにより、将来 audience を `Local` のみへ黙って狭める変更が入るのを防ぐ。
+
 ## 2026-09-22 — chore/packageupdate: `dotnet test` で Microsoft.Testing.Platform ランナーを選択
 
 - コンテキスト: `xunit.v3` を 3.2.2 から 4.0.1 へ（`xunit.runner.visualstudio` も 4.0.0 へ）更新した結果、テスト プロジェクトの依存関係が `xunit.v3.mtp-v1` から `xunit.v3.mtp-v2` に切り替わり、`Microsoft.Testing.Platform` 2.4.0 が引き込まれた。このバージョンの `Microsoft.Testing.Platform.MSBuild` ターゲットは、.NET 10 SDK 以降で新しい `dotnet test` ネイティブ モードに opt-in していない場合、無条件でビルド エラー（"Testing with VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and later"）を発生させる。ローカル環境（.NET 11 SDK）と CI（`windows-latest`。リポジトリに `global.json` がなかったため .NET 10 以降の SDK が解決される）の両方で、`dotnet test` が 1 件もテストを実行せずに失敗していた。

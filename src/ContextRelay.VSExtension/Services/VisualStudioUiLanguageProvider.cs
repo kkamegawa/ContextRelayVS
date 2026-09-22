@@ -15,6 +15,13 @@ internal sealed class VisualStudioUiLanguageProvider
     // still allowing eventual recovery once the underlying problem clears.
     private static readonly TimeSpan FailureRetryCooldown = TimeSpan.FromSeconds(10);
 
+    // The first automatic-mode read of a VS session races the in-process Options package's on-demand
+    // activation (assembly load/JIT plus MEF composition), which is slow immediately after an install or
+    // update with no warm JIT/NGen cache. A short budget here made that very first read time out and fall
+    // back to English even though the same lookup succeeded well within a second once the package was
+    // warm on a later read (Issue #200 verification on a freshly reinstalled VSIX).
+    private static readonly TimeSpan BrokerTimeout = TimeSpan.FromSeconds(5);
+
     private readonly IServiceBroker serviceBroker;
     private readonly ContextRelayOutputLogger logger;
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -51,7 +58,7 @@ internal sealed class VisualStudioUiLanguageProvider
             // elapses instead of caching the failure for the extension's whole lifetime.
             // A missing/unresponsive package must not block opening the tool window.
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromMilliseconds(1500));
+            timeout.CancelAfter(BrokerTimeout);
             IVisualStudioLanguageService? proxy = null;
             try
             {
