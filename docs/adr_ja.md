@@ -1,5 +1,12 @@
 # アーキテクチャ決定記録
 
+## 2026-09-22 — Issue #200: ソリューション クエリで Directory プロパティを明示的に要求する
+
+- コンテキスト: 上記のブローカー サービス audience 修正を実際の Stable/Insiders/Canary インストールで検証中、ツール ウィンドウの初期化が `ContextRelay window initialization failed: データはプロパティ 'Directory' には使用できません。クエリを更新してデータを取得します。` で失敗し、その結果パネルが「Not signed in」のまま固まった。`StartDeferredSignedInUserResolution` は初期化が成功した後にしか到達しないためである。`ContextRelayVsServices.GetWorkspaceRootsAsync` は `QuerySolutionAsync(solution => solution, cancellationToken)` というプロパティを一切要求しない恒等射影でソリューションを取得していた。`Microsoft.VisualStudio.ProjectSystem.Query.ISolutionSnapshot.Directory` はオンデマンドでしか取得されず、`With()` で要求せずに読み取ると例外になる。これはブローカー サービス audience の変更とは無関係であり、今回のコールド スタートの実行順序でたまたま顕在化した既存の不具合である。
+- 決定: クエリを `solution.With(s => s.Directory)` に変更し、返されるスナップショットに `Directory` を含める。`AsyncQueryableExtensions.With<TEntity>(IAsyncQueryable<TEntity>, Expression<Func<TEntity, object>>)`（「クエリ結果に特定のプロパティを含める」）という SDK 標準の方法に従う。
+- 理由: `IAsyncQueryable` の射影からプロパティを要求する SDK 文書化済みの方法である。このメソッドは `ISolutionSnapshot` の他のプロパティを読まないため、これ以上プロパティを要求する必要はない。
+- 影響: `GetWorkspaceRootsAsync` はソリューションを照会しても例外を投げなくなり、以前のクエリが偶然 `Directory` を副作用として取得済みだったかどうかに関わらず、コールド スタート時にツール ウィンドウの初期化（延いてはサインイン状態の遅延解決）が進むようになる。
+
 ## 2026-09-22 — Issue #200: UI 言語ブローカー サービスを Local に加え PublicSdk へも proffer する
 
 - コンテキスト: Issue #192 では `ContextRelay.VisualStudioLanguage (1.0)` を `Audience = ServiceAudience.Local` のみで proffer していた。実際には、同じ Visual Studio インスタンス上で Tools > Options > ContextRelay（インプロセスでシェルのロケールを直接読む経路）は正しくローカライズされる一方、`auto` の UI 言語は Visual Studio の表示言語に関わらず常に英語に解決されていた。2つの別々の devenv セッションの `GlobalBrokeredServiceContainer` の ServiceHub ログ（`%LOCALAPPDATA%\Temp\VSLogs\*.GlobalBrokeredServiceContainer.*.svclog`）に、要求が拒否された記録が残っていた: `Request for "ContextRelay.VisualStudioLanguage (1.0)" from Local, PublicSdk denied because the service is only exposed Local.` / `Remote request ... is declined: ServiceAudienceMismatch.` アウトオブプロセスの VisualStudio.Extensibility ツール ウィンドウは、ブローカー サービスを `Local` 単独ではなく `Local, PublicSdk` として要求するため、#192 で行った `Local` のみの proffer はそのクライアントから到達不能だった。`VisualStudioUiLanguageProvider` は `null` のプロキシを受け取るたびに一時的な障害として扱い英語へフォールバックしていたが、実際の原因（audience 不一致）は一時的なものではなく恒久的だった。

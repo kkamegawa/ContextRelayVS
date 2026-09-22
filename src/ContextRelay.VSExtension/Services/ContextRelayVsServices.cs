@@ -51,8 +51,11 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     public async Task<IReadOnlyList<string>> GetWorkspaceRootsAsync(CancellationToken cancellationToken = default)
     {
         var roots = new List<string>();
+        // Directory is not populated by default; the query API throws when an unrequested property is
+        // read from the snapshot ("Data is not available for property 'Directory'. Refresh the query to
+        // retrieve data."), so it must be explicitly included with With().
         var solutions = await extensibility.Workspaces()
-            .QuerySolutionAsync(solution => solution, cancellationToken)
+            .QuerySolutionAsync(solution => solution.With(s => s.Directory), cancellationToken)
             .ConfigureAwait(false);
         foreach (var solution in solutions)
         {
