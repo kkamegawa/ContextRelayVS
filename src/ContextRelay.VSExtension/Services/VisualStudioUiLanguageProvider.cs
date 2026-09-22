@@ -45,10 +45,10 @@ internal sealed class VisualStudioUiLanguageProvider
                 return null;
             }
 
-            // VS applies display-language changes on restart, so cache a successful lookup (including the
-            // service's own "unavailable" sentinel) per extension instance. A timeout or thrown exception is
-            // treated as transient and is not cached that way, so a later call can retry once the cooldown
-            // above elapses instead of caching the failure for the extension's whole lifetime.
+            // VS applies display-language changes on restart, so cache a successful lookup permanently per
+            // extension instance. A missing proxy, a timeout, or a thrown exception are all treated as
+            // transient and are not cached that way, so a later call can retry once the cooldown above
+            // elapses instead of caching the failure for the extension's whole lifetime.
             // A missing/unresponsive package must not block opening the tool window.
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMilliseconds(1500));
@@ -59,14 +59,21 @@ internal sealed class VisualStudioUiLanguageProvider
                     VisualStudioLanguageService.Descriptor, cancellationToken: timeout.Token).ConfigureAwait(false);
                 if (proxy is not null)
                 {
+                    // A successful response is cached permanently, including the service's own "unavailable"
+                    // sentinel (-1, meaning the Options package captured no locale) — that is a stable answer
+                    // from the package, not a transient failure.
                     locale = await proxy.GetUiLocaleAsync(timeout.Token).ConfigureAwait(false);
+                    initialized = true;
                 }
                 else
                 {
-                    logger.LogWarning("Visual Studio UI language service is unavailable; automatic UI language falls back to English.");
+                    // A null proxy can mean the service is genuinely not registered, but it can equally mean
+                    // the Options package has not finished activating and profferring it yet (a startup race,
+                    // not a permanent condition). Treat it like any other transient failure so a later
+                    // settings read can still recover, instead of caching English for the rest of the session.
+                    logger.LogWarning("Visual Studio UI language service is unavailable; automatic UI language falls back to English for now and will retry.");
+                    nextRetryUtc = DateTime.UtcNow + FailureRetryCooldown;
                 }
-
-                initialized = true;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

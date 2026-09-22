@@ -53,8 +53,17 @@ public static class ContextRelaySettingsStore
         try
         {
             using var stream = File.OpenRead(SettingsFilePath);
-            settings = JsonSerializer.Deserialize<ContextRelaySettingsSnapshot>(stream, JsonOptions)
-                   ?? new ContextRelaySettingsSnapshot();
+            var deserialized = JsonSerializer.Deserialize<ContextRelaySettingsSnapshot>(stream, JsonOptions);
+            if (deserialized is null)
+            {
+                // The file exists but its content is JSON null (or otherwise deserializes to null) rather
+                // than an object — not a legitimate "no settings yet" case, since that is File.Exists being
+                // false above. Report failure instead of silently substituting a default snapshot.
+                settings = new ContextRelaySettingsSnapshot();
+                return false;
+            }
+
+            settings = deserialized;
             return true;
         }
         catch
