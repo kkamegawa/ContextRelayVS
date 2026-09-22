@@ -76,6 +76,9 @@ internal sealed class ContextRelayHost : IDisposable
     private TtlLruCache<string, ContextItem[]> searchCache = new();
     private ContextRelayHostState state = new();
     private string? lastSearchSummary;
+    // Kept alongside currentSearchResults so lastSearchSummary can be rebuilt in a new UI language; it is
+    // otherwise redundant with the summary text itself.
+    private SlashCommandParseResult? lastSearchRoute;
     private string? copilotConversationId;
     private string? copilotConversationAssistantItemId;
     private string? workIqContextId;
@@ -208,6 +211,14 @@ internal sealed class ContextRelayHost : IDisposable
         // status resources; a message built from a captured argument (a count, a path, an exception detail)
         // is left as-is rather than risk showing a wrong or malformed value.
         ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
+
+        if (lastSearchRoute is not null)
+        {
+            // lastSearchSummary was formatted in whatever language was active when the search ran, and is
+            // reused as-is for the visible summary and for later chat/handoff context; rebuild it so both
+            // follow a UI language change instead of keeping old-language headers and source labels.
+            lastSearchSummary = BuildSearchSummary(lastSearchRoute, currentSearchResults);
+        }
 
         await RefreshStateAsync(statusMessage).ConfigureAwait(false);
         return state;
@@ -358,6 +369,7 @@ internal sealed class ContextRelayHost : IDisposable
                 await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
                 await snippetRepository.ClearAsync(cancellationToken).ConfigureAwait(false);
                 currentSearchResults = Array.Empty<ContextItem>();
+                lastSearchRoute = null;
                 lastSearchSummary = null;
                 copilotConversationId = null;
                 copilotConversationAssistantItemId = null;
@@ -516,6 +528,7 @@ internal sealed class ContextRelayHost : IDisposable
                 .ToArray();
 
             currentSearchResults = results;
+            lastSearchRoute = route;
             lastSearchSummary = BuildSearchSummary(route, results);
             await AppendSearchHistoryAsync(trimmed, results, cancellationToken).ConfigureAwait(false);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
@@ -671,6 +684,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
             currentSearchResults = Array.Empty<ContextItem>();
+            lastSearchRoute = null;
             lastSearchSummary = null;
             copilotConversationId = null;
             copilotConversationAssistantItemId = null;
