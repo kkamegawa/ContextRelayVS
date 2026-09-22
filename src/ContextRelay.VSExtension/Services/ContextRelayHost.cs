@@ -228,25 +228,35 @@ internal sealed class ContextRelayHost : IDisposable
             return;
         }
 
-        var directory = Path.GetDirectoryName(ContextRelaySettingsStore.SettingsFilePath);
-        if (string.IsNullOrEmpty(directory))
+        FileSystemWatcher? created = null;
+        try
         {
-            return;
+            var directory = Path.GetDirectoryName(ContextRelaySettingsStore.SettingsFilePath);
+            if (string.IsNullOrEmpty(directory))
+            {
+                return;
+            }
+
+            // A fresh profile has no settings directory yet; create it so the first save raises Created.
+            Directory.CreateDirectory(directory);
+
+            created = new FileSystemWatcher(directory, Path.GetFileName(ContextRelaySettingsStore.SettingsFilePath))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+            FileSystemEventHandler handler = (_, _) => _ = OnSettingsFileChangedAsync();
+            created.Changed += handler;
+            created.Created += handler;
+            created.Renamed += (_, _) => _ = OnSettingsFileChangedAsync();
+            created.EnableRaisingEvents = true;
+            settingsWatcher = created;
         }
-
-        // A fresh profile has no settings directory yet; create it so the first save raises Created.
-        Directory.CreateDirectory(directory);
-
-        var created = new FileSystemWatcher(directory, Path.GetFileName(ContextRelaySettingsStore.SettingsFilePath))
+        catch (Exception ex)
         {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-        };
-        FileSystemEventHandler handler = (_, _) => _ = OnSettingsFileChangedAsync();
-        created.Changed += handler;
-        created.Created += handler;
-        created.Renamed += (_, _) => _ = OnSettingsFileChangedAsync();
-        created.EnableRaisingEvents = true;
-        settingsWatcher = created;
+            // Live Options refresh is auxiliary; the panel must keep working without it.
+            created?.Dispose();
+            logger.LogError("Unable to watch the shared settings file; Options language changes apply when the tool window is reopened.", ex);
+        }
     }
 
     private async Task OnSettingsFileChangedAsync()
