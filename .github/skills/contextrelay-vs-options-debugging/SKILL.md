@@ -310,8 +310,8 @@ If panel initialization depends on those transient tokens, cancellation can occu
 - Visual Studio Tools menu shows literal resource tokens such as:
   - `%ContextRelay.Menu.DisplayName%`
   - `%ContextRelay.Command.<Name>.DisplayName%`
-- The affected extension's `.vsextension/extension.json` contains those `%...%` strings in `controlContainers[].displayName`, `tooltipText`, or `commandSets[].commands[]`.
-- `.vsextension/string-resources.json` may still be present in the VSIX, so the package looks correct at first glance.
+- The generated `.vsextension/extension.json` contains those `%...%` strings in `controlContainers[].displayName`, `tooltipText`, and `commandSets[].commands[]`. **That is intended.** The tokens belong in the manifest, and the symptom is only that Visual Studio failed to resolve them at runtime.
+- `.vsextension/string-resources.json` and `.vsextension/ja/string-resources.json` are present in the VSIX, so the package looks correct at first glance.
 
 ### Why this happens
 
@@ -320,18 +320,18 @@ If panel initialization depends on those transient tokens, cancellation can occu
 ### Remediation
 
 - Keep source `CommandConfiguration` and `MenuConfiguration` strings in `%string-resource-key%` form so the SDK analyzer remains satisfied.
-- Patch the generated `.vsextension/extension.json` after the SDK emits it, replacing only known extension-owned display tokens with stable display text.
-- Patch both:
-  - the bin output `.vsextension/extension.json`, for local build/test reflection checks
-  - the produced VSIX `.vsextension/extension.json`, for installer/runtime metadata
-- Add tests and build assertions that fail if produced extension metadata still contains `%ContextRelay.` tokens.
+- The generated `.vsextension/extension.json` intentionally keeps every `%ContextRelay.*%` token. Visual Studio resolves them from `.vsextension/string-resources.json` (default English) and `.vsextension/ja/string-resources.json`, choosing by the Visual Studio UI language (the installed language pack), not the operating system language.
+- Do not bake English text into `extension.json`. That was the earlier workaround; it showed readable names on every channel but made the menu impossible to localize.
+- The `ValidateContextRelayMenuMetadata` build task fails the build when a token in the bin output or the VSIX is not defined in both resource files, or when either resource file is missing from the VSIX. The tests in `ExtensionHostConfigurationTests` and `InProcPackageVsixPackagingTests` assert the same contract.
+- If a specific Visual Studio channel still shows raw tokens, record its version and channel before changing the approach. Restoring a per-token English fallback trades localization for reliability, so it needs an explicit decision.
 
 ### Verification
 
-1. Build the extension.
-2. Inspect bin output `.vsextension/extension.json` for unresolved extension-owned tokens.
-3. Inspect VSIX `.vsextension/extension.json` for unresolved extension-owned tokens.
+1. Build the extension. `ValidateContextRelayMenuMetadata` fails the build if the token set and the resource keys differ.
+2. Confirm the bin output `.vsextension/extension.json` still contains every `%ContextRelay.*%` token, and that its token set equals the keys of `string-resources.json` and `ja/string-resources.json`. A token that is missing from the manifest means a display name was baked into text, which defeats localization.
+3. Confirm the same for the VSIX: the packaged `.vsextension/extension.json` tokens, `.vsextension/string-resources.json` keys, and `.vsextension/ja/string-resources.json` keys are one identical set. Visual Studio reads the packaged copies, not the source files.
 4. Reinstall the VSIX into a clean Visual Studio instance or clear the target instance's extension metadata cache before checking Tools menu UI.
+5. Check the menu under the Visual Studio UI language you care about (**Tools > Options > Environment > International Settings**). Names must be readable and follow that language, with English as the fallback. Raw `%...%` text means that channel did not resolve the metadata; record the Visual Studio version and channel.
 
 ---
 

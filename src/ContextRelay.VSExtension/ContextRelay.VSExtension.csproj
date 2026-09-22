@@ -105,124 +105,322 @@
   </ItemGroup>
 
   <!--
-    VisualStudio.Extensibility resolves command metadata through the localized
-    .vsextension/string-resources.json files. Legacy menu metadata is still
-    patched to stable display text, while the Attach File command intentionally
-    remains a resource token so Visual Studio can select the UI language.
+    VisualStudio.Extensibility resolves command and menu display names from the
+    .vsextension/string-resources.json files, choosing the file that matches the
+    Visual Studio UI language (the installed language pack) and falling back to the
+    default English file. The generated extension.json therefore keeps every
+    %ContextRelay.*% token instead of baking in English text. This task only
+    validates the metadata. The set of tokens in extension.json, the keys of the
+    English file, and the keys of the Japanese file must all be identical, and the
+    same must hold for the copies that ship inside the VSIX, because Visual Studio
+    reads the packaged files. That leaves no language a raw token to fall through to
+    and no resource that nothing references.
   -->
-  <UsingTask TaskName="PatchContextRelayMenuMetadata" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+  <UsingTask TaskName="ValidateContextRelayMenuMetadata" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <ExtensionJsonPath ParameterType="System.String" Required="false" />
       <VsixPath ParameterType="System.String" Required="false" />
+      <ResourcesDirectory ParameterType="System.String" Required="true" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
       <Using Namespace="System.IO" />
       <Using Namespace="System.IO.Compression" />
       <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
       <Using Namespace="Microsoft.Build.Framework" />
       <Code>
         <![CDATA[
         try
         {
-            bool patched = false;
+            // Source files: the two languages must define exactly the same keys.
+            HashSet<string> english = ReadResourceKeys(File.ReadAllText(Path.Combine(ResourcesDirectory, "string-resources.json"), Encoding.UTF8), "string-resources.json");
+            HashSet<string> japanese = ReadResourceKeys(File.ReadAllText(Path.Combine(ResourcesDirectory, "ja", "string-resources.json"), Encoding.UTF8), "ja/string-resources.json");
+            RequireSameKeys(english, "string-resources.json", japanese, "ja/string-resources.json");
+
             if (!string.IsNullOrWhiteSpace(ExtensionJsonPath) && File.Exists(ExtensionJsonPath))
             {
-                string text = File.ReadAllText(ExtensionJsonPath, Encoding.UTF8);
-                string replaced = ReplaceContextRelayDisplayTokens(text);
-                if (!string.Equals(text, replaced, StringComparison.Ordinal))
-                {
-                    File.WriteAllText(ExtensionJsonPath, replaced, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                    patched = true;
-                }
-
-                string unresolved = replaced.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
-                if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
-                {
-                    Log.LogError("Generated extension.json still contains unresolved ContextRelay display token: {0}", ExtensionJsonPath);
-                }
+                // Build output: validate the deployed resource copies, because those are what the built
+                // manifest sits beside and what Visual Studio reads from the build output.
+                string outputResourcesDirectory = Path.GetDirectoryName(ExtensionJsonPath);
+                HashSet<string> outputEnglish = ReadResourceKeys(File.ReadAllText(Path.Combine(outputResourcesDirectory, "string-resources.json"), Encoding.UTF8), "output string-resources.json");
+                HashSet<string> outputJapanese = ReadResourceKeys(File.ReadAllText(Path.Combine(outputResourcesDirectory, "ja", "string-resources.json"), Encoding.UTF8), "output ja/string-resources.json");
+                RequireSameKeys(outputEnglish, "output string-resources.json", outputJapanese, "output ja/string-resources.json");
+                RequireSameKeys(FindTokens(File.ReadAllText(ExtensionJsonPath, Encoding.UTF8)), "output extension.json tokens", outputEnglish, "output string-resources.json");
             }
 
             if (!string.IsNullOrWhiteSpace(VsixPath) && File.Exists(VsixPath))
             {
-                using (ZipArchive zip = ZipFile.Open(VsixPath, ZipArchiveMode.Update))
+                using (ZipArchive zip = ZipFile.Open(VsixPath, ZipArchiveMode.Read))
                 {
-                    ZipArchiveEntry entry = zip.GetEntry(".vsextension/extension.json");
-                    if (entry == null)
+                    // Visual Studio reads the packaged copies, not the source files, so validate those.
+                    string manifestText = ReadEntry(zip, ".vsextension/extension.json");
+                    string englishText = ReadEntry(zip, ".vsextension/string-resources.json");
+                    string japaneseText = ReadEntry(zip, ".vsextension/ja/string-resources.json");
+                    if (manifestText == null || englishText == null || japaneseText == null)
                     {
-                        Log.LogError("VSIX is missing .vsextension/extension.json: {0}", VsixPath);
                         return false;
                     }
 
-                    string text;
-                    using (var stream = entry.Open())
-                    using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
-                    {
-                        text = reader.ReadToEnd();
-                    }
-
-                    string replaced = ReplaceContextRelayDisplayTokens(text);
-                    if (!string.Equals(text, replaced, StringComparison.Ordinal))
-                    {
-                        entry.Delete();
-                        ZipArchiveEntry replacementEntry = zip.CreateEntry(".vsextension/extension.json", CompressionLevel.Optimal);
-                        using (var stream = replacementEntry.Open())
-                        using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
-                        {
-                            writer.Write(replaced);
-                        }
-
-                        patched = true;
-                    }
-
-                    string unresolved = replaced.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
-                    if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
-                    {
-                        Log.LogError("VSIX .vsextension/extension.json still contains unresolved ContextRelay display token: {0}", VsixPath);
-                    }
+                    HashSet<string> packagedEnglish = ReadResourceKeys(englishText, "packaged .vsextension/string-resources.json");
+                    HashSet<string> packagedJapanese = ReadResourceKeys(japaneseText, "packaged .vsextension/ja/string-resources.json");
+                    RequireSameKeys(packagedEnglish, "packaged string-resources.json", packagedJapanese, "packaged ja/string-resources.json");
+                    RequireSameKeys(FindTokens(manifestText), "packaged extension.json tokens", packagedEnglish, "packaged string-resources.json");
                 }
-            }
-
-            if (patched)
-            {
-                Log.LogMessage(MessageImportance.High, "Patched ContextRelay menu metadata display names.");
             }
         }
         catch (Exception ex)
         {
-            Log.LogError("PatchContextRelayMenuMetadata failed: {0}", ex.ToString());
+            Log.LogError("ValidateContextRelayMenuMetadata failed: {0}", ex.ToString());
             return false;
         }
 
         return !Log.HasLoggedErrors;
 
-        static string ReplaceContextRelayDisplayTokens(string text)
+        string ReadEntry(ZipArchive zip, string name)
         {
-            return text
-                .Replace("%ContextRelay.Menu.DisplayName%", "ContextRelay")
-                .Replace("%ContextRelay.Menu.Language.DisplayName%", "Language")
-                .Replace("%ContextRelay.Command.ClearCache.DisplayName%", "Clear Cache")
-                .Replace("%ContextRelay.Command.ClearChat.DisplayName%", "Clear Chat")
-                .Replace("%ContextRelay.Command.ClearSnippets.DisplayName%", "Clear Snippets")
-                .Replace("%ContextRelay.Command.CopyHandoffPrompt.DisplayName%", "Copy Handoff Prompt")
-                .Replace("%ContextRelay.Command.GenerateHandoff.DisplayName%", "Generate Handoff")
-                .Replace("%ContextRelay.Command.OpenCopilotChat.DisplayName%", "Open Copilot Chat")
-                .Replace("%ContextRelay.Command.OpenHandoffDoc.DisplayName%", "Open Handoff Doc")
-                .Replace("%ContextRelay.Command.OpenWindow.DisplayName%", "ContextRelay")
-                .Replace("%ContextRelay.Command.Search.DisplayName%", "Open ContextRelay")
-                .Replace("%ContextRelay.Command.SetLanguageEnglish.DisplayName%", "English")
-                .Replace("%ContextRelay.Command.SetLanguageJapanese.DisplayName%", "Japanese")
-                .Replace("%ContextRelay.Command.ShowDebugLog.DisplayName%", "Debug Log");
+            ZipArchiveEntry entry = zip.GetEntry(name);
+            if (entry == null)
+            {
+                Log.LogError("VSIX is missing {0}: {1}", name, VsixPath);
+                return null;
+            }
+
+            using (var stream = entry.Open())
+            using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+            {
+                return reader.ReadToEnd();
+            }
+        }
+
+        HashSet<string> ReadResourceKeys(string json, string label)
+        {
+            // Parses the file as real JSON instead of scanning for key-looking lines, so a structurally
+            // malformed file (for example a missing comma between two properties) is rejected here
+            // instead of letting the build succeed with a resource file Visual Studio cannot load. The
+            // parser is self-contained (no assembly reference resolvable from this inline task) and is
+            // intentionally narrow: it accepts only the shape these files are defined to have, a single
+            // flat JSON object of string values, and treats anything else (nesting, a non-string value, a
+            // duplicate key, trailing content) as a failure.
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            try
+            {
+                ParseFlatStringObjectKeys(json, keys);
+            }
+            catch (FormatException ex)
+            {
+                Log.LogError("{0} is not a valid flat JSON object of string values: {1}", label, ex.Message);
+                return keys;
+            }
+
+            if (keys.Count == 0)
+            {
+                Log.LogError("{0} defines no resource keys; it is empty or malformed.", label);
+            }
+
+            return keys;
+        }
+
+        void ParseFlatStringObjectKeys(string json, HashSet<string> keys)
+        {
+            int pos = 0;
+
+            SkipWhitespace();
+            Expect('{');
+            SkipWhitespace();
+            if (TryConsume('}'))
+            {
+                SkipWhitespace();
+                RequireEndOfInput();
+                return;
+            }
+
+            while (true)
+            {
+                SkipWhitespace();
+                string key = ParseString();
+                if (!keys.Add(key))
+                {
+                    throw new FormatException(string.Format("duplicate key '{0}' at position {1}", key, pos));
+                }
+
+                SkipWhitespace();
+                Expect(':');
+                SkipWhitespace();
+                if (Peek() != '"')
+                {
+                    throw new FormatException(string.Format("value for key '{0}' at position {1} must be a JSON string", key, pos));
+                }
+
+                ParseString();
+                SkipWhitespace();
+
+                if (TryConsume(','))
+                {
+                    continue;
+                }
+
+                Expect('}');
+                break;
+            }
+
+            SkipWhitespace();
+            RequireEndOfInput();
+
+            char Peek()
+            {
+                if (pos >= json.Length)
+                {
+                    throw new FormatException("unexpected end of input");
+                }
+
+                return json[pos];
+            }
+
+            bool TryConsume(char c)
+            {
+                if (pos < json.Length && json[pos] == c)
+                {
+                    pos++;
+                    return true;
+                }
+
+                return false;
+            }
+
+            void Expect(char c)
+            {
+                if (Peek() != c)
+                {
+                    throw new FormatException(string.Format("expected '{0}' at position {1}", c, pos));
+                }
+
+                pos++;
+            }
+
+            void SkipWhitespace()
+            {
+                // JSON (RFC 8259) permits only these four characters between tokens. char.IsWhiteSpace
+                // also accepts other Unicode separators (e.g. NBSP, U+2028), which would let this
+                // validator accept a file the runtime JSON parser rejects.
+                while (pos < json.Length && IsJsonWhitespace(json[pos]))
+                {
+                    pos++;
+                }
+            }
+
+            bool IsJsonWhitespace(char c) => c == ' ' || c == '\t' || c == '\n' || c == '\r';
+
+            void RequireEndOfInput()
+            {
+                if (pos != json.Length)
+                {
+                    throw new FormatException(string.Format("unexpected content at position {0} after the closing '}}'", pos));
+                }
+            }
+
+            string ParseString()
+            {
+                Expect('"');
+                var builder = new StringBuilder();
+                while (true)
+                {
+                    if (pos >= json.Length)
+                    {
+                        throw new FormatException("unterminated string");
+                    }
+
+                    char c = json[pos++];
+                    if (c == '"')
+                    {
+                        break;
+                    }
+
+                    if (c == '\\')
+                    {
+                        if (pos >= json.Length)
+                        {
+                            throw new FormatException("unterminated escape sequence");
+                        }
+
+                        char escape = json[pos++];
+                        switch (escape)
+                        {
+                            case '"': builder.Append('"'); break;
+                            case '\\': builder.Append('\\'); break;
+                            case '/': builder.Append('/'); break;
+                            case 'b': builder.Append('\b'); break;
+                            case 'f': builder.Append('\f'); break;
+                            case 'n': builder.Append('\n'); break;
+                            case 'r': builder.Append('\r'); break;
+                            case 't': builder.Append('\t'); break;
+                            case 'u':
+                                if (pos + 4 > json.Length)
+                                {
+                                    throw new FormatException("truncated unicode escape");
+                                }
+
+                                builder.Append((char)Convert.ToInt32(json.Substring(pos, 4), 16));
+                                pos += 4;
+                                break;
+                            default:
+                                throw new FormatException(string.Format("invalid escape '\\{0}'", escape));
+                        }
+                    }
+                    else if (char.IsControl(c))
+                    {
+                        throw new FormatException("unescaped control character in string");
+                    }
+                    else
+                    {
+                        builder.Append(c);
+                    }
+                }
+
+                return builder.ToString();
+            }
+        }
+
+        HashSet<string> FindTokens(string manifestText)
+        {
+            var tokens = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Match match in Regex.Matches(manifestText, "%(ContextRelay\\.[A-Za-z0-9_.]+)%"))
+            {
+                tokens.Add(match.Groups[1].Value);
+            }
+
+            return tokens;
+        }
+
+        void RequireSameKeys(HashSet<string> left, string leftName, HashSet<string> right, string rightName)
+        {
+            foreach (string key in left)
+            {
+                if (!right.Contains(key))
+                {
+                    Log.LogError("'{0}' is in {1} but missing from {2}.", key, leftName, rightName);
+                }
+            }
+
+            foreach (string key in right)
+            {
+                if (!left.Contains(key))
+                {
+                    Log.LogError("'{0}' is in {1} but missing from {2}.", key, rightName, leftName);
+                }
+            }
         }
         ]]>
       </Code>
     </Task>
   </UsingTask>
 
-  <Target Name="PatchContextRelayMenuMetadataInOutput"
+  <Target Name="ValidateContextRelayMenuMetadataInOutput"
           AfterTargets="Build"
           Condition="Exists('$(TargetDir).vsextension\extension.json')">
-    <PatchContextRelayMenuMetadata ExtensionJsonPath="$(TargetDir).vsextension\extension.json" />
+    <ValidateContextRelayMenuMetadata ExtensionJsonPath="$(TargetDir).vsextension\extension.json"
+                                      ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
   </Target>
 
   <!--
@@ -263,10 +461,11 @@
     <Message Importance="High" Text="Patched VSIX $(TargetVsixContainer) with in-proc package payload and hybrid manifest." />
   </Target>
 
-  <Target Name="PatchContextRelayMenuMetadataInVsix"
+  <Target Name="ValidateContextRelayMenuMetadataInVsix"
           AfterTargets="PatchVsixContainerAfterCreation"
           Condition="Exists('$(TargetVsixContainer)')">
-    <PatchContextRelayMenuMetadata VsixPath="$(TargetVsixContainer)" />
+    <ValidateContextRelayMenuMetadata VsixPath="$(TargetVsixContainer)"
+                                      ResourcesDirectory="$(MSBuildProjectDirectory)\.vsextension" />
   </Target>
 
   <!--
@@ -354,19 +553,6 @@
                 {
                     Log.LogError("Produced VSIX is missing .vsextension/extension.json");
                     return false;
-                }
-
-                string extensionJsonText;
-                using (var stream = extensionJsonEntry.Open())
-                using (var reader = new StreamReader(stream))
-                {
-                    extensionJsonText = reader.ReadToEnd();
-                }
-
-                string unresolved = extensionJsonText.Replace("%ContextRelay.Command.AttachFileToChat.DisplayName%", string.Empty);
-                if (unresolved.IndexOf("%ContextRelay.", StringComparison.Ordinal) >= 0)
-                {
-                    Log.LogError(".vsextension/extension.json in produced VSIX contains unresolved ContextRelay display token.");
                 }
 
                 ZipArchiveEntry setupManifestEntry = zip.Entries.FirstOrDefault(en => string.Equals(en.FullName, "manifest.json", StringComparison.OrdinalIgnoreCase));
@@ -502,7 +688,7 @@
   </UsingTask>
 
   <Target Name="AssertVsixContentsAfterPatch"
-          AfterTargets="PatchContextRelayMenuMetadataInVsix"
+          AfterTargets="ValidateContextRelayMenuMetadataInVsix"
           Condition="Exists('$(TargetVsixContainer)')">
     <AssertVsixContents
       VsixPath="$(TargetVsixContainer)"

@@ -19,9 +19,10 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 ## Commands and menus
 
 1. Open **Tools** and confirm every ContextRelay command is present.
-2. Run **ContextRelay** and **Search Microsoft 365** and confirm the tool window opens.
-3. Run **Clear Chat**, **Clear Cache**, **Clear Snippets**, **Generate Handoff Docs**, **Open Handoff Doc**, **Copy Handoff Prompt**, and **Show Debug Log**.
-4. Confirm the commands do not throw and update UI state as expected.
+2. Confirm the **Tools > ContextRelay** menu and every command in it show readable names, never a raw `%ContextRelay.*%` token. With the Visual Studio UI language set to English the names are English; with the Japanese language pack installed and selected (**Tools > Options > Environment > International Settings**) they are Japanese, for example チャットにファイルを添付 and キャッシュをクリア. The name follows the Visual Studio language, not the operating system language, and any other language shows English. A raw token means Visual Studio did not resolve the metadata on that channel; record the Visual Studio version and channel.
+3. Run **ContextRelay** and **Search Microsoft 365** and confirm the tool window opens.
+4. Run **Clear Chat**, **Clear Cache**, **Clear Snippets**, **Generate Handoff Docs**, **Open Handoff Doc**, **Copy Handoff Prompt**, and **Show Debug Log**.
+5. Confirm the commands do not throw and update UI state as expected.
 
 ## Theme and visual consistency
 
