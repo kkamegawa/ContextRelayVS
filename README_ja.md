@@ -4,6 +4,14 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 
 > **現状**: 実装済みプレビューです。ローカルでインストール可能な VSIX をビルドでき、ローカライズ済みツールウィンドウ、スラッシュコマンド補完、結果アクション、`/connectors`、`/ask`、`/workiq` まで含む計画済みのリポジトリ内機能を備えています。Marketplace 公開前に Experimental Instance での手動検証が必要です。
 
+---
+
+## スクリーンショット
+
+![/ask リクエストに対する Microsoft 365 Copilot の応答を表示している Visual Studio の ContextRelay ツールウィンドウ](media/screenshot-tool-window.webp)
+
+---
+
 ## 実装済み機能
 
 - Exchange Mail / Teams / SharePoint / OneDrive を対象とするキーワード検索 (Microsoft Graph 経由)

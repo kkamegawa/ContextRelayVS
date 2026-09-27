@@ -7,6 +7,14 @@ ContextRelay for Visual Studio is a Visual Studio (2022 / 2026) extension that s
 
 > **Status**: Implemented preview. The repository builds an installable VSIX locally and now includes the planned in-repo UX features: localized tool-window text, slash-command discovery, result actions, `/connectors`, plain Microsoft 365 Copilot chat, `/ask` context chat, and `/workiq`. Manual Experimental Instance validation is still required before marketplace release.
 
+---
+
+## Screenshot
+
+![ContextRelay tool window in Visual Studio answering an /ask request with a Microsoft 365 Copilot response](media/screenshot-tool-window.webp)
+
+---
+
 ## Implemented features
 
 - **Plain Copilot chat** — input without a slash command starts or continues a Microsoft 365 Copilot conversation without implicit ContextRelay search context.
