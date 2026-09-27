@@ -13,6 +13,7 @@ obj/
 *.vsp
 *.VC.db
 *.VC.VC.opendb
+o/*
 
 ## VSIX build output
 *.vsix
@@ -35,5 +36,14 @@ Thumbs.db
 *.lscache
 
 artifacts/
+TestResults/
 
 build.log
+
+# APM dependencies
+apm_modules/
+.agents/
+.claude/
+.codex/
+.github/agents/
+.github/skills/

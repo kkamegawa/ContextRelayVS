@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    tags:
-      - "v*"
   pull_request:
 
 jobs:
@@ -12,15 +9,18 @@ jobs:
     permissions:
       contents: read    # least-privilege for checkout
       checks: write     # required by dorny/test-reporter
+      id-token: write   # required by codecov/codecov-action v7
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Restore
         run: dotnet restore ContextRelayVS.sln
@@ -36,12 +36,12 @@ jobs:
         run: >-
           dotnet test tests\ContextRelay.Core.Tests\ContextRelay.Core.Tests.csproj
           -c Release --no-build -v minimal
-          --collect:"XPlat Code Coverage"
-          --logger trx
+          --report-xunit-trx
+          --coverlet --coverlet-output-format cobertura
           --results-directory ./TestResults
 
       - name: Publish test results
-        uses: dorny/test-reporter@a6ddd83ac95ff4586f5d3aceeb314d9a1841db95 # v3.0.0
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.1.0
         if: always()
         with:
           name: xUnit Tests
@@ -49,9 +49,9 @@ jobs:
           reporter: dotnet-trx
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@3f20e214133d0983f9a10f3d63b0faf9241a3daa # v6.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          files: TestResults/**/coverage.cobertura.xml
+          files: TestResults/**/coverage.cobertura*.xml
           fail_ci_if_error: false
 
       - name: Verify VSIX exists

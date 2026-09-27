@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ContextRelay.VSExtension.Commands;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
@@ -29,6 +29,7 @@ internal static class ContextRelayMenuDefinitions
             MenuChild.Command<CopyHandoffPromptCommand>(),
             MenuChild.Command<OpenCopilotChatCommand>(),
             MenuChild.Command<OpenHandoffDocCommand>(),
+            MenuChild.Command<AttachFileToChatCommand>(),
             MenuChild.Menu(LanguageMenu),
 
             // Separator

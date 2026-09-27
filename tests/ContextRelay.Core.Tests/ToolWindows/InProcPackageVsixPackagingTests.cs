@@ -2,6 +2,7 @@
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
 
@@ -26,9 +27,33 @@ public sealed class InProcPackageVsixPackagingTests
         using var archive = ZipFile.OpenRead(vsixPath);
 
         AssertEntryPresent(archive, "extension.vsixmanifest");
+        AssertEntryPresent(archive, ".vsextension/extension.json");
+        AssertEntryPresent(archive, ".vsextension/string-resources.json");
+        AssertEntryPresent(archive, ".vsextension/ja/string-resources.json");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.dll");
+        AssertEntryPresent(archive, "ja/ContextRelay.VSExtension.Package.resources.dll");
         AssertEntryPresent(archive, "ContextRelay.VSExtension.Package.pkgdef");
         AssertEntryPresent(archive, "Community.VisualStudio.Toolkit.dll");
+
+        var extensionJsonEntry = archive.GetEntry(".vsextension/extension.json");
+        Assert.NotNull(extensionJsonEntry);
+
+        string extensionJson;
+        using (var stream = extensionJsonEntry!.Open())
+        using (var reader = new StreamReader(stream))
+        {
+            extensionJson = reader.ReadToEnd();
+        }
+
+        // Tokens must survive packaging so Visual Studio can resolve them for its UI language. The
+        // packaged manifest tokens and both packaged language files must be the same set, because
+        // Visual Studio reads these copies and not the source files.
+        var tokens = ContextRelayResourceTokens.FindTokens(extensionJson);
+        Assert.NotEmpty(tokens);
+        var packagedEnglish = ContextRelayResourceTokens.ReadResourceMap(archive.GetEntry(".vsextension/string-resources.json")!);
+        var packagedJapanese = ContextRelayResourceTokens.ReadResourceMap(archive.GetEntry(".vsextension/ja/string-resources.json")!);
+        Assert.Equal(tokens, packagedEnglish.Keys.OrderBy(key => key, StringComparer.Ordinal));
+        Assert.Equal(tokens, packagedJapanese.Keys.OrderBy(key => key, StringComparer.Ordinal));
 
         var manifestEntry = archive.GetEntry("extension.vsixmanifest");
         Assert.NotNull(manifestEntry);
@@ -68,9 +93,56 @@ public sealed class InProcPackageVsixPackagingTests
         var vsPackageAsset = assets.SingleOrDefault(a => a.Attribute("Type")?.Value == "Microsoft.VisualStudio.VsPackage");
         Assert.True(vsPackageAsset is not null, "VsPackage asset is missing from the patched extension.vsixmanifest.");
         Assert.Equal("ContextRelay.VSExtension.Package.pkgdef", vsPackageAsset!.Attribute("Path")?.Value);
+        Assert.Contains(
+            assets,
+            a => a.Attribute("Type")?.Value == "Microsoft.VisualStudio.Assembly"
+                 && a.Attribute("Path")?.Value == "ContextRelay.VSExtension.Package.dll");
+        Assert.Contains(
+            assets,
+            a => a.Attribute("Type")?.Value == "Microsoft.VisualStudio.Assembly"
+                 && a.Attribute("Path")?.Value == "Community.VisualStudio.Toolkit.dll");
 
         var manifestXml = manifest.ToString();
         Assert.DoesNotContain("%CurrentProject%", manifestXml, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Asserts the packaged ContextRelay.VisualStudioLanguage brokered service is proffered with an
+    /// audience that an out-of-process VisualStudio.Extensibility client can actually reach. That
+    /// client requests the service as "Local, PublicSdk"; if the audience regresses to Local alone,
+    /// Visual Studio declines the request with ServiceAudienceMismatch and automatic UI language
+    /// silently falls back to English no matter what the Visual Studio display language is set to.
+    /// Regression coverage for Issue #200.
+    /// </summary>
+    [Fact]
+    public void BuiltVsix_BrokeredServiceAudienceIncludesPublicSdk()
+    {
+        const int Local = 0x3;
+        const int PublicSdk = 0x10000000;
+
+        var vsixPath = BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.vsix");
+
+        using var archive = ZipFile.OpenRead(vsixPath);
+        var entry = archive.GetEntry("ContextRelay.VSExtension.Package.pkgdef");
+        Assert.True(entry is not null, "Built VSIX is missing required entry 'ContextRelay.VSExtension.Package.pkgdef'.");
+
+        string pkgdef;
+        using (var stream = entry!.Open())
+        using (var reader = new StreamReader(stream))
+        {
+            pkgdef = reader.ReadToEnd();
+        }
+
+        var match = Regex.Match(
+            pkgdef,
+            @"\[\$RootKey\$\\BrokeredServices\\ContextRelay\.VisualStudioLanguage\\1\.0\](?:\r?\n[^\[]*)*?""audience""=dword:([0-9a-fA-F]+)");
+        Assert.True(match.Success, "Packaged pkgdef is missing the ContextRelay.VisualStudioLanguage brokered service audience entry.");
+
+        var audience = Convert.ToInt32(match.Groups[1].Value, 16);
+        Assert.True((audience & Local) == Local, $"Brokered service audience 0x{audience:X} must still include Local (0x{Local:X}).");
+        Assert.True(
+            (audience & PublicSdk) == PublicSdk,
+            $"Brokered service audience 0x{audience:X} must include PublicSdk (0x{PublicSdk:X}); otherwise the out-of-process tool window is declined with ServiceAudienceMismatch and automatic UI language always falls back to English.");
     }
 
     private static void AssertEntryPresent(ZipArchive archive, string entryName)

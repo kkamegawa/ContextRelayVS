@@ -1,9 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Resources;
 using ContextRelay.Core.Router;
+using ContextRelay.VisualStudio;
 
 namespace ContextRelay.VSExtension.ToolWindows;
 
@@ -18,6 +20,10 @@ internal static class ContextRelayLocalizedStrings
         "ContextRelay.VSExtension.Resources.ContextRelayStrings",
         typeof(ContextRelayLocalizedStrings).Assembly);
     private static string configuredUiLanguage = UiLanguageAuto;
+    private static int? visualStudioUiLocale;
+
+    /// <summary>Applies the locale reported by the owning Visual Studio session.</summary>
+    public static void SetVisualStudioUiLocale(int? locale) => visualStudioUiLocale = locale;
 
     private static readonly IReadOnlyDictionary<string, string> CommandDescriptionKeys =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -48,17 +54,27 @@ internal static class ContextRelayLocalizedStrings
     public static string CopyPromptButtonText => GetString("CopyPromptButtonText");
     public static string OpenHandoffButtonText => GetString("OpenHandoffButtonText");
     public static string OpenCopilotButtonText => GetString("OpenCopilotButtonText");
+    public static string AddFilesButtonText => GetString("AddFilesButtonText");
+    public static string AttachFileToChatButtonText => GetString("AttachFileToChatButtonText");
+    public static string RemoveAttachmentButtonText => GetString("RemoveAttachmentButtonText");
+    public static string GetRemoveAttachmentAutomationName(string label) => Format("RemoveAttachmentAutomationName_Format", label);
+    public static string StopGenerationButtonText => GetString("StopGenerationButtonText");
+    public static string ChatResponseCancelledStatus => GetString("ChatResponseCancelledStatus");
+    public static string GetChatResponseFailedStatus(string detail) => Format("ChatResponseFailedStatus", detail);
+    public static string AddFilesToolTip => GetString("AddFilesToolTip");
     public static string ClearChatButtonText => GetString("ClearChatButtonText");
     public static string ClearSnippetsButtonText => GetString("ClearSnippetsButtonText");
     public static string ClearCacheButtonText => GetString("ClearCacheButtonText");
-    public static string DebugLogButtonText => GetString("DebugLogButtonText");
+    public static string DebugLogOpenedStatus => GetString("DebugLogOpenedStatus");
     public static string SearchButtonText => GetString("SearchButtonText");
     public static string SearchResultsHeaderText => GetString("SearchResultsHeaderText");
+    public static string SearchSummaryHeaderText => GetString("SearchSummaryHeaderText");
     public static string WindowTitleText => GetString("WindowTitleText");
     public static string SnippetsHeaderText => GetString("SnippetsHeaderText");
     public static string ChatHistoryHeaderText => GetString("ChatHistoryHeaderText");
     public static string SearchToolTip => GetString("SearchToolTip");
     public static string CommandPopupHeaderText => GetString("CommandPopupHeaderText");
+    public static string FileMentionPopupHeaderText => GetString("FileMentionPopupHeaderText");
     public static string PinButtonText => GetString("PinButtonText");
     public static string OpenButtonText => GetString("OpenButtonText");
     public static string DeleteButtonText => GetString("DeleteButtonText");
@@ -71,7 +87,15 @@ internal static class ContextRelayLocalizedStrings
     public static string RequestedSourceDisabledStatus => GetString("RequestedSourceDisabledStatus");
     public static string AskDisabledStatus => GetString("AskDisabledStatus");
     public static string ChatPreviewDisabledStatus => GetString("ChatPreviewDisabledStatus");
-    public static string AskRequiresPinnedContextStatus => GetString("AskRequiresPinnedContextStatus");
+    public static string AskRequiresContextStatus => GetString("AskRequiresContextStatus");
+    public static string FileMentionPromptEmptyStatus => GetString("FileMentionPromptEmptyStatus");
+    public static string FilePickerWorkspaceUnavailableStatus => GetString("FilePickerWorkspaceUnavailableStatus");
+    public static string FilePickerNoFilesSelectedStatus => GetString("FilePickerNoFilesSelectedStatus");
+    public static string FilePickerNoWorkspaceFilesSelectedStatus => GetString("FilePickerNoWorkspaceFilesSelectedStatus");
+    public static string FilePickerAddFilesFailedStatus => GetString("FilePickerAddFilesFailedStatus");
+    public static string CreatedFilesFolderSelectionCanceledStatus => GetString("CreatedFilesFolderSelectionCanceledStatus");
+    public static string WorkIqLocalFileContextDisabledStatus => GetString("WorkIqLocalFileContextDisabledStatus");
+    public static string FileMentionWorkspaceUnavailableStatus => GetString("FileMentionWorkspaceUnavailableStatus");
     public static string ChatAndSnippetsClearedStatus => GetString("ChatAndSnippetsClearedStatus");
     public static string ResultPinnedStatus => GetString("ResultPinnedStatus");
     public static string ResultPinnedWithExcerptFallbackStatus => GetString("ResultPinnedWithExcerptFallbackStatus");
@@ -96,6 +120,11 @@ internal static class ContextRelayLocalizedStrings
     public static string CopyAssistantButtonText => GetString("CopyAssistantButtonText");
     public static string AppendAssistantButtonText => GetString("AppendAssistantButtonText");
     public static string ReplaceAssistantButtonText => GetString("ReplaceAssistantButtonText");
+    public static string ContinueAssistantButtonText => GetString("ContinueAssistantButtonText");
+    public static string AssistantResponseContinuedStatus => GetString("AssistantResponseContinuedStatus");
+    public static string AssistantContinuationUnavailableStatus => GetString("AssistantContinuationUnavailableStatus");
+    public static string AssistantContinuationEmptyStatus => GetString("AssistantContinuationEmptyStatus");
+    public static string AssistantContinuationNoNewContentStatus => GetString("AssistantContinuationNoNewContentStatus");
     public static string ContextLabelsPrefixText => GetString("ContextLabelsPrefixText");
     public static string NoResultsFoundStatus => GetString("NoResultsFoundStatus");
     public static string SourceLabelMail => GetString("SourceLabel_mail");
@@ -109,11 +138,87 @@ internal static class ContextRelayLocalizedStrings
     public static string SourceLabelAll => GetString("SourceLabel_all");
     public static string SourceLabelDefault => GetString("SourceLabel_default");
     public static string TypeQueryStatus => GenericHelpText;
+    public static string AddFilesDialogTitle => GetString("AddFilesDialogTitle");
+    public static string AddFilesDialogFilter => GetString("AddFilesDialogFilter");
+    public static string CreatedFilesFolderDialogTitle => GetString("CreatedFilesFolderDialogTitle");
 
-    public static bool IsReadyStatus(string? statusMessage)
+    /// <summary>
+    /// Resource keys behind every status property that carries no captured arguments (no count, path, or
+    /// exception detail). These are the only status messages that can be safely reproduced in a different
+    /// language purely from the resource key, without remembering the arguments that built them.
+    /// </summary>
+    private static readonly string[] StaticStatusResourceKeys =
     {
-        return string.Equals(statusMessage, GetString("ReadyStatus", EnglishCulture), StringComparison.Ordinal) ||
-            string.Equals(statusMessage, GetString("ReadyStatus", JapaneseCulture), StringComparison.Ordinal);
+        "ChatResponseCancelledStatus",
+        "DebugLogOpenedStatus",
+        "ReadyStatus",
+        "RequestedSourceDisabledStatus",
+        "AskDisabledStatus",
+        "ChatPreviewDisabledStatus",
+        "AskRequiresContextStatus",
+        "FileMentionPromptEmptyStatus",
+        "FilePickerWorkspaceUnavailableStatus",
+        "FilePickerNoFilesSelectedStatus",
+        "FilePickerNoWorkspaceFilesSelectedStatus",
+        "FilePickerAddFilesFailedStatus",
+        "CreatedFilesFolderSelectionCanceledStatus",
+        "WorkIqLocalFileContextDisabledStatus",
+        "FileMentionWorkspaceUnavailableStatus",
+        "ChatAndSnippetsClearedStatus",
+        "ResultPinnedStatus",
+        "ResultPinnedWithExcerptFallbackStatus",
+        "ResultUnpinnedStatus",
+        "SnippetRemovedStatus",
+        "SnippetsClearedStatus",
+        "ChatHistoryClearedStatus",
+        "SearchCacheClearedStatus",
+        "HandoffPromptCopiedStatus",
+        "OpenedHandoffStatus",
+        "OpenCopilotPromptReadyStatus",
+        "OpenCopilotPromptAndPaneReadyStatus",
+        "ResultCopiedStatus",
+        "SnippetCopiedStatus",
+        "AppendedToHandoffStatus",
+        "ChatReplyShownStatus",
+        "WorkIqReplyShownStatus",
+        "AssistantResponseCopiedStatus",
+        "AssistantResponseAppendedStatus",
+        "AssistantResponseReplacedStatus",
+        "NoActiveEditorStatus",
+        "AssistantResponseContinuedStatus",
+        "AssistantContinuationUnavailableStatus",
+        "AssistantContinuationEmptyStatus",
+        "AssistantContinuationNoNewContentStatus",
+        "NoResultsFoundStatus",
+        "GenericHelpText", // Also covers TypeQueryStatus, which forwards to this same resource.
+        "ToolWindowInitializationFailed_NoDetail", // The other branch of GetToolWindowInitializationFailedStatus
+                                                    // carries captured exception text and is excluded.
+    };
+
+    /// <summary>
+    /// Attempts to reproduce <paramref name="statusMessage"/> in the currently configured UI language.
+    /// Only status text that exactly matches one of the fixed, argument-free status resources (in either
+    /// supported language) can be relocalized this way; a message that carries a captured argument (a
+    /// count, a path, an exception detail) or is not a known status resource is returned unchanged, so a
+    /// UI language change does not corrupt it.
+    /// </summary>
+    internal static bool TryRelocalizeStaticStatus(string? statusMessage, out string relocalizedStatus)
+    {
+        if (!string.IsNullOrEmpty(statusMessage))
+        {
+            foreach (var key in StaticStatusResourceKeys)
+            {
+                if (string.Equals(statusMessage, GetString(key, EnglishCulture), StringComparison.Ordinal) ||
+                    string.Equals(statusMessage, GetString(key, JapaneseCulture), StringComparison.Ordinal))
+                {
+                    relocalizedStatus = GetString(key, GetResolvedCulture());
+                    return true;
+                }
+            }
+        }
+
+        relocalizedStatus = statusMessage ?? string.Empty;
+        return false;
     }
 
     public static string GetToolWindowInitializationFailedStatus(string? detail)
@@ -137,7 +242,57 @@ internal static class ContextRelayLocalizedStrings
 
     public static string GetAskReplyShownStatus(int snippetCount) => Format("AskReplyShownStatus_Format", snippetCount);
 
+    public static string GetAskReplyShownWithContextBreakdownStatus(int snippetCount, int localFileCount) =>
+        Format("AskReplyShownWithContextBreakdownStatus_Format", snippetCount, localFileCount);
+
     public static string GetChatReplyShownWithContextStatus(int contextCount) => Format("ChatReplyShownWithContextStatus_Format", contextCount);
+
+    public static string GetCopilotResponseMayBeIncompleteStatus(string baseStatus) =>
+        Format("CopilotResponseMayBeIncompleteStatus_Format", baseStatus);
+
+    public static string GetFilePickerFilesAddedStatus(int fileCount) => Format("FilePickerFilesAddedStatus_Format", fileCount);
+
+    public static string GetFilePickerFilesAddedPartialStatus(int fileCount, int skippedCount) =>
+        Format("FilePickerFilesAddedPartialStatus_Format", fileCount, skippedCount);
+
+    public static string GetFilePickerMentionLimitReachedStatus(int maxMentions) =>
+        Format("FilePickerMentionLimitReachedStatus_Format", maxMentions);
+
+    public static string GetLocalFileContextLabel(string relativePath) =>
+        Format("LocalFileContextLabel_Format", relativePath);
+
+    public static string GetFileMentionNotFoundStatus(string rawPath) =>
+        Format("FileMentionNotFoundStatus_Format", rawPath);
+
+    public static string GetFileMentionOutsideWorkspaceStatus(string rawPath) =>
+        Format("FileMentionOutsideWorkspaceStatus_Format", rawPath);
+
+    public static string GetFileMentionAmbiguousStatus(string rawPath) =>
+        Format("FileMentionAmbiguousStatus_Format", rawPath);
+
+    public static string GetFileMentionUnsupportedFileTypeStatus(string rawPath) =>
+        Format("FileMentionUnsupportedFileTypeStatus_Format", rawPath);
+
+    public static string GetSearchSummaryLatestQuery(string query) =>
+        Format("SearchSummaryLatestQuery_Format", query);
+
+    public static string GetSearchSummaryRequestedSources(string requestedSources) =>
+        Format("SearchSummaryRequestedSources_Format", requestedSources);
+
+    public static string GetSearchSummaryNoResultsBullet => GetString("SearchSummaryNoResultsBullet");
+
+    public static string GetSearchSummaryTotalResults(int count) =>
+        Format("SearchSummaryTotalResults_Format", count);
+
+    public static string GetSearchSummaryUntitled => GetString("SearchSummaryUntitled");
+
+    public static string GetSearchSummaryCachedSuffix => GetString("SearchSummaryCachedSuffix");
+
+    public static string GetSearchSummaryTopItems(string titleSummary) =>
+        Format("SearchSummaryTopItems_Format", titleSummary);
+
+    public static string GetSearchSummarySourceLine(string sourceLabel, int count, string cachedSuffix, string topItemsSummary) =>
+        Format("SearchSummarySourceLine_Format", sourceLabel, count, cachedSuffix, topItemsSummary);
 
     public static string GetAskPreviewDocumentTitle(string query, string extension) =>
         string.IsNullOrWhiteSpace(query)
@@ -146,13 +301,18 @@ internal static class ContextRelayLocalizedStrings
 
     public static string GetHelpTextForQuery(string? queryText)
     {
-        var command = ExtractSlashCommand(queryText);
-        if (string.IsNullOrEmpty(command))
+        var parsed = SlashCommandRouter.Parse(queryText ?? string.Empty);
+        if (parsed.Target == RouteTarget.Chat)
         {
             return GenericHelpText;
         }
 
-        var normalizedCommand = command!.ToLowerInvariant();
+        if (parsed.SearchScope == SearchScope.Scoped && parsed.SourceCommandNames.Count > 1)
+        {
+            return GetScopedSourceHelpText(parsed.SourceCommandNames);
+        }
+
+        var normalizedCommand = parsed.SlashCommandName?.ToLowerInvariant() ?? string.Empty;
         return normalizedCommand switch
         {
             "/mail" => GetString("HelpFor_mail"),
@@ -172,23 +332,23 @@ internal static class ContextRelayLocalizedStrings
 
     public static IReadOnlyList<SlashCommandSuggestion> GetCommandSuggestions(string? queryText)
     {
-        var trimmed = queryText?.TrimStart() ?? string.Empty;
-        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+        if (!TryGetSlashSelectionContext(queryText, out var context))
         {
             return Array.Empty<SlashCommandSuggestion>();
         }
 
-        var whitespaceIndex = trimmed.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
-        if (whitespaceIndex >= 0)
-        {
-            return Array.Empty<SlashCommandSuggestion>();
-        }
-
-        var prefix = trimmed;
+        var combinableCommands = SlashCommandRouter.GetCombinableCommands();
         var suggestions = new List<SlashCommandSuggestion>();
         foreach (var command in SlashCommandRouter.GetSupportedCommands())
         {
-            if (!command.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (!command.StartsWith(context.Partial, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (context.CombinableOnly &&
+                (!combinableCommands.Contains(command, StringComparer.OrdinalIgnoreCase) ||
+                    context.SelectedCommands.Contains(command)))
             {
                 continue;
             }
@@ -197,7 +357,8 @@ internal static class ContextRelayLocalizedStrings
             {
                 Icon = SourcePresentation.GetCommandIcon(command),
                 Name = command,
-                Description = GetCommandDescription(command)
+                Description = GetCommandDescription(command),
+                CommittedQuery = BuildCommittedQuery(context, command)
             });
         }
 
@@ -214,16 +375,60 @@ internal static class ContextRelayLocalizedStrings
         return GenericHelpText;
     }
 
-    private static string? ExtractSlashCommand(string? queryText)
+    private static string GetScopedSourceHelpText(IReadOnlyList<string> commands)
     {
-        var trimmed = queryText?.TrimStart() ?? string.Empty;
+        var prefix = string.Join(" ", commands);
+        return Format("HelpFor_scopedSources_Format", prefix, prefix);
+    }
+
+    private static bool TryGetSlashSelectionContext(string? queryText, out SlashSelectionContext context)
+    {
+        var text = queryText ?? string.Empty;
+        var trimmed = text.Trim();
         if (!trimmed.StartsWith("/", StringComparison.Ordinal))
         {
-            return null;
+            context = default;
+            return false;
         }
 
-        var whitespaceIndex = trimmed.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
-        return whitespaceIndex >= 0 ? trimmed.Substring(0, whitespaceIndex) : trimmed;
+        var hasTrailingWhitespace = text.Length > 0 && char.IsWhiteSpace(text[text.Length - 1]);
+        var tokens = trimmed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0)
+        {
+            context = default;
+            return false;
+        }
+
+        var partial = hasTrailingWhitespace ? "/" : tokens[^1].ToLowerInvariant();
+        if (!partial.StartsWith("/", StringComparison.Ordinal))
+        {
+            context = default;
+            return false;
+        }
+
+        var previousTokens = (hasTrailingWhitespace ? tokens : tokens[..^1])
+            .Select(token => token.ToLowerInvariant())
+            .ToArray();
+        var combinableCommands = SlashCommandRouter.GetCombinableCommands();
+        var selectedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var token in previousTokens)
+        {
+            if (!combinableCommands.Contains(token, StringComparer.OrdinalIgnoreCase))
+            {
+                context = default;
+                return false;
+            }
+
+            selectedCommands.Add(token);
+        }
+
+        context = new SlashSelectionContext(previousTokens, partial, selectedCommands, previousTokens.Length > 0);
+        return true;
+    }
+
+    private static string BuildCommittedQuery(SlashSelectionContext context, string command)
+    {
+        return string.Join(" ", context.PreviousTokens.Concat(new[] { command })) + " ";
     }
 
     private static string SanitizeFileName(string value)
@@ -312,15 +517,7 @@ internal static class ContextRelayLocalizedStrings
 
     private static string ResolveLanguageCode(string language)
     {
-        var normalized = NormalizeUiLanguage(language);
-        if (!normalized.Equals(UiLanguageAuto, StringComparison.OrdinalIgnoreCase))
-        {
-            return normalized;
-        }
-
-        return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals(UiLanguageJapanese, StringComparison.OrdinalIgnoreCase)
-            ? UiLanguageJapanese
-            : UiLanguageEnglish;
+        return VisualStudioLanguageService.ResolveLanguage(language, visualStudioUiLocale);
     }
 
     private static string NormalizeUiLanguage(string? language)
@@ -383,4 +580,10 @@ internal static class ContextRelayLocalizedStrings
             ? JapaneseCulture
             : EnglishCulture;
     }
+
+    private readonly record struct SlashSelectionContext(
+        IReadOnlyList<string> PreviousTokens,
+        string Partial,
+        HashSet<string> SelectedCommands,
+        bool CombinableOnly);
 }

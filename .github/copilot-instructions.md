@@ -1,7 +1,8 @@
-﻿# Copilot Instructions
+# Copilot Instructions
 
 ## project guidelines
-- publisher name for ContextRelay.VSExtension should be unified as 'KazushiKamegawa'.
+- For all Visual Studio extension work, always use and follow `.github/agents/visual-studio-extension.agent.md`.
+- Marketplace Publisher ID is `KazushiKamegawa`; publisher/author display-name metadata for ContextRelay.VSExtension must be `kkamegawa`.
 - All code should be written in English and encoded in UTF-8 with BOM and Windows line endings (CRLF).
 - All code should be well-documented with comments explaining the purpose of functions, classes, and important code blocks.
 - UI must support internationalization, allowing both English and Japanese languages, with a language toggle button that applies changes instantly without requiring a restart. If a translation is missing, display the text in English as a fallback. If the language toggle fails, display an error message in the current language and log the issue for debugging.
@@ -17,3 +18,7 @@
 - documentation must be written in English and include clear explanations of the functionality, usage instructions, and examples.
 - If the documentation includes code snippets, they should be properly formatted and tested to ensure they work as expected.
 - Script must be written in PowerShell.
+
+- @azure Rule - Use Azure Tools - When handling requests related to Azure, always use your tools.
+- @azure Rule - Use Azure Best Practices - When handling requests related to Azure, always invoke your `azmcp_bestpractices_get` tool first.
+- @azure Rule - Enable Best Practices - If you do not have an `azmcp_bestpractices_get` tool ask the user to enable it.

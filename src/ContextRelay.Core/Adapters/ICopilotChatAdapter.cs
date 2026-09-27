@@ -1,10 +1,14 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 
 namespace ContextRelay.Core.Adapters;
 
 public interface ICopilotChatAdapter
 {
+    CopilotChatResponseDiagnostics LastResponseDiagnostics { get; }
+
+    void SetLastResponseDiagnostics(CopilotChatResponseDiagnostics diagnostics);
+
     Task<string> AskAsync(string accessToken, string prompt, CancellationToken cancellationToken = default);
 
     Task<string> CreateConversationAsync(string accessToken, CancellationToken cancellationToken = default);
@@ -14,5 +18,13 @@ public interface ICopilotChatAdapter
         string conversationId,
         string message,
         CopilotChatSendOptions? options = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        System.IProgress<string>? progress = null);
+
+    Task<string> ContinueAsync(
+        string accessToken,
+        string conversationId,
+        CancellationToken cancellationToken = default,
+        System.IProgress<string>? progress = null,
+        bool streamResponses = true);
 }

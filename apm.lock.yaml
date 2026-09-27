@@ -1,0 +1,18 @@
+lockfile_version: '1'
+apm_version: 0.31.0
+dependencies:
+- repo_url: dotnet/skills
+  name: b7b5400a22d3356b5c046c769364acdbac99c82a6b22e3aaef5d0a889939d73b
+  host: github.com
+  resolved_commit: 8bbfe7a4d1c5c0cd42cd04e38031779c75f2dda3
+  version: 8bbfe7a
+  package_type: apm_package
+  content_hash: sha256:d364acafc0921a0c0da7541d51f01c2e8ee4ef7923ebd6f103e073860dd3d4ba
+- repo_url: tfsugjp/skills
+  name: 229747fe42f0c6eaa7bc7120410df9c03dda37af2ac3c9990841d113be0335fe
+  host: github.com
+  resolved_commit: 660ff636af54ff04c2338745f6345d26f3790f14
+  version: 0.1.0
+  package_type: apm_package
+  content_hash: sha256:61dec3b37f40274ac7f1bb7a6a849c6c19cac4edfa2ca0a601a8ee27c61034ec
+deployments: []

@@ -16,6 +16,7 @@ using ContextRelay.Core.Auth;
 using ContextRelay.Core.Auth.Msal;
 using ContextRelay.Core.Cache;
 using ContextRelay.Core.Chat;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Handoff;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
@@ -24,15 +25,45 @@ using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Snippets;
 using ContextRelay.Core.Utilities;
 using ContextRelay.VSExtension.ToolWindows;
+using Microsoft.VisualStudio.Extensibility;
 
 namespace ContextRelay.VSExtension.Services;
 
 internal sealed class ContextRelayHost : IDisposable
 {
+    private sealed class ChatGenerationStoppedException : OperationCanceledException
+    {
+    }
+
+    private sealed class CallbackProgress : IProgress<string>
+    {
+        private readonly Action<string> callback;
+
+        public CallbackProgress(Action<string> callback)
+        {
+            this.callback = callback;
+        }
+
+        public void Report(string value) => callback(value);
+    }
+
+    private readonly record struct CreatedFileTargetContext(string RootDirectory, bool ShouldAddToSolutionExplorer, bool FolderWasSelected);
+    private readonly record struct HandoffDocumentWriteContext(HandoffGenerationResult GenerationResult, CreatedFileTargetContext TargetContext);
+    private readonly record struct SendAttachmentSelection(
+        IReadOnlyList<ResolvedAttachment> Attachments,
+        IReadOnlyList<string> SubmittedPendingIds);
+    private readonly record struct ActiveChatResponse(
+        string Text,
+        ChatRequestStateMachine.Request RequestState);
+
     private readonly IContextRelayPackageServices packageServices;
     private readonly ContextRelayOutputLogger logger;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly CancellationTokenSource disposeCancellation = new();
+    private readonly object draftQuerySync = new();
+    private readonly object pendingAttachmentsSync = new();
+    private readonly object activeChatRequestSync = new();
+    private readonly ChatRequestStateMachine chatRequestStateMachine = new();
     private readonly Lazy<IContextRelayAuthProvider> authProvider;
     private readonly FileSystemSharedSessionStore sharedStore;
     private readonly SharedStoreWatcher watcher;
@@ -45,13 +76,22 @@ internal sealed class ContextRelayHost : IDisposable
     private TtlLruCache<string, ContextItem[]> searchCache = new();
     private ContextRelayHostState state = new();
     private string? lastSearchSummary;
+    // Kept alongside currentSearchResults so lastSearchSummary can be rebuilt in a new UI language; it is
+    // otherwise redundant with the summary text itself.
+    private SlashCommandParseResult? lastSearchRoute;
     private string? copilotConversationId;
+    private string? copilotConversationAssistantItemId;
     private string? workIqContextId;
+    private string draftQueryText = string.Empty;
+    private readonly List<ResolvedAttachment> pendingAttachments = new();
+    private CancellationTokenSource? activeChatRequestCancellation;
     private string? cacheWorkspaceRoot;
     private int cacheTtlSeconds = 300;
     private int cacheMaxEntries = 200;
     private ContextItem[] currentSearchResults = Array.Empty<ContextItem>();
     private bool initialized;
+    private bool isStreaming;
+    private string streamingResponseText = string.Empty;
     private bool shouldResolveSignedInUser;
     private int deferredSignedInUserResolutionScheduled;
 
@@ -84,9 +124,33 @@ internal sealed class ContextRelayHost : IDisposable
         copilotChatAdapter = new CopilotChatAdapter(graphClient);
         workIqAdapter = new WorkIqAdapter(new System.Net.Http.HttpClient(), logger, ownsHttpClient: true);
         handoffDocumentGenerator = new HandoffDocumentGenerator(sharedStore);
+        settingsReloadCoalescer = new ReloadCoalescer(
+            ReloadSettingsLanguageAsync,
+            ex => logger.LogError("Unable to apply a UI language change from the shared settings file.", ex));
     }
 
+    private FileSystemWatcher? settingsWatcher;
+    private readonly ReloadCoalescer settingsReloadCoalescer;
+
     public event EventHandler<ContextRelayStateChangedEventArgs>? StateChanged;
+
+    public void UpdateDraftQueryText(string queryText)
+    {
+        lock (draftQuerySync)
+        {
+            draftQueryText = queryText ?? string.Empty;
+        }
+    }
+
+    public void LogUiDiagnostic(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        logger.LogDiagnostic($"[ui] {message}");
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -100,7 +164,7 @@ internal sealed class ContextRelayHost : IDisposable
 
             await logger.InitializeAsync(cancellationToken).ConfigureAwait(false);
             initialized = true;
-            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -119,7 +183,7 @@ internal sealed class ContextRelayHost : IDisposable
         {
             state = new ContextRelayHostState
             {
-                QueryText = state.QueryText,
+                QueryText = GetDraftQueryText(),
                 HelpText = ContextRelayLocalizedStrings.GenericHelpText,
                 StatusMessage = ContextRelayLocalizedStrings.GetToolWindowInitializationFailedStatus(exception.Message),
                 SignedInUser = state.SignedInUser,
@@ -140,21 +204,135 @@ internal sealed class ContextRelayHost : IDisposable
     public async Task<ContextRelayHostState> GetStateAsync()
     {
         var settings = await packageServices.GetSettingsSnapshotAsync().ConfigureAwait(false);
-        ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
 
-        var statusMessage = ContextRelayLocalizedStrings.IsReadyStatus(state.StatusMessage)
-            ? ContextRelayLocalizedStrings.ReadyStatus
-            : state.StatusMessage;
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            // ContextRelayLocalizedStrings is process-wide static state, and GetSettingsSnapshotAsync
+            // above already applied it as a side effect before this call reached gate — a concurrent
+            // caller could have changed it again in between. Re-apply it here, now that gate is held, so
+            // it cannot change again before the status/summary rebuild below reads it.
+            ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
 
-        await RefreshStateAsync(statusMessage).ConfigureAwait(false);
+            // Reproduce the current status in the (possibly changed) UI language when it is one of the
+            // fixed status resources; a message built from a captured argument (a count, a path, an
+            // exception detail) is left as-is rather than risk showing a wrong or malformed value.
+            ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
+
+            await RefreshStateCoreAsync(statusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
         return state;
     }
 
     public async Task<ContextRelayHostState> UpdateUiLanguageAsync(string uiLanguage, CancellationToken cancellationToken = default)
     {
         await packageServices.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
-        await RefreshStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Mirrors GetStateAsync: re-apply under gate so a concurrent caller cannot change the
+            // language again before this explicit choice's own rebuild below reads it.
+            ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsStore.NormalizeUiLanguage(uiLanguage));
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ReadyStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
         return state;
+    }
+
+    /// <summary>
+    /// Watches the shared settings file so a language change saved from the Options page reaches an
+    /// already-open tool window; the Options page runs in another process and cannot call the host.
+    /// </summary>
+    public void StartSettingsLanguageWatcher()
+    {
+        if (settingsWatcher is not null || disposeCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        FileSystemWatcher? created = null;
+        try
+        {
+            var directory = Path.GetDirectoryName(ContextRelaySettingsStore.SettingsFilePath);
+            if (string.IsNullOrEmpty(directory))
+            {
+                return;
+            }
+
+            // A fresh profile has no settings directory yet; create it so the first save raises Created.
+            Directory.CreateDirectory(directory);
+
+            created = new FileSystemWatcher(directory, Path.GetFileName(ContextRelaySettingsStore.SettingsFilePath))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+            FileSystemEventHandler handler = (_, _) => _ = OnSettingsFileChangedAsync();
+            created.Changed += handler;
+            created.Created += handler;
+            created.Renamed += (_, _) => _ = OnSettingsFileChangedAsync();
+            created.EnableRaisingEvents = true;
+            settingsWatcher = created;
+        }
+        catch (Exception ex)
+        {
+            // Live Options refresh is auxiliary; the panel must keep working without it.
+            created?.Dispose();
+            logger.LogError("Unable to watch the shared settings file; Options language changes apply when the tool window is reopened.", ex);
+        }
+    }
+
+    private async Task OnSettingsFileChangedAsync()
+    {
+        try
+        {
+            // Saves arrive as several file events; wait so only one reload runs per save.
+            await Task.Delay(300, disposeCancellation.Token).ConfigureAwait(false);
+
+            // settingsReloadCoalescer guarantees a save that arrives while a reload is already running is
+            // not lost, and that a failed reload retries with backoff instead of abandoning it. The dispose
+            // token stops that retry loop (rather than letting it run forever) once the host is disposed.
+            await settingsReloadCoalescer.TriggerAsync(disposeCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogError("Unable to apply a UI language change from the shared settings file.", ex);
+        }
+    }
+
+    private async Task ReloadSettingsLanguageAsync()
+    {
+        if (!ContextRelaySettingsStore.TryLoadSettings(out var settings))
+        {
+            // A transient read failure (for example the file is caught mid-write by a concurrent save)
+            // must never be mistaken for "no change": LoadSettings() would silently substitute a default
+            // snapshot here, which can spuriously equal the current language and hide a real save. Throw
+            // so settingsReloadCoalescer re-arms this trigger and retries with backoff instead.
+            throw new IOException("Unable to read the shared settings file while applying a UI language change.");
+        }
+
+        if (!string.Equals(
+                ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage),
+                ContextRelayLocalizedStrings.CurrentUiLanguage,
+                StringComparison.Ordinal))
+        {
+            // GetStateAsync reloads the full language state (including the host locale for auto)
+            // and raises StateChanged so the open view model refreshes its labels.
+            await GetStateAsync().ConfigureAwait(false);
+        }
     }
 
     public void StartDeferredSignedInUserResolution()
@@ -189,22 +367,31 @@ internal sealed class ContextRelayHost : IDisposable
         }, disposeCancellation.Token);
     }
 
-    public async Task<ContextRelayHostState> SubmitQueryAsync(string input, CancellationToken cancellationToken = default)
+    public async Task<ContextRelayHostState> SubmitQueryAsync(
+        string input,
+        IClientContext? clientContext = null,
+        CancellationToken cancellationToken = default)
     {
+        RouteTarget? submittedRoute = null;
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var trimmed = input?.Trim() ?? string.Empty;
             var route = SlashCommandRouter.Parse(trimmed);
+            submittedRoute = route.Target;
             state.QueryText = trimmed;
+            UpdateDraftQueryText(trimmed);
 
             if (route.Target == RouteTarget.Clear)
             {
+                chatRequestStateMachine.Clear();
                 await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
                 await snippetRepository.ClearAsync(cancellationToken).ConfigureAwait(false);
                 currentSearchResults = Array.Empty<ContextItem>();
+                lastSearchRoute = null;
                 lastSearchSummary = null;
                 copilotConversationId = null;
+                copilotConversationAssistantItemId = null;
                 workIqContextId = null;
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatAndSnippetsClearedStatus, trimmed, cancellationToken).ConfigureAwait(false);
             }
@@ -217,6 +404,9 @@ internal sealed class ContextRelayHost : IDisposable
             var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
+            logger.LogDiagnostic(
+                $"SubmitQuery target={route.Target} command={(string.IsNullOrWhiteSpace(route.SlashCommandName) ? "(chat)" : route.SlashCommandName)} " +
+                $"inputLength={trimmed.Length} queryLength={route.Query.Length}");
             await EnsureCacheReadyAsync(settings, cancellationToken).ConfigureAwait(false);
             var enabledSources = GetEnabledSources(route, settings);
             if (enabledSources.Count == 0 &&
@@ -229,9 +419,41 @@ internal sealed class ContextRelayHost : IDisposable
 
             var authSettings = settings.ToAuthSettings();
             shouldResolveSignedInUser = true;
+            var filePrompt = route.Target switch
+            {
+                RouteTarget.Chat => await ResolveFilePromptAsync(trimmed, route.Query, trimmed, settings.ChatMaxAttachedFiles, cancellationToken).ConfigureAwait(false),
+                RouteTarget.Ask => await ResolveFilePromptAsync(route.Query, route.Query, trimmed, settings.ChatMaxAttachedFiles, cancellationToken).ConfigureAwait(false),
+                RouteTarget.WorkIq => await ResolveFilePromptAsync(route.Query, route.Query, trimmed, FileMentionResolver.MaxFileMentions, cancellationToken).ConfigureAwait(false),
+                _ => new FilePromptContext(route.Query, Array.Empty<ResolvedFileMention>())
+            };
+            if (filePrompt is null)
+            {
+                return state;
+            }
+
             if (route.Target == RouteTarget.WorkIq)
             {
-                return await HandleWorkIqCommandAsync(trimmed, route.Query, authSettings, cancellationToken).ConfigureAwait(false);
+                return await HandleWorkIqCommandAsync(trimmed, filePrompt.Prompt, authSettings, settings, filePrompt.Files, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Build and validate the /ask payload before authentication. A request without explicit
+            // context must be rejected locally instead of triggering token acquisition or network work.
+            if (route.Target == RouteTarget.Ask)
+            {
+                if (!settings.EnableChatPreview)
+                {
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                }
+
+                var (_, askContextPayload) = await BuildSendContextAsync(
+                    filePrompt.Files,
+                    settings,
+                    clientContext,
+                    cancellationToken).ConfigureAwait(false);
+                if (!askContextPayload.HasGroundingContext)
+                {
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             var featureOptions = settings.ToFeatureOptions();
@@ -253,36 +475,63 @@ internal sealed class ContextRelayHost : IDisposable
                     return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatPreviewDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
                 }
 
-                return await HandleChatCommandAsync(trimmed, route.Query, token.AccessToken, cancellationToken).ConfigureAwait(false);
+                return await HandleChatCommandAsync(
+                    trimmed,
+                    filePrompt.Prompt,
+                    token.AccessToken,
+                    filePrompt.Files,
+                    settings,
+                    clientContext,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             if (route.Target == RouteTarget.Ask)
             {
-                if (!settings.EnableChatPreview)
-                {
-                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskDisabledStatus, trimmed, cancellationToken).ConfigureAwait(false);
-                }
-
-                var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (snippets.Count == 0)
-                {
-                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresPinnedContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
-                }
-
-                var contextPayload = ChatContextPayloadBuilder.Build(snippets);
                 var conversationId = await EnsureCopilotConversationAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
-                var reply = await copilotChatAdapter
-                    .SendMessageAsync(token.AccessToken, conversationId, route.Query, contextPayload.SendOptions, cancellationToken)
-                    .ConfigureAwait(false);
+                copilotConversationAssistantItemId = null;
+                // The pre-auth payload only guards against context-less requests. Sign-in and conversation
+                // creation can take a while, so re-read attachments at the actual send boundary.
+                var (attachmentSelection, contextPayload) = await BuildSendContextAsync(
+                    filePrompt.Files,
+                    settings,
+                    clientContext,
+                    cancellationToken).ConfigureAwait(false);
+                if (!contextPayload.HasGroundingContext)
+                {
+                    return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AskRequiresContextStatus, trimmed, cancellationToken).ConfigureAwait(false);
+                }
+
+                var requestMessage = AppendGroundingInstruction(filePrompt.Prompt, contextPayload);
+                LogChatPayloadDiagnostics("ask", requestMessage, contextPayload);
+                var includedPendingIds = GetIncludedPendingAttachmentIds(attachmentSelection, contextPayload);
+                var response = await SendCopilotMessageAsync(
+                    token.AccessToken,
+                    conversationId,
+                    requestMessage,
+                    contextPayload.SendOptions,
+                    includedPendingIds,
+                    cancellationToken).ConfigureAwait(false);
+                var reply = response.Text;
                 if (string.IsNullOrWhiteSpace(reply))
                 {
                     throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
                 }
 
-                await AppendChatHistoryAsync(route.Query, reply, "ask", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+                var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Ask, requestMessage, reply);
+                copilotConversationAssistantItemId = await AppendChatHistoryAsync(
+                    filePrompt.Prompt,
+                    normalizedReply,
+                    "ask",
+                    contextPayload.Labels,
+                    cancellationToken,
+                    response.RequestState).ConfigureAwait(false);
                 logger.LogInformation("Handled /ask with Microsoft 365 Copilot.");
+                var includedAttachmentCount = contextPayload.IncludedAttachmentIds.Count;
+                var askStatus = includedAttachmentCount == 0
+                    ? ContextRelayLocalizedStrings.GetAskReplyShownStatus(contextPayload.IncludedPinnedSnippetCount)
+                    : ContextRelayLocalizedStrings.GetAskReplyShownWithContextBreakdownStatus(contextPayload.IncludedPinnedSnippetCount, includedAttachmentCount);
                 return await RefreshStateCoreAsync(
-                    ContextRelayLocalizedStrings.GetAskReplyShownStatus(snippets.Count),
+                    AddCopilotIntegrityWarningIfNeeded(askStatus),
                     trimmed,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -298,7 +547,9 @@ internal sealed class ContextRelayHost : IDisposable
                 .ToArray();
 
             currentSearchResults = results;
-            lastSearchSummary = BuildSearchSummary(route, results);
+            lastSearchRoute = route;
+            // RefreshStateCoreAsync rebuilds lastSearchSummary from lastSearchRoute/currentSearchResults
+            // below, in the current UI language, under the same gate hold as this assignment.
             await AppendSearchHistoryAsync(trimmed, results, cancellationToken).ConfigureAwait(false);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation($"Search completed with {results.Length} result(s).");
@@ -309,10 +560,25 @@ internal sealed class ContextRelayHost : IDisposable
                 trimmed,
                 cancellationToken).ConfigureAwait(false);
         }
+        catch (ChatGenerationStoppedException)
+        {
+            logger.LogInformation("Microsoft 365 Copilot response generation was stopped by the user.");
+            return await RefreshStateCoreAsync(
+                ContextRelayLocalizedStrings.ChatResponseCancelledStatus,
+                input?.Trim() ?? string.Empty,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || disposeCancellation.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError("Search execution failed.", ex);
-            return await RefreshStateCoreAsync(ex.Message, input?.Trim() ?? string.Empty, cancellationToken).ConfigureAwait(false);
+            var statusMessage = submittedRoute is RouteTarget.Chat or RouteTarget.Ask
+                ? ContextRelayLocalizedStrings.GetChatResponseFailedStatus(ex.Message)
+                : ex.Message;
+            return await RefreshStateCoreAsync(statusMessage, input?.Trim() ?? string.Empty, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -341,7 +607,7 @@ internal sealed class ContextRelayHost : IDisposable
                 }
 
                 logger.LogInformation($"Unpinned snippet '{item.Title}'.");
-                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ResultUnpinnedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ResultUnpinnedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
             }
 
             var hydrationResult = await TryHydrateContextItemForHandoffAsync(item, cancellationToken).ConfigureAwait(false);
@@ -363,7 +629,7 @@ internal sealed class ContextRelayHost : IDisposable
                 hydrationResult.FellBackToExcerpt
                     ? ContextRelayLocalizedStrings.ResultPinnedWithExcerptFallbackStatus
                     : ContextRelayLocalizedStrings.ResultPinnedStatus,
-                state.QueryText,
+                GetDraftQueryText(),
                 cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -383,11 +649,18 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+            var handoffContext = await TryEnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+            if (handoffContext is null)
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var handoffPath = handoffContext.Value.GenerationResult.HandoffPath ?? handoffContext.Value.GenerationResult.PlanPath;
             var hydrated = await TryHydrateContextItemForHandoffAsync(item, cancellationToken).ConfigureAwait(false);
             var excerpt = BuildHandoffExcerpt(hydrated.Item);
             await AppendMarkdownToFileAsync(handoffPath, excerpt, cancellationToken).ConfigureAwait(false);
-            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AppendedToHandoffStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AppendedToHandoffStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -401,7 +674,7 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             await snippetRepository.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetRemovedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetRemovedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -415,7 +688,7 @@ internal sealed class ContextRelayHost : IDisposable
         try
         {
             await snippetRepository.ClearAsync(cancellationToken).ConfigureAwait(false);
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetsClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SnippetsClearedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -425,15 +698,18 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task<ContextRelayHostState> ClearChatAsync(CancellationToken cancellationToken = default)
     {
+        chatRequestStateMachine.Clear();
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await sharedStore.ClearAsync(SharedStoreFileKind.ChatHistory, cancellationToken).ConfigureAwait(false);
             currentSearchResults = Array.Empty<ContextItem>();
+            lastSearchRoute = null;
             lastSearchSummary = null;
             copilotConversationId = null;
+            copilotConversationAssistantItemId = null;
             workIqContextId = null;
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatHistoryClearedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -451,11 +727,83 @@ internal sealed class ContextRelayHost : IDisposable
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Search cache cleared.");
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SearchCacheClearedStatus, state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.SearchCacheClearedStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             gate.Release();
+        }
+    }
+
+    public async Task<ContextRelayHostState> AddFilesToQueryAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await SyncDebugLoggingOptionsAsync(cancellationToken).ConfigureAwait(false);
+            var currentQuery = GetDraftQueryText();
+            logger.LogDiagnostic($"[ui] AddFilesToQuery invoked with currentQueryLength={currentQuery.Length}");
+            var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+            PrunePendingAttachmentsFromCurrentWorkspace(workspaceRoots);
+            var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            if (settings.ChatMaxAttachedFiles == 0)
+            {
+                await PublishAttachmentStateAsync(ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(0)).ConfigureAwait(false);
+                return state;
+            }
+
+            var selectedFiles = await packageServices
+                .PickWorkspaceFilesAsync(workspaceRoots.Count > 0 ? workspaceRoots[0] : null, cancellationToken)
+                .ConfigureAwait(false);
+            logger.LogDiagnostic($"[ui] AddFilesToQuery picker returned selectedFileCount={selectedFiles.Count}");
+            if (selectedFiles.Count == 0)
+            {
+                logger.LogDiagnostic("[ui] AddFilesToQuery canceled because no files were selected.");
+                await PublishAttachmentStateAsync(ContextRelayLocalizedStrings.FilePickerNoFilesSelectedStatus).ConfigureAwait(false);
+                return state;
+            }
+
+            if (workspaceRoots.Count == 0)
+            {
+                workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            var addedCount = 0;
+            var skippedCount = 0;
+            lock (pendingAttachmentsSync)
+            {
+                foreach (var path in selectedFiles)
+                {
+                    if (pendingAttachments.Count >= settings.ChatMaxAttachedFiles ||
+                        !WorkspaceFileAttachmentResolver.TryResolve(path, workspaceRoots, out var attachment) ||
+                        attachment is null ||
+                        pendingAttachments.Any(item => string.Equals(item.AbsolutePath, attachment.AbsolutePath, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    attachment.DisplayName = attachment.RelativePath.Replace(Path.DirectorySeparatorChar, '/');
+                    pendingAttachments.Add(attachment);
+                    chatRequestStateMachine.AddPendingAttachment(attachment.Id);
+                    addedCount++;
+                }
+            }
+
+            var status = skippedCount > 0
+                ? ContextRelayLocalizedStrings.GetFilePickerFilesAddedPartialStatus(addedCount, skippedCount)
+                : ContextRelayLocalizedStrings.GetFilePickerFilesAddedStatus(addedCount);
+            await PublishAttachmentStateAsync(status).ConfigureAwait(false);
+            return state;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError("Adding local files to the query failed.", ex);
+            await PublishAttachmentStateAsync(ContextRelayLocalizedStrings.FilePickerAddFilesFailedStatus).ConfigureAwait(false);
+            return state;
         }
     }
 
@@ -464,9 +812,15 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var result = await EnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
+            var handoffContext = await TryEnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
+            if (handoffContext is null)
+            {
+                return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+            }
+
+            var result = handoffContext.Value.GenerationResult;
             logger.LogInformation($"Generated handoff docs in '{result.OutputDirectory}'.");
-            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.GetHandoffUpdatedStatus(result.WrittenFiles.Count), state.QueryText, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.GetHandoffUpdatedStatus(result.WrittenFiles.Count), GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -476,7 +830,14 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task CopyHandoffPromptAsync(CancellationToken cancellationToken = default)
     {
-        var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        var handoffContext = await TryEnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        if (handoffContext is null)
+        {
+            await RefreshStateAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus).ConfigureAwait(false);
+            return;
+        }
+
+        var handoffPath = handoffContext.Value.GenerationResult.HandoffPath ?? handoffContext.Value.GenerationResult.PlanPath;
         var prompt = BuildHandoffPrompt(handoffPath);
         await packageServices.CopyTextToClipboardAsync(prompt, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handoff prompt copied to clipboard.");
@@ -504,9 +865,118 @@ internal sealed class ContextRelayHost : IDisposable
             : ContextRelayLocalizedStrings.NoActiveEditorStatus).ConfigureAwait(false);
     }
 
+    public async Task ContinueAssistantResponseAsync(string itemId, string existingText, CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(copilotConversationId))
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationUnavailableStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
+            graphClient.BaseUrl = settings.ToAuthSettings().GraphEndpoint;
+
+            var authSettings = settings.ToAuthSettings();
+            var token = await authProvider.Value
+                .GetAccessTokenAsync(authSettings, settings.ToFeatureOptions(), cancellationToken)
+                .ConfigureAwait(false);
+
+            var history = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
+            var currentItem = history.FirstOrDefault(item => string.Equals(item.Id, itemId, StringComparison.Ordinal));
+            if (currentItem is null ||
+                !currentItem.IsCopilotAssistant ||
+                !string.Equals(copilotConversationAssistantItemId, currentItem.Id, StringComparison.Ordinal))
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationUnavailableStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            // Clear the target before sending so a failed upsert cannot leave the
+            // button active against an already-advanced server conversation.
+            copilotConversationAssistantItemId = null;
+
+            var continuationResponse = await ContinueCopilotMessageAsync(
+                token.AccessToken,
+                copilotConversationId!,
+                settings.ChatStreamResponses,
+                cancellationToken).ConfigureAwait(false);
+            var continuation = continuationResponse.Text;
+            if (string.IsNullOrWhiteSpace(continuation))
+            {
+                throw new InvalidOperationException(ContextRelayLocalizedStrings.AssistantContinuationEmptyStatus);
+            }
+
+            var baseText = string.IsNullOrWhiteSpace(currentItem.Text) ? existingText : currentItem.Text;
+            var stitched = CopilotChatAdapter.StitchAssistantResponses(baseText, continuation);
+            if (string.Equals(stitched, baseText, StringComparison.Ordinal))
+            {
+                await RefreshStateCoreAsync(ContextRelayLocalizedStrings.AssistantContinuationNoNewContentStatus, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            RecordManualContinuationDiagnostics(stitched, copilotChatAdapter.LastResponseDiagnostics);
+            var continuationItem = new SharedChatHistoryItem
+            {
+                Id = currentItem.Id,
+                Role = currentItem.Role,
+                Text = stitched,
+                Timestamp = currentItem.Timestamp,
+                Metadata = new Dictionary<string, JsonElement>(currentItem.Metadata),
+                ExtensionData = new Dictionary<string, JsonElement>(currentItem.ExtensionData)
+            };
+            if (!continuationResponse.RequestState.TryRecordHistory())
+            {
+                return;
+            }
+            await sharedStore.AppendChatHistoryAsync(new[] { continuationItem }, cancellationToken).ConfigureAwait(false);
+            copilotConversationAssistantItemId = continuationItem.Id;
+            logger.LogInformation("Fetched and updated Microsoft 365 Copilot continuation.");
+            await RefreshStateCoreAsync(
+                AddCopilotIntegrityWarningIfNeeded(ContextRelayLocalizedStrings.AssistantResponseContinuedStatus),
+                GetDraftQueryText(),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ChatGenerationStoppedException)
+        {
+            logger.LogInformation("Microsoft 365 Copilot continuation was stopped by the user.");
+            await RefreshStateCoreAsync(
+                ContextRelayLocalizedStrings.ChatResponseCancelledStatus,
+                GetDraftQueryText(),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContextRelayAuthenticationException ex)
+        {
+            logger.LogError("Authentication failed while fetching Copilot continuation.", ex);
+            await RefreshStateCoreAsync(ex.Message, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError("Failed to fetch Copilot continuation.", ex);
+            await RefreshStateCoreAsync(
+                ContextRelayLocalizedStrings.GetChatResponseFailedStatus(ex.Message),
+                GetDraftQueryText(),
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public async Task OpenHandoffDocumentAsync(CancellationToken cancellationToken = default)
     {
-        var handoffPath = await EnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        var handoffContext = await TryEnsureHandoffDocPathAsync(cancellationToken).ConfigureAwait(false);
+        if (handoffContext is null)
+        {
+            await RefreshStateAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus).ConfigureAwait(false);
+            return;
+        }
+
+        var handoffPath = handoffContext.Value.GenerationResult.HandoffPath ?? handoffContext.Value.GenerationResult.PlanPath;
         await packageServices.OpenDocumentAsync(handoffPath, cancellationToken).ConfigureAwait(false);
         await RefreshStateAsync(ContextRelayLocalizedStrings.OpenedHandoffStatus).ConfigureAwait(false);
     }
@@ -524,7 +994,15 @@ internal sealed class ContextRelayHost : IDisposable
 
     public void ShowDebugLog()
     {
+        _ = ShowDebugLogAsync();
+    }
+
+    public async Task ShowDebugLogAsync(CancellationToken cancellationToken = default)
+    {
+        await SyncDebugLoggingOptionsAsync(cancellationToken).ConfigureAwait(false);
         logger.ShowDebugPane();
+        logger.LogDiagnostic("[ui] Debug log pane opened.");
+        await RefreshStateAsync(ContextRelayLocalizedStrings.DebugLogOpenedStatus).ConfigureAwait(false);
     }
 
     public void OpenExternalUrl(string? url)
@@ -557,10 +1035,12 @@ internal sealed class ContextRelayHost : IDisposable
     public void Dispose()
     {
         disposeCancellation.Cancel();
+        chatRequestStateMachine.Dispose();
         watcher.Changed -= OnSharedStoreChanged;
         workIqAdapter.Dispose();
         snippetRepository.Dispose();
         watcher.Dispose();
+        settingsWatcher?.Dispose();
         gate.Dispose();
         disposeCancellation.Dispose();
     }
@@ -654,20 +1134,24 @@ internal sealed class ContextRelayHost : IDisposable
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<string> EnsureHandoffDocPathAsync(CancellationToken cancellationToken)
+    private async Task<HandoffDocumentWriteContext?> TryEnsureHandoffDocPathAsync(CancellationToken cancellationToken)
     {
-        var result = await EnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
-        return result.HandoffPath ?? result.PlanPath;
+        return await TryEnsureHandoffDocsAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HandoffGenerationResult> EnsureHandoffDocsAsync(CancellationToken cancellationToken)
+    private async Task<HandoffDocumentWriteContext?> TryEnsureHandoffDocsAsync(CancellationToken cancellationToken)
     {
-        var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
         logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
+        var targetContext = await TryResolveCreatedFileTargetContextAsync(cancellationToken).ConfigureAwait(false);
+        if (targetContext is null)
+        {
+            logger.LogInformation("Skipped handoff generation because no target folder was selected.");
+            return null;
+        }
+
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        var fallbackRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return await handoffDocumentGenerator.GenerateAsync(
+        var result = await handoffDocumentGenerator.GenerateAsync(
             new HandoffContext
             {
                 Snippets = snippets,
@@ -676,11 +1160,13 @@ internal sealed class ContextRelayHost : IDisposable
             new HandoffGenerationOptions
             {
                 OutputDirectory = string.IsNullOrWhiteSpace(settings.OutputDirectory) ? ".contextrelay" : settings.OutputDirectory,
-                WorkspaceRoot = workspaceRoot,
-                FallbackRootDirectory = fallbackRoot,
+                WorkspaceRoot = targetContext.Value.RootDirectory,
+                FallbackRootDirectory = targetContext.Value.RootDirectory,
                 IncludeHandoffDocument = true
             },
             cancellationToken).ConfigureAwait(false);
+        await RegisterCreatedFilesAsync(result.WrittenFiles, targetContext.Value, cancellationToken).ConfigureAwait(false);
+        return new HandoffDocumentWriteContext(result, targetContext.Value);
     }
 
     private async Task AppendSearchHistoryAsync(string query, IReadOnlyList<ContextItem> results, CancellationToken cancellationToken)
@@ -696,23 +1182,431 @@ internal sealed class ContextRelayHost : IDisposable
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task AppendChatHistoryAsync(string userPrompt, string assistantReply, CancellationToken cancellationToken)
+    public async Task<ContextRelayHostState> RemovePendingAttachmentAsync(string attachmentId, CancellationToken cancellationToken = default)
     {
-        await AppendChatHistoryAsync(userPrompt, assistantReply, kind: null, contextLabels: Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (pendingAttachmentsSync)
+        {
+            pendingAttachments.RemoveAll(item => string.Equals(item.Id, attachmentId, StringComparison.Ordinal));
+        }
+        chatRequestStateMachine.RemovePendingAttachment(attachmentId);
+
+        await PublishAttachmentStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+        return state;
     }
 
-    private async Task AppendChatHistoryAsync(
+    private Task PublishAttachmentStateAsync(string statusMessage)
+    {
+        if (!chatRequestStateMachine.IsRunning)
+        {
+            return RefreshStateAsync(statusMessage);
+        }
+
+        ResolvedAttachment[] snapshot;
+        lock (pendingAttachmentsSync)
+        {
+            snapshot = pendingAttachments.Select(item => item.Clone()).ToArray();
+        }
+
+        state.StatusMessage = statusMessage;
+        state.PendingAttachments = snapshot;
+        StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state));
+        return Task.CompletedTask;
+    }
+
+    private static ResolvedAttachment ToAttachment(ResolvedFileMention file) => new()
+    {
+        AbsolutePath = file.AbsolutePath,
+        WorkspaceRoot = file.WorkspaceRoot,
+        RelativePath = file.RelativePath,
+        DisplayName = file.RelativePath
+    };
+
+    private async Task<SendAttachmentSelection> GetSendAttachmentsAsync(
+        IReadOnlyList<ResolvedFileMention> mentions,
+        ContextRelaySettingsSnapshot settings,
+        IClientContext? clientContext,
+        CancellationToken cancellationToken)
+    {
+        var maxAttachments = settings.ChatMaxAttachedFiles;
+        if (maxAttachments <= 0)
+        {
+            return new SendAttachmentSelection(Array.Empty<ResolvedAttachment>(), Array.Empty<string>());
+        }
+
+        ResolvedAttachment? activeAttachment = null;
+        IReadOnlyList<string> workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        var canonicalMentions = CanonicalizeMentions(mentions, workspaceRoots);
+        ResolvedAttachment[] pendingSnapshot;
+        PrunePendingAttachmentsFromCurrentWorkspace(workspaceRoots);
+        lock (pendingAttachmentsSync)
+        {
+            pendingSnapshot = pendingAttachments.Select(item => item.Clone()).ToArray();
+        }
+
+        var canonicalPending = pendingSnapshot;
+        if (settings.ChatAttachActiveEditor && clientContext is not null)
+        {
+            var snapshot = await packageServices.GetActiveEditorSnapshotAsync(clientContext, cancellationToken).ConfigureAwait(false);
+            if (snapshot is not null)
+            {
+                if (WorkspaceFileAttachmentResolver.TryResolve(snapshot.FilePath, workspaceRoots, out activeAttachment) &&
+                    activeAttachment is not null)
+                {
+                    activeAttachment.SelectionStartLine = snapshot.SelectionStartLine;
+                    activeAttachment.SelectionEndLine = snapshot.SelectionEndLine;
+                }
+            }
+        }
+
+        return SelectSendAttachments(canonicalMentions, canonicalPending, activeAttachment, maxAttachments);
+    }
+
+    private static IReadOnlyList<ResolvedAttachment> CanonicalizePendingAttachments(
+        IReadOnlyList<ResolvedAttachment> pending,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var canonicalPending = new List<ResolvedAttachment>(pending.Count);
+        foreach (var attachment in pending)
+        {
+            if (!WorkspaceFileAttachmentResolver.TryResolve(attachment.AbsolutePath, workspaceRoots, out var resolved) ||
+                resolved is null)
+            {
+                continue;
+            }
+
+            resolved.Id = attachment.Id;
+            resolved.DisplayName = attachment.DisplayName;
+            resolved.SelectionStartLine = attachment.SelectionStartLine;
+            resolved.SelectionEndLine = attachment.SelectionEndLine;
+            canonicalPending.Add(resolved);
+        }
+
+        return canonicalPending;
+    }
+
+    private void PrunePendingAttachmentsFromCurrentWorkspace(IReadOnlyList<string> workspaceRoots)
+    {
+        IReadOnlyList<string> prunedPendingIds;
+        lock (pendingAttachmentsSync)
+        {
+            prunedPendingIds = PrunePendingAttachments(pendingAttachments, workspaceRoots);
+        }
+
+        foreach (var attachmentId in prunedPendingIds)
+        {
+            chatRequestStateMachine.RemovePendingAttachment(attachmentId);
+        }
+    }
+
+    private static IReadOnlyList<string> PrunePendingAttachments(
+        List<ResolvedAttachment> pending,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var canonicalPending = CanonicalizePendingAttachments(pending, workspaceRoots);
+        var retainedIds = new HashSet<string>(canonicalPending.Select(item => item.Id), StringComparer.Ordinal);
+        var prunedIds = pending
+            .Where(item => !retainedIds.Contains(item.Id))
+            .Select(item => item.Id)
+            .ToArray();
+
+        pending.Clear();
+        pending.AddRange(canonicalPending);
+        return prunedIds;
+    }
+
+    private static IReadOnlyList<ResolvedFileMention> CanonicalizeMentions(
+        IReadOnlyList<ResolvedFileMention> mentions,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var canonicalMentions = new List<ResolvedFileMention>(mentions.Count);
+        foreach (var mention in mentions)
+        {
+            if (!WorkspaceFileAttachmentResolver.TryResolve(mention.AbsolutePath, workspaceRoots, out var resolved) ||
+                resolved is null)
+            {
+                continue;
+            }
+
+            canonicalMentions.Add(new ResolvedFileMention
+            {
+                AbsolutePath = resolved.AbsolutePath,
+                WorkspaceRoot = resolved.WorkspaceRoot,
+                RelativePath = resolved.RelativePath,
+                Uri = FilePathUri.FromPath(resolved.AbsolutePath)
+            });
+        }
+
+        return canonicalMentions;
+    }
+
+    private static SendAttachmentSelection SelectSendAttachments(
+        IReadOnlyList<ResolvedFileMention> mentions,
+        IReadOnlyList<ResolvedAttachment> pending,
+        ResolvedAttachment? activeAttachment,
+        int maxAttachments)
+    {
+        if (maxAttachments <= 0)
+        {
+            return new SendAttachmentSelection(Array.Empty<ResolvedAttachment>(), Array.Empty<string>());
+        }
+
+        var result = new List<ResolvedAttachment>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var mention in mentions)
+        {
+            if (result.Count >= maxAttachments)
+            {
+                break;
+            }
+
+            var attachment = ToAttachment(mention);
+            var matchingPending = pending.FirstOrDefault(item =>
+                string.Equals(item.AbsolutePath, attachment.AbsolutePath, StringComparison.OrdinalIgnoreCase));
+            if (matchingPending is not null)
+            {
+                attachment.Id = matchingPending.Id;
+            }
+
+            if (seen.Add(attachment.AbsolutePath))
+            {
+                result.Add(attachment);
+            }
+        }
+
+        foreach (var attachment in pending)
+        {
+            if (result.Count >= maxAttachments)
+            {
+                break;
+            }
+
+            if (seen.Add(attachment.AbsolutePath))
+            {
+                result.Add(attachment);
+            }
+        }
+
+        if (activeAttachment is not null &&
+            result.Count < maxAttachments &&
+            seen.Add(activeAttachment.AbsolutePath))
+        {
+            result.Add(activeAttachment);
+        }
+
+        var selectedIds = new HashSet<string>(result.Select(item => item.Id), StringComparer.Ordinal);
+        var submittedPendingIds = pending
+            .Where(item => selectedIds.Contains(item.Id))
+            .Select(item => item.Id)
+            .ToArray();
+        return new SendAttachmentSelection(result, submittedPendingIds);
+    }
+
+    private static IReadOnlyList<string> GetIncludedPendingAttachmentIds(
+        SendAttachmentSelection selection,
+        ChatContextPayload payload)
+    {
+        var includedIds = new HashSet<string>(payload.IncludedAttachmentIds, StringComparer.Ordinal);
+        return selection.SubmittedPendingIds.Where(includedIds.Contains).ToArray();
+    }
+
+    public void StopGeneration()
+    {
+        chatRequestStateMachine.Stop();
+        lock (activeChatRequestSync)
+        {
+            activeChatRequestCancellation?.Cancel();
+        }
+    }
+
+    private async Task<ActiveChatResponse> SendCopilotMessageAsync(
+        string accessToken,
+        string conversationId,
+        string message,
+        CopilotChatSendOptions options,
+        IReadOnlyList<string> submittedPendingIds,
+        CancellationToken cancellationToken)
+    {
+        return await RunActiveChatRequestAsync(
+            (requestToken, progress) => copilotChatAdapter.SendMessageAsync(
+                accessToken,
+                conversationId,
+                message,
+                options,
+                requestToken,
+                progress),
+            submittedPendingIds,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ActiveChatResponse> ContinueCopilotMessageAsync(
+        string accessToken,
+        string conversationId,
+        bool streamResponses,
+        CancellationToken cancellationToken)
+    {
+        return await RunActiveChatRequestAsync(
+            (requestToken, progress) => copilotChatAdapter.ContinueAsync(
+                accessToken,
+                conversationId,
+                requestToken,
+                progress,
+                streamResponses),
+            Array.Empty<string>(),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ActiveChatResponse> RunActiveChatRequestAsync(
+        Func<CancellationToken, IProgress<string>, Task<string>> sendAsync,
+        IReadOnlyList<string> submittedPendingIds,
+        CancellationToken cancellationToken)
+    {
+        using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            disposeCancellation.Token);
+        if (!chatRequestStateMachine.TryBegin(submittedPendingIds, requestCancellation.Token, out var requestState))
+        {
+            throw new InvalidOperationException("A chat request is already in progress.");
+        }
+        lock (activeChatRequestSync)
+        {
+            activeChatRequestCancellation = requestCancellation;
+        }
+
+        isStreaming = true;
+        streamingResponseText = string.Empty;
+        try
+        {
+            if (submittedPendingIds.Count > 0)
+            {
+                lock (pendingAttachmentsSync)
+                {
+                    if (!TryClaimPendingAttachments(pendingAttachments, submittedPendingIds))
+                    {
+                        throw new InvalidOperationException("A pending attachment was removed before the request was submitted.");
+                    }
+                }
+
+                await PublishAttachmentStateAsync(ContextRelayLocalizedStrings.ReadyStatus).ConfigureAwait(false);
+            }
+
+            PublishStreamingState();
+            var progress = new CallbackProgress(text =>
+            {
+                streamingResponseText = text ?? string.Empty;
+                PublishStreamingState();
+            });
+            var response = await sendAsync(requestState.CancellationToken, progress).ConfigureAwait(false);
+            return new ActiveChatResponse(response, requestState);
+        }
+        catch (OperationCanceledException) when (
+            !cancellationToken.IsCancellationRequested &&
+            !disposeCancellation.IsCancellationRequested &&
+            requestState.CancellationToken.IsCancellationRequested)
+        {
+            // Only a user Stop becomes a stopped-generation result. Cancellation from extension
+            // shutdown must stay an OperationCanceledException so no state refresh runs while
+            // Dispose is tearing down the store, watcher, and gate.
+            throw new ChatGenerationStoppedException();
+        }
+        finally
+        {
+            lock (activeChatRequestSync)
+            {
+                if (ReferenceEquals(activeChatRequestCancellation, requestCancellation))
+                {
+                    activeChatRequestCancellation = null;
+                }
+            }
+
+            chatRequestStateMachine.Complete(requestState);
+
+            isStreaming = false;
+            streamingResponseText = string.Empty;
+            PublishStreamingState();
+        }
+    }
+
+    private static bool TryClaimPendingAttachments(
+        List<ResolvedAttachment> pending,
+        IReadOnlyList<string> submittedPendingIds)
+    {
+        var submitted = new HashSet<string>(submittedPendingIds, StringComparer.Ordinal);
+        if (submitted.Count == 0)
+        {
+            return true;
+        }
+
+        var available = new HashSet<string>(pending.Select(item => item.Id), StringComparer.Ordinal);
+        if (!submitted.IsSubsetOf(available))
+        {
+            return false;
+        }
+
+        pending.RemoveAll(item => submitted.Contains(item.Id));
+        return true;
+    }
+
+    private void PublishStreamingState()
+    {
+        state.IsStreaming = isStreaming;
+        state.StreamingResponseText = streamingResponseText;
+        StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state, streamingOnly: true));
+    }
+
+    private static string AppendGroundingInstruction(string message, ChatContextPayload payload)
+    {
+        return payload.HasGroundingContext && !string.IsNullOrWhiteSpace(payload.GroundingInstruction)
+            ? message + "\n\n" + payload.GroundingInstruction
+            : message;
+    }
+
+    private void LogChatPayloadDiagnostics(string route, string prompt, ChatContextPayload payload)
+    {
+        var additionalContext = payload.SendOptions.AdditionalContext;
+        var contextualFiles = payload.SendOptions.ContextualResources?.Files ?? Array.Empty<CopilotContextualFileResource>();
+        logger.LogDiagnostic(
+            $"[{route}] Outbound payload summary: promptLength={prompt.Length}, labels={payload.Labels.Count}, " +
+            $"additionalContextCount={additionalContext.Count}, contextualFileCount={contextualFiles.Count}");
+        for (var index = 0; index < additionalContext.Count; index++)
+        {
+            var context = additionalContext[index];
+            logger.LogDiagnostic(
+                $"[{route}] additionalContext[{index}] description={context.Description ?? "(none)"} textChars={context.Text.Length}");
+        }
+
+        for (var index = 0; index < contextualFiles.Count; index++)
+        {
+            logger.LogDiagnostic($"[{route}] contextualResources.files[{index}] uri={contextualFiles[index].Uri}");
+        }
+    }
+
+    private async Task<string> AppendChatHistoryAsync(string userPrompt, string assistantReply, CancellationToken cancellationToken)
+    {
+        return await AppendChatHistoryAsync(userPrompt, assistantReply, kind: null, contextLabels: Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> AppendChatHistoryAsync(
         string userPrompt,
         string assistantReply,
         string? kind,
         IReadOnlyList<string> contextLabels,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChatRequestStateMachine.Request? requestState = null)
     {
+        if (requestState is not null && !requestState.TryRecordHistory())
+        {
+            return string.Empty;
+        }
+
+        var assistantItem = CreateChatItem("assistant", assistantReply, kind, contextLabels);
         await sharedStore.AppendChatHistoryAsync(new[]
         {
             CreateChatItem("user", userPrompt),
-            CreateChatItem("assistant", assistantReply, kind, contextLabels)
+            assistantItem
         }, cancellationToken).ConfigureAwait(false);
+
+        return assistantItem.Id;
     }
 
     private SharedChatHistoryItem CreateChatItem(string role, string text, string? kind = null, IReadOnlyList<string>? contextLabels = null)
@@ -738,39 +1632,123 @@ internal sealed class ContextRelayHost : IDisposable
         };
     }
 
+    private async Task<(SendAttachmentSelection Selection, ChatContextPayload Payload)> BuildSendContextAsync(
+        IReadOnlyList<ResolvedFileMention> localFiles,
+        ContextRelaySettingsSnapshot settings,
+        IClientContext? clientContext,
+        CancellationToken cancellationToken)
+    {
+        var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        logger.LogDiagnostic($"chat context sources: pinnedSnippets={snippets.Count}, localFiles={localFiles.Count}, hasSearchSummary={!string.IsNullOrWhiteSpace(lastSearchSummary)}");
+        var selection = await GetSendAttachmentsAsync(
+            localFiles,
+            settings,
+            clientContext,
+            cancellationToken).ConfigureAwait(false);
+        var payload = await ChatContextPayloadBuilder.BuildAsync(
+            selection.Attachments,
+            snippets,
+            lastSearchSummary,
+            cancellationToken).ConfigureAwait(false);
+        payload.SendOptions.StreamResponses = settings.ChatStreamResponses;
+        return (selection, payload);
+    }
+
     private async Task<ContextRelayHostState> HandleChatCommandAsync(
         string originalInput,
         string message,
         string accessToken,
+        IReadOnlyList<ResolvedFileMention> localFiles,
+        ContextRelaySettingsSnapshot settings,
+        IClientContext? clientContext,
         CancellationToken cancellationToken)
     {
-        var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        var contextPayload = ChatContextPayloadBuilder.Build(snippets, lastSearchSummary);
         var conversationId = await EnsureCopilotConversationAsync(accessToken, cancellationToken).ConfigureAwait(false);
-        var reply = await copilotChatAdapter
-            .SendMessageAsync(accessToken, conversationId, message, contextPayload.SendOptions, cancellationToken)
-            .ConfigureAwait(false);
+        copilotConversationAssistantItemId = null;
+        // Build the payload only after token acquisition and conversation creation so attachments
+        // reflect the file state at the actual send boundary.
+        var (attachmentSelection, contextPayload) = await BuildSendContextAsync(
+            localFiles,
+            settings,
+            clientContext,
+            cancellationToken).ConfigureAwait(false);
+        var requestMessage = AppendGroundingInstruction(message, contextPayload);
+        LogChatPayloadDiagnostics("chat", requestMessage, contextPayload);
+        var includedPendingIds = GetIncludedPendingAttachmentIds(attachmentSelection, contextPayload);
+        var response = await SendCopilotMessageAsync(
+            accessToken,
+            conversationId,
+            requestMessage,
+            contextPayload.SendOptions,
+            includedPendingIds,
+            cancellationToken).ConfigureAwait(false);
+        var reply = response.Text;
         if (string.IsNullOrWhiteSpace(reply))
         {
             throw new InvalidOperationException("Microsoft 365 Copilot returned an empty response.");
         }
 
-        await AppendChatHistoryAsync(message, reply, "chat", contextPayload.Labels, cancellationToken).ConfigureAwait(false);
+        var normalizedReply = NormalizeAssistantReplyForDisplay(RouteTarget.Chat, requestMessage, reply);
+        copilotConversationAssistantItemId = await AppendChatHistoryAsync(
+            message,
+            normalizedReply,
+            "chat",
+            contextPayload.Labels,
+            cancellationToken,
+            response.RequestState).ConfigureAwait(false);
         logger.LogInformation("Handled plain chat with Microsoft 365 Copilot.");
+        // Labels also cover the search summary, which is orientation rather than explicit context.
+        // Report only the attachments and pinned snippets that the payload actually included.
+        var explicitContextCount = contextPayload.IncludedAttachmentIds.Count + contextPayload.IncludedPinnedSnippetCount;
+        var chatStatus = explicitContextCount == 0
+            ? ContextRelayLocalizedStrings.ChatReplyShownStatus
+            : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(explicitContextCount);
         return await RefreshStateCoreAsync(
-            contextPayload.Labels.Count == 0
-                ? ContextRelayLocalizedStrings.ChatReplyShownStatus
-                : ContextRelayLocalizedStrings.GetChatReplyShownWithContextStatus(contextPayload.Labels.Count),
+            AddCopilotIntegrityWarningIfNeeded(chatStatus),
             originalInput,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private void RecordManualContinuationDiagnostics(string stitchedResponse, CopilotChatResponseDiagnostics continuationDiagnostics)
+    {
+        var integrity = CopilotResponseIntegrityChecker.Evaluate(stitchedResponse);
+        // A stream that was interrupted (timed out or failed mid-transfer) after yielding a
+        // valid-looking snapshot still means the response may be incomplete, even when the
+        // stitched text itself passes the integrity check. Preserve that signal instead of
+        // overwriting it with the stitched-text heuristic alone.
+        var mayBeIncomplete = continuationDiagnostics.MayBeIncomplete || integrity.IsLikelyTruncated;
+        var reason = integrity.IsLikelyTruncated ? integrity.Reason : continuationDiagnostics.TruncationReason;
+        copilotChatAdapter.SetLastResponseDiagnostics(new CopilotChatResponseDiagnostics(
+            continuationDiagnostics.MessageCount,
+            continuationDiagnostics.PartLengths,
+            stitchedResponse.Length,
+            continuationDiagnostics.ContinuationRounds,
+            continuationDiagnostics.TruncationDetected || mayBeIncomplete,
+            mayBeIncomplete,
+            reason,
+            continuationDiagnostics.StreamEventCount));
+    }
+
+    private string AddCopilotIntegrityWarningIfNeeded(string status)
+    {
+        return copilotChatAdapter.LastResponseDiagnostics.MayBeIncomplete
+            ? ContextRelayLocalizedStrings.GetCopilotResponseMayBeIncompleteStatus(status)
+            : status;
     }
 
     private async Task<ContextRelayHostState> HandleWorkIqCommandAsync(
         string originalInput,
         string query,
         ContextRelayAuthSettings authSettings,
+        ContextRelaySettingsSnapshot settings,
+        IReadOnlyList<ResolvedFileMention> localFiles,
         CancellationToken cancellationToken)
     {
+        if (localFiles.Count > 0 && !settings.AllowLocalFileContextForWorkIq)
+        {
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.WorkIqLocalFileContextDisabledStatus, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
         ContextRelayAccessToken token;
         try
         {
@@ -782,8 +1760,13 @@ internal sealed class ContextRelayHost : IDisposable
             return await RefreshStateCoreAsync(ex.Message, originalInput, cancellationToken).ConfigureAwait(false);
         }
 
+        var workIqQuery = localFiles.Count == 0
+            ? query
+            : await FileContextPromptBuilder.BuildWorkIqPromptAsync(query, localFiles, cancellationToken).ConfigureAwait(false);
+        logger.LogDiagnostic(
+            $"/workiq outbound summary: localFileCount={localFiles.Count}, queryLength={query.Length}, composedQueryLength={workIqQuery.Length}");
         var reply = await workIqAdapter
-            .SendMessageAsync(token.AccessToken, query, workIqContextId, cancellationToken: cancellationToken)
+            .SendMessageAsync(token.AccessToken, workIqQuery, workIqContextId, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(reply.Text))
         {
@@ -795,9 +1778,79 @@ internal sealed class ContextRelayHost : IDisposable
             workIqContextId = reply.ContextId;
         }
 
-        await AppendChatHistoryAsync(query, reply.Text.Trim(), "workiq", Array.Empty<string>(), cancellationToken).ConfigureAwait(false);
+        var contextLabels = localFiles.Select(file => ContextRelayLocalizedStrings.GetLocalFileContextLabel(file.RelativePath)).ToArray();
+        await AppendChatHistoryAsync(query, reply.Text.Trim(), "workiq", contextLabels, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Handled /workiq with Work IQ.");
         return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.WorkIqReplyShownStatus, originalInput, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<FilePromptContext?> ResolveFilePromptAsync(
+        string rawPrompt,
+        string fallbackPrompt,
+        string originalInput,
+        int maxFileMentions,
+        CancellationToken cancellationToken)
+    {
+        var candidates = FileMentionResolver.ExtractCandidates(rawPrompt);
+        if (candidates.Count == 0)
+        {
+            logger.LogDiagnostic("No #file mention candidates detected in prompt.");
+            return new FilePromptContext(fallbackPrompt, Array.Empty<ResolvedFileMention>());
+        }
+
+        logger.LogDiagnostic($"Detected {candidates.Count} #file mention candidate(s): {string.Join(", ", candidates.Select(candidate => candidate.RawPath))}");
+        var workspaceRoots = await packageServices.GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        logger.LogDiagnostic(
+            $"Workspace roots for mention resolution: count={workspaceRoots.Count}, values={string.Join(" | ", workspaceRoots.Take(5))}" +
+            (workspaceRoots.Count > 5 ? " | ..." : string.Empty));
+        var resolution = FileMentionResolver.Resolve(rawPrompt, workspaceRoots, maxFileMentions);
+        logger.LogDiagnostic(
+            $"Mention resolution result: localFiles={resolution.Files.Count}, errors={resolution.Errors.Count}, cleanedPromptLength={resolution.CleanedPrompt.Length}");
+        if (resolution.Errors.Count > 0)
+        {
+            foreach (var error in resolution.Errors)
+            {
+                logger.LogDiagnostic($"Mention resolution error: code={error.Code}, detail={error.Detail}");
+            }
+
+            return await RefreshFilePromptErrorAsync(
+                GetFileMentionResolutionErrorMessage(resolution.Errors[0], maxFileMentions),
+                originalInput,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (string.IsNullOrWhiteSpace(resolution.CleanedPrompt))
+        {
+            logger.LogDiagnostic("Mention resolution produced an empty prompt after removing #file mentions.");
+            return await RefreshFilePromptErrorAsync(ContextRelayLocalizedStrings.FileMentionPromptEmptyStatus, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (resolution.Files.Count > 0)
+        {
+            logger.LogDiagnostic($"Resolved local files: {string.Join(", ", resolution.Files.Select(file => file.RelativePath))}");
+        }
+
+        return new FilePromptContext(resolution.CleanedPrompt, resolution.Files);
+    }
+
+    private async Task<FilePromptContext?> RefreshFilePromptErrorAsync(string message, string originalInput, CancellationToken cancellationToken)
+    {
+        await RefreshStateCoreAsync(message, originalInput, cancellationToken).ConfigureAwait(false);
+        return null;
+    }
+
+    private static string GetFileMentionResolutionErrorMessage(FileMentionResolutionError error, int maxFileMentions)
+    {
+        return error.Code switch
+        {
+            FileMentionErrorCode.WorkspaceUnavailable => ContextRelayLocalizedStrings.FileMentionWorkspaceUnavailableStatus,
+            FileMentionErrorCode.MentionLimitReached => ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(maxFileMentions),
+            FileMentionErrorCode.NotFound => ContextRelayLocalizedStrings.GetFileMentionNotFoundStatus(error.Detail ?? string.Empty),
+            FileMentionErrorCode.OutsideWorkspace => ContextRelayLocalizedStrings.GetFileMentionOutsideWorkspaceStatus(error.Detail ?? string.Empty),
+            FileMentionErrorCode.AmbiguousPath => ContextRelayLocalizedStrings.GetFileMentionAmbiguousStatus(error.Detail ?? string.Empty),
+            FileMentionErrorCode.UnsupportedFileType => ContextRelayLocalizedStrings.GetFileMentionUnsupportedFileTypeStatus(error.Detail ?? string.Empty),
+            _ => ContextRelayLocalizedStrings.FileMentionWorkspaceUnavailableStatus
+        };
     }
 
     private async Task<string> EnsureCopilotConversationAsync(string accessToken, CancellationToken cancellationToken)
@@ -817,12 +1870,20 @@ internal sealed class ContextRelayHost : IDisposable
         ContextRelaySettingsSnapshot settings,
         CancellationToken cancellationToken)
     {
-        var outputDirectory = await ResolveOutputDirectoryAsync(settings, cancellationToken).ConfigureAwait(false);
+        var targetContext = await TryResolveCreatedFileTargetContextAsync(cancellationToken).ConfigureAwait(false);
+        if (targetContext is null)
+        {
+            await RefreshStateAsync(ContextRelayLocalizedStrings.CreatedFilesFolderSelectionCanceledStatus).ConfigureAwait(false);
+            return;
+        }
+
+        var outputDirectory = ResolveOutputDirectory(settings, targetContext.Value.RootDirectory);
         Directory.CreateDirectory(outputDirectory);
         var fileExtension = AskPreviewLanguageDetector.GetFileExtension(previewDocument.LanguageId);
         var fileName = ContextRelayLocalizedStrings.GetAskPreviewDocumentTitle(query, fileExtension);
         var filePath = Path.Combine(outputDirectory, fileName);
         await WriteAllTextAsync(filePath, previewDocument.Content, cancellationToken).ConfigureAwait(false);
+        await RegisterCreatedFilesAsync(new[] { filePath }, targetContext.Value, cancellationToken).ConfigureAwait(false);
         await packageServices.OpenDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }
 
@@ -831,7 +1892,7 @@ internal sealed class ContextRelayHost : IDisposable
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            await RefreshStateCoreAsync(statusMessage, state.QueryText, CancellationToken.None).ConfigureAwait(false);
+            await RefreshStateCoreAsync(statusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
         }
         finally
         {
@@ -841,10 +1902,18 @@ internal sealed class ContextRelayHost : IDisposable
 
     private async Task<ContextRelayHostState> RefreshStateCoreAsync(string statusMessage, string queryText, CancellationToken cancellationToken)
     {
+        UpdateDraftQueryText(queryText);
         var chatHistory = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
         var snippets = await snippetRepository.GetAllAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
+        var workspaceFiles = await packageServices.GetWorkspaceFilesAsync(cancellationToken).ConfigureAwait(false);
         var handoffIndex = await sharedStore.GetHandoffIndexAsync(cancellationToken).ConfigureAwait(false);
+        var effectiveQueryText = GetDraftQueryText();
+        ResolvedAttachment[] pendingAttachmentSnapshot;
+        lock (pendingAttachmentsSync)
+        {
+            pendingAttachmentSnapshot = pendingAttachments.Select(item => item.Clone()).ToArray();
+        }
 
         string? signedInUser = state.SignedInUser;
         if (shouldResolveSignedInUser)
@@ -853,20 +1922,46 @@ internal sealed class ContextRelayHost : IDisposable
             signedInUser = await TryGetSignedInUserAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (lastSearchRoute is not null)
+        {
+            // Every state publish rebuilds the summary from the cached route/results (always consistent
+            // with each other here, since both are only ever mutated together while gate is held, the same
+            // as this read). This keeps it cheap to reason about correctness-wise — it is always current —
+            // at the cost of some redundant recomputation on state changes unrelated to language, and it is
+            // what makes the summary follow a UI language change regardless of which caller (automatic
+            // refresh, an explicit English/Japanese choice, or an Options save reaching an open tool
+            // window) triggered this publish.
+            lastSearchSummary = BuildSearchSummary(lastSearchRoute, currentSearchResults);
+        }
+
         state = new ContextRelayHostState
         {
-            QueryText = queryText,
-            HelpText = ContextRelayLocalizedStrings.GetHelpTextForQuery(queryText),
+            QueryText = effectiveQueryText,
+            HelpText = ContextRelayLocalizedStrings.GetHelpTextForQuery(effectiveQueryText),
             StatusMessage = statusMessage,
             SignedInUser = signedInUser,
             LastHandoffPath = ResolveHandoffPath(workspaceRoot, handoffIndex),
             SearchResults = currentSearchResults,
             Snippets = snippets,
-            ChatHistory = chatHistory
+            ChatHistory = chatHistory,
+            ContinuableCopilotAssistantItemId = copilotConversationAssistantItemId,
+            SearchSummary = lastSearchSummary ?? string.Empty,
+            WorkspaceFiles = workspaceFiles,
+            IsStreaming = isStreaming,
+            StreamingResponseText = streamingResponseText,
+            PendingAttachments = pendingAttachmentSnapshot
         };
 
         StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state));
         return state;
+    }
+
+    private string GetDraftQueryText()
+    {
+        lock (draftQuerySync)
+        {
+            return draftQueryText;
+        }
     }
 
     private async Task<string?> TryGetSignedInUserAsync(CancellationToken cancellationToken)
@@ -889,6 +1984,12 @@ internal sealed class ContextRelayHost : IDisposable
         }
     }
 
+    private async Task SyncDebugLoggingOptionsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
+    }
+
     private static IReadOnlyList<ContextSource> GetEnabledSources(SlashCommandParseResult route, ContextRelaySettingsSnapshot settings)
     {
         var sources = new List<ContextSource>();
@@ -900,12 +2001,23 @@ internal sealed class ContextRelayHost : IDisposable
             }
         }
 
-        if (route.Target == RouteTarget.All && settings.ConnectorsEnabled)
+        if (route.SearchScope == SearchScope.All && settings.ConnectorsEnabled)
         {
             sources.Add(ContextSource.Connectors);
         }
 
         return sources;
+    }
+
+    private static string NormalizeAssistantReplyForDisplay(RouteTarget routeTarget, string prompt, string reply)
+    {
+        if (routeTarget is not (RouteTarget.Chat or RouteTarget.Ask))
+        {
+            return reply.Trim();
+        }
+
+        var previewDocument = AskPreviewLanguageDetector.Detect(prompt, reply);
+        return previewDocument.Content.Trim();
     }
 
     private static bool IsEnabled(ContextSource source, ContextRelaySettingsSnapshot settings)
@@ -926,12 +2038,51 @@ internal sealed class ContextRelayHost : IDisposable
 
     private static string BuildSearchSummary(SlashCommandParseResult route, IReadOnlyList<ContextItem> results)
     {
-        if (results.Count == 0)
+        var lines = new List<string>
         {
-            return $"No results found for '{route.Query}'.";
+            ContextRelayLocalizedStrings.GetSearchSummaryLatestQuery(route.Query),
+            string.Empty
+        };
+
+        if (route.SourceCommandNames.Count > 0)
+        {
+            var requestedSources = route.SourceCommandNames
+                .Select(commandName => commandName.TrimStart('/'))
+                .Select(SourcePresentation.GetSourceLabel)
+                .ToArray();
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryRequestedSources(string.Join(", ", requestedSources)));
+            lines.Add(string.Empty);
         }
 
-        return $"Query '{route.Query}' returned {results.Count} result(s): {string.Join(", ", results.Take(5).Select(item => item.Title))}.";
+        if (results.Count == 0)
+        {
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryNoResultsBullet);
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryTotalResults(results.Count));
+        lines.Add(string.Empty);
+
+        foreach (var group in results.GroupBy(item => item.Source.ToString(), StringComparer.OrdinalIgnoreCase))
+        {
+            var titles = group
+                .Take(3)
+                .Select(item => string.IsNullOrWhiteSpace(item.Title) ? ContextRelayLocalizedStrings.GetSearchSummaryUntitled : item.Title)
+                .ToArray();
+            var cacheSummary = group.Any(item => item.Cache?.Hit == true)
+                ? ContextRelayLocalizedStrings.GetSearchSummaryCachedSuffix
+                : string.Empty;
+            var titleSummary = titles.Length > 0
+                ? ContextRelayLocalizedStrings.GetSearchSummaryTopItems(string.Join("; ", titles))
+                : string.Empty;
+            lines.Add(ContextRelayLocalizedStrings.GetSearchSummarySourceLine(
+                SourcePresentation.GetSourceLabel(group.Key),
+                group.Count(),
+                cacheSummary,
+                titleSummary));
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static string BuildHandoffPrompt(string handoffPath)
@@ -1034,19 +2185,82 @@ internal sealed class ContextRelayHost : IDisposable
         await RefreshStateAsync(statusMessage).ConfigureAwait(false);
     }
 
-    private async Task<string> ResolveOutputDirectoryAsync(ContextRelaySettingsSnapshot settings, CancellationToken cancellationToken)
+    private static string ResolveOutputDirectory(ContextRelaySettingsSnapshot settings, string rootDirectory)
     {
-        var workspaceRoot = await packageServices.GetSolutionRootAsync(cancellationToken).ConfigureAwait(false);
         var outputDirectory = string.IsNullOrWhiteSpace(settings.OutputDirectory) ? ".contextrelay" : settings.OutputDirectory;
         if (Path.IsPathRooted(outputDirectory))
         {
             return Path.GetFullPath(outputDirectory);
         }
 
-        var baseDirectory = !string.IsNullOrWhiteSpace(workspaceRoot)
-            ? workspaceRoot
-            : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.GetFullPath(Path.Combine(baseDirectory!, outputDirectory));
+        return Path.GetFullPath(Path.Combine(rootDirectory, outputDirectory));
+    }
+
+    private async Task RegisterCreatedFilesAsync(
+        IReadOnlyList<string> filePaths,
+        CreatedFileTargetContext targetContext,
+        CancellationToken cancellationToken)
+    {
+        if (filePaths.Count == 0)
+        {
+            return;
+        }
+
+        if (!targetContext.ShouldAddToSolutionExplorer)
+        {
+            return;
+        }
+
+        var addedCount = await packageServices.TryAddFilesToSolutionAsync(filePaths, cancellationToken).ConfigureAwait(false);
+        if (addedCount > 0)
+        {
+            logger.LogInformation($"Added {addedCount} ContextRelay-created file(s) to Solution Explorer.");
+            return;
+        }
+
+        logger.LogInformation(
+            "ContextRelay created files on disk, but automatic Solution Explorer registration is not available in the current workspace.");
+    }
+
+    private async Task<CreatedFileTargetContext?> TryResolveCreatedFileTargetContextAsync(CancellationToken cancellationToken)
+    {
+        var initialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var targetContext = await ResolveCreatedFileTargetContextAsync(
+            packageServices.GetSolutionRootAsync,
+            packageServices.PickWorkspaceFolderAsync,
+            initialDirectory,
+            cancellationToken).ConfigureAwait(false);
+        if (targetContext is { FolderWasSelected: true } selectedTarget)
+        {
+            logger.LogInformation($"Selected '{selectedTarget.RootDirectory}' as the target folder for ContextRelay-created files.");
+        }
+
+        return targetContext;
+    }
+
+    private static async Task<CreatedFileTargetContext?> ResolveCreatedFileTargetContextAsync(
+        Func<CancellationToken, Task<string?>> getSolutionRootAsync,
+        Func<string?, CancellationToken, Task<string?>> pickFolderAsync,
+        string? initialDirectory,
+        CancellationToken cancellationToken)
+    {
+        var workspaceRoot = await getSolutionRootAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            var fullRoot = Path.GetFullPath(workspaceRoot);
+            if (Directory.Exists(fullRoot))
+            {
+                return new CreatedFileTargetContext(fullRoot, ShouldAddToSolutionExplorer: true, FolderWasSelected: false);
+            }
+        }
+
+        var selectedFolder = await pickFolderAsync(initialDirectory, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(selectedFolder))
+        {
+            return null;
+        }
+
+        return new CreatedFileTargetContext(Path.GetFullPath(selectedFolder), ShouldAddToSolutionExplorer: false, FolderWasSelected: true);
     }
 
     private static string FormatContextItemForClipboard(ContextItem item)
@@ -1463,6 +2677,158 @@ internal sealed class ContextRelayHost : IDisposable
         return Path.Combine(workspaceRoot, ".vs", "ContextRelay", "cache.json");
     }
 
+    private static FileSelectionQueryUpdate MergeSelectedFilesIntoQuery(
+        string currentQuery,
+        IReadOnlyList<string> selectedFiles,
+        IReadOnlyList<string> workspaceRoots)
+    {
+        var existingCandidates = FileMentionResolver.ExtractCandidates(currentQuery);
+        var remainingCapacity = FileMentionResolver.MaxFileMentions - existingCandidates.Count;
+        if (remainingCapacity <= 0)
+        {
+            return new FileSelectionQueryUpdate(
+                currentQuery,
+                ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(FileMentionResolver.MaxFileMentions));
+        }
+
+        var normalizedSelections = selectedFiles
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var normalizedWorkspaceRoots = workspaceRoots
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedWorkspaceRoots.Length == 0 && normalizedSelections.Length > 0)
+        {
+            normalizedWorkspaceRoots = normalizedSelections
+                .Select(path => WorkspaceRootInference.InferWorkspaceRootFromPath(path))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(path!))
+                .Where(Directory.Exists)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        if (normalizedWorkspaceRoots.Length == 0)
+        {
+            return new FileSelectionQueryUpdate(currentQuery, ContextRelayLocalizedStrings.FilePickerWorkspaceUnavailableStatus);
+        }
+
+        var existingMentionPaths = new HashSet<string>(
+            existingCandidates.Select(candidate => NormalizeComparablePath(candidate.RawPath)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var mentionTokens = new List<string>();
+        var skippedCount = 0;
+        foreach (var selectedPath in normalizedSelections)
+        {
+            if (mentionTokens.Count >= remainingCapacity)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            if (!CopilotSupportedFilePolicy.IsSupported(selectedPath))
+            {
+                skippedCount++;
+                continue;
+            }
+
+            var workspaceRoot = normalizedWorkspaceRoots
+                .Where(root => IsPathWithinRoot(selectedPath, root))
+                .OrderByDescending(root => root.Length)
+                .FirstOrDefault();
+            if (workspaceRoot is null)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            var relativePath = GetRelativeWorkspacePath(workspaceRoot, selectedPath);
+            var comparablePath = NormalizeComparablePath(relativePath);
+            if (!existingMentionPaths.Add(comparablePath))
+            {
+                skippedCount++;
+                continue;
+            }
+
+            mentionTokens.Add(BuildMentionToken(relativePath));
+        }
+
+        if (mentionTokens.Count == 0)
+        {
+            if (normalizedSelections.Length > 0 && existingCandidates.Count >= FileMentionResolver.MaxFileMentions)
+            {
+                return new FileSelectionQueryUpdate(
+                    currentQuery,
+                    ContextRelayLocalizedStrings.GetFilePickerMentionLimitReachedStatus(FileMentionResolver.MaxFileMentions));
+            }
+
+            return new FileSelectionQueryUpdate(currentQuery, ContextRelayLocalizedStrings.FilePickerNoWorkspaceFilesSelectedStatus);
+        }
+
+        var updatedQuery = AppendMentionTokens(currentQuery, mentionTokens);
+        var status = skippedCount > 0
+            ? ContextRelayLocalizedStrings.GetFilePickerFilesAddedPartialStatus(mentionTokens.Count, skippedCount)
+            : ContextRelayLocalizedStrings.GetFilePickerFilesAddedStatus(mentionTokens.Count);
+        return new FileSelectionQueryUpdate(updatedQuery, status);
+    }
+
+    private static bool IsPathWithinRoot(string path, string root)
+    {
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedPath = Path.GetFullPath(path);
+        if (string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
+        return normalizedPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRelativeWorkspacePath(string workspaceRoot, string absolutePath)
+    {
+        var normalizedRoot = workspaceRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var rootWithSeparator = normalizedRoot + Path.DirectorySeparatorChar;
+        var relative = absolutePath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
+            ? absolutePath.Substring(rootWithSeparator.Length)
+            : Path.GetFileName(absolutePath);
+        return relative.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+    }
+
+    private static string BuildMentionToken(string relativePath)
+    {
+        var normalizedPath = relativePath.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+        var requiresQuotes = normalizedPath.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '#' }) >= 0;
+        return requiresQuotes
+            ? $"#\"{normalizedPath}\""
+            : $"#{normalizedPath}";
+    }
+
+    private static string AppendMentionTokens(string currentQuery, IReadOnlyList<string> mentionTokens)
+    {
+        var separator = string.IsNullOrWhiteSpace(currentQuery) || char.IsWhiteSpace(currentQuery[currentQuery.Length - 1])
+            ? string.Empty
+            : " ";
+        return string.IsNullOrWhiteSpace(currentQuery)
+            ? string.Join(" ", mentionTokens)
+            : currentQuery + separator + string.Join(" ", mentionTokens);
+    }
+
+    private static string NormalizeComparablePath(string path)
+    {
+        return (path ?? string.Empty)
+            .Trim()
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+    }
+
     private void OnSharedStoreChanged(object? sender, SharedStoreChangedEventArgs e)
     {
         if (e.FileKind != SharedStoreFileKind.ChatHistory &&
@@ -1513,6 +2879,32 @@ internal sealed class ContextRelayHost : IDisposable
         public ContextItem Item { get; }
 
         public bool FellBackToExcerpt { get; }
+    }
+
+    private sealed class FilePromptContext
+    {
+        public FilePromptContext(string prompt, IReadOnlyList<ResolvedFileMention> files)
+        {
+            Prompt = prompt;
+            Files = files;
+        }
+
+        public string Prompt { get; }
+
+        public IReadOnlyList<ResolvedFileMention> Files { get; }
+    }
+
+    private sealed class FileSelectionQueryUpdate
+    {
+        public FileSelectionQueryUpdate(string queryText, string statusMessage)
+        {
+            QueryText = queryText;
+            StatusMessage = statusMessage;
+        }
+
+        public string QueryText { get; }
+
+        public string StatusMessage { get; }
     }
 
     private enum DriveContentMode

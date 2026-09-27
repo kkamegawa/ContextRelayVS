@@ -19,18 +19,48 @@ Use this checklist against a Visual Studio Experimental Instance before publishi
 ## Commands and menus
 
 1. Open **Tools** and confirm every ContextRelay command is present.
-2. Run **ContextRelay** and **Search Microsoft 365** and confirm the tool window opens.
-3. Run **Clear Chat**, **Clear Cache**, **Clear Snippets**, **Generate Handoff Docs**, **Open Handoff Doc**, **Copy Handoff Prompt**, and **Show Debug Log**.
-4. Confirm the commands do not throw and update UI state as expected.
+2. Confirm the **Tools > ContextRelay** menu and every command in it show readable names, never a raw `%ContextRelay.*%` token. With the Visual Studio UI language set to English the names are English; with the Japanese language pack installed and selected (**Tools > Options > Environment > International Settings**) they are Japanese, for example チャットにファイルを添付 and キャッシュをクリア. The name follows the Visual Studio language, not the operating system language, and any other language shows English. A raw token means Visual Studio did not resolve the metadata on that channel; record the Visual Studio version and channel.
+
+### Automatic language selection
+
+3. In **Tools > Options > Environment > International Settings**, set the Visual Studio display language to English while the Windows and extension process UI cultures are Japanese. Set ContextRelay **UI language** to `auto`, restart Visual Studio, and confirm the initial tool-window labels, status, help text, result labels, and Options labels are English.
+4. Repeat with the Visual Studio display language set to Japanese while the Windows and extension process UI cultures are English. With `auto`, restart Visual Studio and confirm the same surfaces are Japanese.
+5. Set Visual Studio to an installed but unsupported language, or simulate an unavailable host-locale response in the Experimental Instance. With `auto`, confirm every ContextRelay surface falls back to English and no raw resource key is shown.
+6. Select `en` explicitly while Visual Studio is Japanese and confirm the tool window and Options labels remain English. Select `ja` explicitly while Visual Studio is English and confirm they remain Japanese. Change between `auto`, `en`, and `ja` without restarting and confirm the currently open tool window refreshes immediately; restart once more and confirm the persisted explicit choice is restored.
+7. Run **ContextRelay** and **Search Microsoft 365** and confirm the tool window opens.
+8. Run **Clear Chat**, **Clear Cache**, **Clear Snippets**, **Generate Handoff Docs**, **Open Handoff Doc**, **Copy Handoff Prompt**, and **Show Debug Log**.
+9. Confirm the commands do not throw and update UI state as expected.
 
 ## Theme and visual consistency
 
-1. Switch Visual Studio themes (Light, Dark, Blue).
-2. Confirm ContextRelay buttons use the same visual style as native Visual Studio buttons, including hover, pressed, and disabled states.
-3. Confirm list controls, text box, tab headers, and border lines use Visual Studio theme colors and do not fall back to default WPF white backgrounds in Dark theme.
-4. Confirm no custom button/background color appears, and no button surface visually merges into the tool window background.
+1. Repeat this section on Visual Studio 2022 and Visual Studio 2026 / Insider with the Light, Dark, Blue, and High Contrast themes.
+2. Confirm the tool window background, panel surfaces, cards, list items, text, and borders use Visual Studio theme resources without default WPF white or black surfaces.
+3. Confirm neutral buttons show distinct rest, pointer-over, pressed, keyboard-focus, and disabled states while the composer's primary button is the only primary action. That one button reads **Send** (送信) while idle and **Stop** (停止) while a response is generating.
+4. Use Tab and Shift+Tab to reach each regular action button, then activate it with Enter and Space. Confirm slash-command suggestion items remain outside the Tab order and continue to follow the query input keyboard behavior. With the suggestion popup closed, confirm Tab moves focus out of the query box to the primary button, including while a response is generating; with the popup open, confirm Tab still applies the selected suggestion.
+5. Confirm every focus indicator is visible in Light, Dark, Blue, and High Contrast themes and is not communicated by color alone.
+6. Select query text by mouse drag, Shift+Arrow, and Ctrl+A. Confirm the selection foreground and background remain readable, and confirm the caret stays visible when the selection is collapsed.
+7. Hover and select chat, search-result, snippet, and suggestion rows. For slash-command suggestions, move the pointer outside the popup and press `Up` and `Down` repeatedly. Confirm the active row has a visible full-row highlight, its foreground remains readable, and the highlight follows the selected item when a list contains more items than the visible viewport.
+8. Change the Visual Studio theme while the tool window remains open. Confirm every surface and interaction state updates without reopening the window.
+9. Narrow the tool window until action rows wrap. Confirm buttons keep consistent height and spacing and no content overlaps or clips.
+10. Populate a long chat history and scroll through it. Confirm pixel scrolling remains smooth and existing chat rendering behavior is unchanged.
 
 ## Search and shared state
+
+### Chat options and `/ask` parity (Issue #184)
+
+1. Open **Tools > Options > ContextRelay > General** and confirm the `Chat` category contains **Maximum attached files** (default `5`), **Attach active editor** (default disabled), and **Stream chat responses** (default enabled).
+2. Set the maximum to `0`, reload the Options page, and confirm the value remains non-negative and file attachments are disabled. Restore it to `5`.
+3. Enable **Attach active editor** with a saved supported file open, then send `/ask` with no pinned snippet. Confirm the active editor is used as explicit context; with no eligible active editor, confirm `/ask` is rejected without an API request.
+4. Click the **+** (attach file) button, select a supported workspace file, and confirm a pending attachment chip appears. Remove the chip and confirm it is no longer included in the next request.
+5. Add pending local files and pinned snippets, send `/ask`, and confirm the request uses the bounded attachment set and the response displays the context labels.
+6. Start a chat request with **Stream chat responses** enabled and confirm the response text is updated incrementally while the request is in progress, rather than appearing only after completion.
+7. While a request is generating, confirm the primary button's label changes to **Stop** without moving or resizing, that keyboard focus stays on it when the change happens so Enter and Space stop the request, and that the streaming text uses the tool window foreground color in every theme. Add another attachment, stop the request with **Stop**, then start a new chat request and confirm the attachment added during generation is still present and is included in that next request.
+8. After stopping a request, send a fresh query and confirm it succeeds; no automatic continuation request is made after the stop.
+9. Toggle **Stream chat responses** and confirm both settings persist in `%AppData%\ContextRelay\settings.json`; verify an existing JSON file with none of the three properties loads with defaults `5`, disabled, and enabled.
+10. Open **Tools > ContextRelay > Attach File to Chat**, select a supported workspace file, and confirm it produces the same pending attachment chip as the **+** button in the tool window.
+11. Send a plain chat message (no slash command) with one attachment and ask for information the attached file does not contain. Confirm the reply is built from the attached material and states that the attached context is not sufficient, instead of answering from web results. Then send a plain chat message with no attachment, no pinned snippet, and active-editor attachment disabled, and confirm it still returns an answer.
+
+### Core chat and shared state
 
 1. Sign in with a valid Entra ID work/school account.
 2. Run plain text such as `Summarize my current planning context`, then run `/mail test`, `/teams test`, `/sharepoint test`, `/onedrive test`, `/all test`, `/ask summarize`, `/workiq What meetings do I have today?`, and `/clear`.

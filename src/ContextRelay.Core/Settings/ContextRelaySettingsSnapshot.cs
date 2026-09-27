@@ -1,3 +1,4 @@
+﻿using System;
 using ContextRelay.Core.Auth;
 
 namespace ContextRelay.Core.Settings;
@@ -7,6 +8,8 @@ namespace ContextRelay.Core.Settings;
 /// </summary>
 public sealed class ContextRelaySettingsSnapshot
 {
+    private int chatMaxAttachedFiles = 5;
+
     /// <summary>
     /// Gets or sets the maximum number of search results returned for a query.
     /// </summary>
@@ -23,6 +26,25 @@ public sealed class ContextRelaySettingsSnapshot
     public bool EnableChatPreview { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the maximum number of files that can be attached to a chat request.
+    /// </summary>
+    public int ChatMaxAttachedFiles
+    {
+        get => chatMaxAttachedFiles;
+        set => chatMaxAttachedFiles = Math.Max(0, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the active editor is attached to chat requests.
+    /// </summary>
+    public bool ChatAttachActiveEditor { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether chat responses are streamed as they arrive.
+    /// </summary>
+    public bool ChatStreamResponses { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the preferred UI language.
     /// </summary>
     public string UiLanguage { get; set; } = "auto";
@@ -36,6 +58,11 @@ public sealed class ContextRelaySettingsSnapshot
     /// Gets or sets a value indicating whether Work IQ debug logging is enabled.
     /// </summary>
     public bool EnableWorkIqDebugLogging { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether local file content can be sent to Work IQ.
+    /// </summary>
+    public bool AllowLocalFileContextForWorkIq { get; set; }
 
     /// <summary>
     /// Gets or sets the Microsoft Entra application client ID.

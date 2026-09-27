@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using ContextRelay.Core.Models;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.VSExtension.ToolWindows;
 
@@ -23,4 +24,16 @@ internal sealed class ContextRelayHostState
     public IReadOnlyList<SharedSnippetItem> Snippets { get; set; } = Array.Empty<SharedSnippetItem>();
 
     public IReadOnlyList<SharedChatHistoryItem> ChatHistory { get; set; } = Array.Empty<SharedChatHistoryItem>();
+
+    public string? ContinuableCopilotAssistantItemId { get; set; }
+
+    public string SearchSummary { get; set; } = string.Empty;
+
+    public IReadOnlyList<string> WorkspaceFiles { get; set; } = Array.Empty<string>();
+
+    public bool IsStreaming { get; set; }
+
+    public string StreamingResponseText { get; set; } = string.Empty;
+
+    public IReadOnlyList<ResolvedAttachment> PendingAttachments { get; set; } = Array.Empty<ResolvedAttachment>();
 }

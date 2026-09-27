@@ -1,6 +1,7 @@
 ﻿{
   "ContextRelay.Menu.DisplayName": "ContextRelay",
   "ContextRelay.Menu.Language.DisplayName": "Language",
+  "ContextRelay.Command.AttachFileToChat.DisplayName": "Attach File to Chat",
   "ContextRelay.Command.ClearCache.DisplayName": "Clear Cache",
   "ContextRelay.Command.ClearChat.DisplayName": "Clear Chat",
   "ContextRelay.Command.ClearSnippets.DisplayName": "Clear Snippets",

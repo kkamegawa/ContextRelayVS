@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -23,11 +23,15 @@ public sealed class SharedChatHistoryItem
     [JsonIgnore]
     public bool IsActionableAssistant =>
         string.Equals(Role, "assistant", System.StringComparison.OrdinalIgnoreCase) &&
-        Metadata.TryGetValue("kind", out var kind) &&
-        kind.ValueKind == JsonValueKind.String &&
-        (string.Equals(kind.GetString(), "chat", System.StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(kind.GetString(), "ask", System.StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(kind.GetString(), "workiq", System.StringComparison.OrdinalIgnoreCase));
+        IsKnownAssistantKind("chat", "ask", "workiq");
+
+    [JsonIgnore]
+    public bool IsCopilotAssistant =>
+        string.Equals(Role, "assistant", System.StringComparison.OrdinalIgnoreCase) &&
+        IsKnownAssistantKind("chat", "ask");
+
+    [JsonIgnore]
+    public string? Kind => GetKind();
 
     [JsonIgnore]
     public IReadOnlyList<string> ContextLabels => GetContextLabels();
@@ -37,6 +41,22 @@ public sealed class SharedChatHistoryItem
 
     [JsonIgnore]
     public string ContextLabelsJoinedDisplay => string.Join(", ", ContextLabels);
+
+    private bool IsKnownAssistantKind(params string[] knownKinds)
+    {
+        var kind = GetKind();
+        return knownKinds.Any(knownKind => string.Equals(kind, knownKind, System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string? GetKind()
+    {
+        return
+        Metadata.TryGetValue("kind", out var kind) &&
+        kind.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(kind.GetString())
+                ? kind.GetString()
+                : null;
+    }
 
     private string[] GetContextLabels()
     {

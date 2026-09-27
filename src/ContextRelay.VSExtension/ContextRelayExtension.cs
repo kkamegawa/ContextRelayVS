@@ -18,9 +18,11 @@ internal sealed class ContextRelayExtension : Extension
         // to activate the net8 main extension in-process reintroduces the System.Runtime
         // load failure seen in the ActivityLog.
         Metadata = new(
-            id: "ContextRelayVS.kkamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
+            // Keep this corrected extension identity stable going forward so Visual Studio
+            // upgrades in-place and restores existing tool window frames.
+            id: "ContextRelayVS.KazushiKamegawa.d0dd4dd5-7d88-4b80-8d4d-9dd18fa4cf11",
             version: ExtensionAssemblyVersion,
-            publisherName: "KazushiKamegawa",
+            publisherName: "kkamegawa",
             displayName: "ContextRelay for Visual Studio",
             description: "Surface Microsoft 365 context in a Visual Studio tool window."),
     };
@@ -29,6 +31,7 @@ internal sealed class ContextRelayExtension : Extension
     {
         base.InitializeServices(serviceCollection);
         serviceCollection.AddSingleton<ContextRelaySettingsService>();
+        serviceCollection.AddSingleton<VisualStudioUiLanguageProvider>();
         serviceCollection.AddSingleton<ContextRelayOutputLogger>();
         serviceCollection.AddSingleton<IContextRelayPackageServices, ContextRelayVsServices>();
         serviceCollection.AddSingleton<ContextRelayHost>();

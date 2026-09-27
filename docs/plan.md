@@ -1,4 +1,4 @@
-﻿_See the session plan at the project root (`plan.md` snapshot)._
+_See the session plan at the project root (`plan.md` snapshot)._
 
 This file mirrors the design plan stored during planning so that downstream work can reference it from the repository. Keep it in sync with session notes when major decisions change.
 
@@ -77,7 +77,7 @@ ContextRelayVS/
 
 ## 6. Graph calls
 
-- `Microsoft.Graph` v5 for REST SDK. `Microsoft.Graph.Beta` for `/beta` (Chat, Retrieval where needed).
+- `Microsoft.Graph` v6 for REST SDK. `Microsoft.Graph.Beta` for `/beta` (Chat, Retrieval where needed).
 - Retrieval API (`POST /v1.0/copilot/retrieval`) and Chat API (`/beta/copilot/conversations`) called directly via `HttpClient`.
 
 ## 7. Commands (.vsct)
@@ -106,7 +106,22 @@ Registered by an in-proc VSSDK `AsyncPackage` and persisted to the shared JSON s
 
 - **Integrated page**: one `ContextRelay > General` property grid that contains General, Authentication, Diagnostics, Caching, and Feature toggles.
 - **Shared persistence**: the in-proc Options page writes to the same JSON file consumed by the out-of-proc extension.
-- **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value.
+- **UI language**: changes in either the Options page or the tool window language toggle are normalized to the same shared setting value. Explicit English/Japanese choices take precedence. In automatic mode, the existing in-process package reads the Visual Studio UI locale and exposes it through a session-local brokered service to the out-of-process tool window. Unsupported or unavailable host languages resolve to English, independently of the operating system and extension thread cultures. Language resolution completes before the initial tool window view model is created. Option labels use the same host locale and the property descriptors refresh when the shared setting changes.
+- **UI language selection**: the Options property is a fixed drop-down (not free text) listing the supported values: `Auto (follow Visual Studio)` (`auto`), `English (en)` (`en`) and `日本語 (ja)` (`ja`). The stored value stays `auto`, `en` or `ja`. The default is `auto`; because an explicit choice always wins, a saved `en` or `ja` keeps overriding the Visual Studio display language until `Auto` is selected again. The out-of-process host watches the shared settings file, so a language saved from Options reaches an already-open tool window: the host reloads the full language state (including the host locale for `auto`) and refreshes the view model without reopening the window. The watcher's coalescing logic (guaranteeing a save that arrives mid-reload is not lost, and that a failed reload retries with a bounded backoff instead of being dropped) lives in a small, independently testable `ReloadCoalescer` type rather than inline in the host. An already-open command/file-mention suggestion popup is rebuilt with the new language too, keeping the same selected row by its language-invariant command or file token, since its query text does not change on a language change alone. A status message already on screen (for example a result count) is reproduced in the new language when it was built from one of the fixed, argument-free status resources; a message carrying a captured argument or raw exception text is left unchanged rather than risk showing an incorrect or malformed value. A failed host-locale lookup falls back to English for a bounded cooldown (rather than retrying the broker and its timeout on every subsequent settings read) before it is retried, so a persistently unresponsive package does not repeatedly delay ordinary search, chat, file, and handoff operations. Reading the shared settings file for this comparison uses an API that distinguishes a legitimate default snapshot from a failed read (a concurrent save still in progress, corrupt content); a failed read is treated as a reload failure so it retries with backoff instead of silently comparing against a default that can spuriously equal the current language and hide a real save.
+- **Chat settings**: the `Chat` category exposes `ChatMaxAttachedFiles` (default `5`, non-negative; `0` disables attachments), `ChatAttachActiveEditor` (default `false`), and `ChatStreamResponses` (default `true`). These values are persisted in the same JSON object and missing properties retain these defaults for existing settings files.
+
+## 8.1 Chat context rules and parity settings (Issue #184)
+
+The Visual Studio implementation uses the same explicit-context behavior as the VS Code extension. `/ask` accepts pinned snippets, pending local attachments, and the eligible saved active editor when enabled; it is rejected when no usable explicit context is available. Plain chat continues to work without explicit context. Response streaming is controlled by `ChatStreamResponses`, and the attachment count is bounded by `ChatMaxAttachedFiles`. Pending attachments are claimed and removed from the visible pending queue when the request is submitted, so files added during generation remain queued for the next request and do not compete with in-flight files for the limit.
+
+The same context selection applies to plain chat, so an input without a slash command is built from the identical sources and differs only in that it is allowed to run with no explicit context at all:
+
+- **Attachment selection**: `#file` mentions are taken first, then queued attachments, then the active editor, deduplicated by canonical path and truncated at `ChatMaxAttachedFiles`. `/workiq` keeps its own limit of `FileMentionResolver.MaxFileMentions`.
+- **Active editor**: only saved file content is read, and a non-empty editor selection narrows the attachment to the selected lines. When the buffer has unsaved edits the selection is ignored, because its line numbers do not match the saved file.
+- **Grounding**: when a request carries explicit context, `ChatContextPayloadBuilder.GroundingInstructionText` is appended to the outbound message and `CopilotWebContext.IsWebEnabled` is set to `false` so the answer is built from the attached files and pinned snippets instead of web results. Requests without explicit context send no grounding instruction and no web context override.
+- **Search summary**: the latest search summary is added to `additionalContext` as orientation when one exists, but it is not grounding context. It does not satisfy the `/ask` check and does not disable web context.
+- **Validation order**: `/ask` builds and validates its payload before acquiring a Copilot token, so a request with no explicit context is rejected locally without authentication or network work.
+- **Request lifecycle**: the composer keeps one primary button that switches its label and behavior to stop while a request is running, so cancellation is reachable from the same keyboard position, and a stopped request reports cancellation without issuing an automatic continuation. Continuation stays manual.
 
 ## 9. Handoff docs
 
@@ -182,7 +197,7 @@ Initial todos are seeded in the session SQL store. Update this plan whenever hig
 ## 18. Current implementation status
 
 - **Implemented end-to-end in-repo**: shared session store, schema docs, MSAL auth core, slash-command router, shared snippet repository, handoff document generator, TTL + LRU cache, Graph/retrieval/chat adapters, localized WPF tool window UI, slash-command popup, result-card context actions, dedicated `/connectors` routing, `/ask` editor previews, VS commands, options pages, logging panes, and installable VSIX packaging.
-- **Parity follow-up against the VS Code extension**: result pinning now toggles/unpins instead of only warning on duplicates, mail/SharePoint/OneDrive pinning hydrates fuller content for handoff use, `/ask` now requires pinned snippets and uses capped context plus output-format detection, and the soft handoff command now tries to open GitHub Copilot Chat after copying the prompt.
+- **Parity follow-up against the VS Code extension**: result pinning now toggles/unpins instead of only warning on duplicates, mail/SharePoint/OneDrive pinning hydrates fuller content for handoff use, `/ask` now uses the shared explicit-context and attachment rules described in [Issue #184](https://github.com/kkamegawa/ContextRelayVS/issues/184), and the soft handoff command now tries to open GitHub Copilot Chat after copying the prompt.
 - **Shared-store behavior covered**: schema emission, unknown-field preservation, handoff path normalization, tombstone-aware snippet merge, retry on Windows atomic replace failures.
 - **Repository readiness improved**: README / README_ja now reflect implementation status, `docs/e2e_checklist.md` and `docs/marketplace_release.md` exist, CI audits vulnerable/deprecated packages, and release assets include a Marketplace publish manifest plus a release workflow.
 - **Still missing for release readiness**: `/rootsuffix Exp` validation on supported VS versions and the out-of-repo VS Code shared-store migration PR.

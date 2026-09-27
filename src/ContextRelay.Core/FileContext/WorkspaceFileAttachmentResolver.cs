@@ -1,0 +1,483 @@
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
+using System.Runtime.InteropServices;
+using System.Security;
+
+namespace ContextRelay.Core.FileContext;
+
+/// <summary>
+/// Resolves and reads explicit local attachments while enforcing trusted workspace roots.
+/// </summary>
+public static class WorkspaceFileAttachmentResolver
+{
+    public const int MaxFileChars = 12000;
+
+    /// <summary>
+    /// Resolves the final directory target of <paramref name="path"/>, following links and junctions.
+    /// Callers compare trusted roots through this method so a redirected directory cannot widen the trusted set.
+    /// </summary>
+    /// <param name="path">The directory path to canonicalize.</param>
+    /// <param name="canonicalPath">The canonical directory path when resolution succeeds.</param>
+    /// <returns><see langword="true"/> when the directory exists and its final target was resolved.</returns>
+    public static bool TryGetCanonicalDirectory(string path, out string canonicalPath)
+    {
+        canonicalPath = string.Empty;
+        return !string.IsNullOrWhiteSpace(path) && TryGetCanonicalPath(path, directory: true, out canonicalPath);
+    }
+
+    public static bool TryResolve(
+        string path,
+        IReadOnlyList<string> workspaceRoots,
+        out ResolvedAttachment? attachment)
+    {
+        attachment = null;
+        if (string.IsNullOrWhiteSpace(path) || workspaceRoots is null)
+        {
+            return false;
+        }
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(path.Trim());
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+        if (!File.Exists(fullPath) || !CopilotSupportedFilePolicy.IsSupported(fullPath))
+        {
+            return false;
+        }
+
+        foreach (var root in workspaceRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+
+            string fullRoot;
+            try
+            {
+                fullRoot = NormalizeRootPath(root);
+            }
+            catch (ArgumentException)
+            {
+                continue;
+            }
+            catch (NotSupportedException)
+            {
+                continue;
+            }
+            // Containment is decided on the canonical paths alone. A lexical check against the
+            // original root rejects a canonical path stored by an earlier resolution when the
+            // workspace root itself is a link or junction, which would drop valid attachments.
+            if (!TryGetCanonicalPath(fullRoot, directory: true, out var canonicalRoot) ||
+                !TryGetCanonicalPath(fullPath, directory: false, out var canonicalPath) ||
+                !IsUnderRoot(canonicalPath, canonicalRoot))
+            {
+                continue;
+            }
+
+            attachment = new ResolvedAttachment
+            {
+                AbsolutePath = canonicalPath,
+                WorkspaceRoot = canonicalRoot,
+                RelativePath = GetRelativePath(canonicalRoot, canonicalPath),
+                DisplayName = Path.GetFileName(canonicalPath)
+            };
+            return true;
+        }
+
+        return false;
+    }
+
+    public static async Task<string?> ReadTextAsync(
+        ResolvedAttachment attachment,
+        CancellationToken cancellationToken = default)
+    {
+        if (attachment is null || string.IsNullOrWhiteSpace(attachment.AbsolutePath) ||
+            string.IsNullOrWhiteSpace(attachment.WorkspaceRoot))
+        {
+            return null;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            using var stream = new FileStream(attachment.AbsolutePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (!TryGetFinalPath(stream.SafeFileHandle, out var finalPath) ||
+                !TryGetCanonicalPath(attachment.WorkspaceRoot, directory: true, out var canonicalRoot) ||
+                !IsUnderRoot(finalPath, canonicalRoot) ||
+                !CopilotSupportedFilePolicy.IsSupported(finalPath))
+            {
+                return null;
+            }
+
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var text = attachment.SelectionStartLine.HasValue || attachment.SelectionEndLine.HasValue
+                ? await ReadSelectedLinesAsync(reader, attachment, cancellationToken).ConfigureAwait(false)
+                : await ReadFullFileAsync(reader, cancellationToken).ConfigureAwait(false);
+            return FileContextPromptBuilder.NormalizeExtractedText(text);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+        catch (SecurityException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<string> ReadFullFileAsync(StreamReader reader, CancellationToken cancellationToken)
+    {
+        var buffer = new char[MaxFileChars + 1];
+        var count = 0;
+        while (count < buffer.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var read = await reader.ReadAsync(buffer, count, buffer.Length - count).ConfigureAwait(false);
+            if (read == 0)
+                break;
+            count += read;
+        }
+
+        var text = new string(buffer, 0, Math.Min(count, MaxFileChars));
+        if (count <= MaxFileChars)
+            return text;
+
+        const string omissionMarker = "\n[additional file content omitted]";
+        var contentBudget = Math.Max(0, MaxFileChars - omissionMarker.Length);
+        return text.Substring(0, Math.Min(text.Length, contentBudget)) + omissionMarker;
+    }
+
+    private static async Task<string> ReadSelectedLinesAsync(StreamReader reader, ResolvedAttachment attachment, CancellationToken cancellationToken)
+    {
+        var start = Math.Max(1, attachment.SelectionStartLine ?? attachment.SelectionEndLine ?? 1);
+        var end = Math.Max(start, attachment.SelectionEndLine ?? start);
+        var lineReader = new ChunkedLineReader(reader);
+        var builder = new StringBuilder();
+        var lineNumber = 0;
+        var isFirstSelectedLine = true;
+        while (lineNumber < end)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var isSelected = lineNumber + 1 >= start;
+            if (isSelected && builder.Length >= MaxFileChars)
+            {
+                break;
+            }
+
+            // Separate on the line boundary rather than on whether earlier lines produced
+            // characters, so a blank line inside the selection is preserved.
+            if (isSelected && !isFirstSelectedLine)
+            {
+                if (builder.Length >= MaxFileChars)
+                {
+                    break;
+                }
+
+                builder.Append('\n');
+            }
+
+            if (isSelected)
+            {
+                isFirstSelectedLine = false;
+            }
+
+            var remaining = isSelected ? MaxFileChars - builder.Length : 0;
+            var result = await lineReader.ReadLineAsync(
+                isSelected ? builder : null,
+                remaining,
+                cancellationToken).ConfigureAwait(false);
+            if (!result.HasLine)
+                break;
+            lineNumber++;
+            if (result.ReachedLimit)
+                break;
+        }
+
+        return builder.ToString();
+    }
+
+    private sealed class ChunkedLineReader
+    {
+        private const int BufferSize = 1024;
+        private readonly StreamReader reader;
+        private readonly char[] buffer = new char[BufferSize];
+        private int bufferIndex;
+        private int bufferCount;
+        private bool skipLineFeedAfterCarriageReturn;
+
+        public ChunkedLineReader(StreamReader reader)
+        {
+            this.reader = reader;
+        }
+
+        public async Task<ChunkedLineResult> ReadLineAsync(
+            StringBuilder? destination,
+            int appendLimit,
+            CancellationToken cancellationToken)
+        {
+            var hasContent = false;
+            var appended = 0;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (bufferIndex >= bufferCount)
+                {
+                    bufferCount = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    bufferIndex = 0;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (bufferCount == 0)
+                    {
+                        return new ChunkedLineResult(hasLine: hasContent, reachedLimit: false);
+                    }
+                }
+
+                var value = buffer[bufferIndex++];
+                if (skipLineFeedAfterCarriageReturn)
+                {
+                    skipLineFeedAfterCarriageReturn = false;
+                    if (value == '\n')
+                    {
+                        continue;
+                    }
+                }
+
+                if (value == '\r')
+                {
+                    skipLineFeedAfterCarriageReturn = true;
+                    return new ChunkedLineResult(hasLine: true, reachedLimit: false);
+                }
+
+                if (value == '\n')
+                {
+                    return new ChunkedLineResult(hasLine: true, reachedLimit: false);
+                }
+
+                hasContent = true;
+                if (destination is not null && appended < appendLimit)
+                {
+                    destination.Append(value);
+                    appended++;
+                    if (appended >= appendLimit)
+                    {
+                        return new ChunkedLineResult(hasLine: true, reachedLimit: true);
+                    }
+                }
+            }
+        }
+    }
+
+    private readonly struct ChunkedLineResult
+    {
+        public ChunkedLineResult(bool hasLine, bool reachedLimit)
+        {
+            HasLine = hasLine;
+            ReachedLimit = reachedLimit;
+        }
+
+        public bool HasLine { get; }
+
+        public bool ReachedLimit { get; }
+    }
+
+    private static bool TryGetCanonicalPath(string path, bool directory, out string canonicalPath)
+    {
+        canonicalPath = string.Empty;
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return TryGetUnixCanonicalPath(path, out canonicalPath);
+
+        var handle = CreateFile(path, 0, FileShareRead | FileShareWrite | FileShareDelete, IntPtr.Zero,
+            OpenExisting, directory ? FileFlagBackupSemantics : 0, IntPtr.Zero);
+        using (handle)
+        {
+            return !handle.IsInvalid && TryGetFinalPath(handle, out canonicalPath);
+        }
+    }
+
+    private static bool TryGetFinalPath(SafeFileHandle handle, out string path)
+    {
+        path = string.Empty;
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return TryGetUnixHandlePath(handle, out path);
+
+        var buffer = new StringBuilder(512);
+        var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
+        if (length == 0)
+            return false;
+        if (length >= buffer.Capacity)
+        {
+            buffer = new StringBuilder((int)length + 1);
+            length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
+        }
+        if (length == 0)
+            return false;
+        path = NormalizeFinalPath(buffer.ToString());
+        return true;
+    }
+
+    private static bool TryGetUnixCanonicalPath(string path, out string canonicalPath)
+    {
+        canonicalPath = string.Empty;
+        var buffer = Marshal.AllocHGlobal(4096);
+        try
+        {
+            var result = RealPath(path, buffer);
+            if (result == IntPtr.Zero)
+                return false;
+            canonicalPath = Marshal.PtrToStringAnsi(result) ?? string.Empty;
+            return canonicalPath.Length > 0;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static bool TryGetUnixHandlePath(SafeFileHandle handle, out string path)
+    {
+        path = string.Empty;
+        var descriptor = checked((int)handle.DangerousGetHandle().ToInt64());
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            var buffer = Marshal.AllocHGlobal(4096);
+            try
+            {
+                if (Fcntl(descriptor, FGetPath, buffer) == -1)
+                    return false;
+                path = Marshal.PtrToStringAnsi(buffer) ?? string.Empty;
+                return path.Length > 0;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        foreach (var prefix in new[] { "/proc/self/fd/", "/dev/fd/" })
+        {
+            var link = prefix + descriptor.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var buffer = Marshal.AllocHGlobal(4096);
+            try
+            {
+                var length = ReadLink(link, buffer, (UIntPtr)4096);
+                if (length == new IntPtr(-1) || length == IntPtr.Zero)
+                    continue;
+                path = Marshal.PtrToStringAnsi(buffer, checked((int)length.ToInt64())) ?? string.Empty;
+                if (path.Length > 0)
+                    return true;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeFinalPath(string path)
+    {
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"\\" + path.Substring(8);
+        }
+
+        return path.StartsWith(@"\\?\", StringComparison.Ordinal)
+            ? path.Substring(4)
+            : path;
+    }
+
+    private static bool IsUnderRoot(string path, string root)
+    {
+        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var separator = root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+            root.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? string.Empty
+            : Path.DirectorySeparatorChar.ToString();
+        return string.Equals(path, root, comparison) ||
+            path.StartsWith(root + separator, comparison);
+    }
+
+    private static string NormalizeRootPath(string root)
+    {
+        var fullRoot = Path.GetFullPath(root.Trim());
+        var pathRoot = Path.GetPathRoot(fullRoot);
+        var minimumLength = pathRoot?.Length ?? 0;
+        while (fullRoot.Length > minimumLength &&
+            (fullRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+             fullRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)))
+        {
+            fullRoot = fullRoot.Substring(0, fullRoot.Length - 1);
+        }
+
+        return fullRoot;
+    }
+
+    private static string GetRelativePath(string root, string path)
+    {
+        // Compute the relative path directly. Unix paths such as "/" and "/tmp/file.md" are not absolute
+        // System.Uri instances, so routing them through Uri.MakeRelativeUri throws on non-Windows hosts.
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (path.Length > normalizedRoot.Length &&
+            path.StartsWith(normalizedRoot, comparison) &&
+            (path[normalizedRoot.Length] == Path.DirectorySeparatorChar ||
+             path[normalizedRoot.Length] == Path.AltDirectorySeparatorChar))
+        {
+            return path.Substring(normalizedRoot.Length + 1)
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        }
+
+        // Callers verify containment first, so this only guards against unexpected input.
+        return Path.GetFileName(path);
+    }
+
+    private const uint FileShareRead = 0x00000001;
+    private const uint FileShareWrite = 0x00000002;
+    private const uint FileShareDelete = 0x00000004;
+    private const uint OpenExisting = 3;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+    private const int FGetPath = 50;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(string fileName, uint desiredAccess, uint shareMode,
+        IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle file, StringBuilder path, uint bufferLength, uint flags);
+
+    [DllImport("libc", EntryPoint = "realpath", CharSet = CharSet.Ansi, SetLastError = true)]
+    private static extern IntPtr RealPath(string path, IntPtr resolvedPath);
+
+    [DllImport("libc", EntryPoint = "readlink", CharSet = CharSet.Ansi, SetLastError = true)]
+    private static extern IntPtr ReadLink(string path, IntPtr buffer, UIntPtr bufferSize);
+
+    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int Fcntl(int descriptor, int command, IntPtr buffer);
+}

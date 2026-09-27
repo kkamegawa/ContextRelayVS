@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -421,7 +421,7 @@ public sealed class AdapterTests
         var cancellationToken = TestContext.Current.CancellationToken;
         using var httpClient = new HttpClient(new QueueHttpMessageHandler(
             CreateResponse(HttpStatusCode.OK, """{ "id": "conversation-1" }"""),
-            CreateResponse(HttpStatusCode.OK, """
+            CreateStreamResponse("""
                 {
                   "messages": [
                     { "text": "Summarize the pinned docs." },
@@ -440,7 +440,7 @@ public sealed class AdapterTests
     public async Task CopilotChatAdapter_SendMessage_IncludesExplicitContextPayloads()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var handler = new RecordingHttpMessageHandler(CreateResponse(HttpStatusCode.OK, """
+        var handler = new RecordingHttpMessageHandler(CreateStreamResponse("""
             {
               "messages": [
                 { "text": "Use this context." },
@@ -520,6 +520,15 @@ public sealed class AdapterTests
         }
 
         return response;
+    }
+
+    private static HttpResponseMessage CreateStreamResponse(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent($"data: {JsonSerializer.Serialize(document.RootElement)}\n\n", Encoding.UTF8, "text/event-stream")
+        };
     }
 
     private sealed class QueueHttpMessageHandler : HttpMessageHandler

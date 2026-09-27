@@ -1,0 +1,7 @@
+root = true
+
+# Visual Studio source files use UTF-8 with BOM and CRLF line endings.
+[*.{cs,xaml,csproj,props,targets,resx,ps1,json}]
+charset = utf-8-bom
+end_of_line = crlf
+insert_final_newline = true

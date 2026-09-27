@@ -1,9 +1,16 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Settings;
 using ContextRelay.VSExtension.ToolWindows;
 using Microsoft.VisualStudio.Extensibility;
+using Microsoft.VisualStudio.Extensibility.Editor;
+using Microsoft.VisualStudio.Extensibility.Shell.FileDialog;
+using Microsoft.VisualStudio.ProjectSystem.Query;
 
 namespace ContextRelay.VSExtension.Services;
 
@@ -11,24 +18,285 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
 {
     private readonly VisualStudioExtensibility extensibility;
     private readonly ContextRelaySettingsService settingsService;
+    private readonly VisualStudioUiLanguageProvider uiLanguageProvider;
+    private readonly object selectedWorkspaceRootsGate = new();
+    private readonly object workspaceFileCacheGate = new();
+    private string[] selectedWorkspaceRoots = Array.Empty<string>();
+    private string[] cachedWorkspaceFileRoots = Array.Empty<string>();
+    private string[] cachedWorkspaceFiles = Array.Empty<string>();
 
-    public ContextRelayVsServices(VisualStudioExtensibility extensibility, ContextRelaySettingsService settingsService)
+    public ContextRelayVsServices(VisualStudioExtensibility extensibility, ContextRelaySettingsService settingsService, VisualStudioUiLanguageProvider uiLanguageProvider)
     {
         this.extensibility = extensibility;
         this.settingsService = settingsService;
+        this.uiLanguageProvider = uiLanguageProvider;
     }
 
     public async Task<ContextRelaySettingsSnapshot> GetSettingsSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        if (ContextRelaySettingsService.NormalizeUiLanguage(settings.UiLanguage) == "auto")
+        {
+            // Only automatic mode depends on the host locale; explicit choices apply without the broker.
+            ContextRelayLocalizedStrings.SetVisualStudioUiLocale(await uiLanguageProvider.GetUiLocaleAsync(cancellationToken).ConfigureAwait(false));
+
+            // The broker call can take a while; re-read so a save made meanwhile is not overwritten by the stale value.
+            settings = await settingsService.LoadSettingsAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         ContextRelayLocalizedStrings.SetUiLanguage(settings.UiLanguage);
         return settings;
     }
 
-    public Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> GetWorkspaceRootsAsync(CancellationToken cancellationToken = default)
     {
-        // Stub: workspace query API shape varies across SDK versions
-        return Task.FromResult<string?>(null);
+        var roots = new List<string>();
+        // Directory is not populated by default; the query API throws when an unrequested property is
+        // read from the snapshot ("Data is not available for property 'Directory'. Refresh the query to
+        // retrieve data."), so it must be explicitly included with With().
+        var solutions = await extensibility.Workspaces()
+            .QuerySolutionAsync(solution => solution.With(s => s.Directory), cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var solution in solutions)
+        {
+            if (!string.IsNullOrWhiteSpace(solution.Directory))
+            {
+                roots.Add(solution.Directory);
+            }
+        }
+
+        var documents = await extensibility.Documents().GetOpenDocumentsAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var document in documents)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!document.Moniker.IsFile)
+            {
+                continue;
+            }
+
+            var root = WorkspaceRootInference.InferWorkspaceRootFromPath(document.Moniker.LocalPath);
+            if (!string.IsNullOrWhiteSpace(root))
+            {
+                roots.Add(root!);
+            }
+        }
+
+        if (roots.Count == 0)
+        {
+            var currentDirectoryRoot = WorkspaceRootInference.InferWorkspaceRootFromPath(
+                Environment.CurrentDirectory,
+                requireWorkspaceMarker: true);
+            if (!string.IsNullOrWhiteSpace(currentDirectoryRoot))
+            {
+                roots.Add(currentDirectoryRoot);
+            }
+        }
+
+        var currentWorkspaceRoots = roots.ToArray();
+        lock (selectedWorkspaceRootsGate)
+        {
+            roots.AddRange(GetAuthorizedRememberedRoots(selectedWorkspaceRoots, currentWorkspaceRoots));
+        }
+
+        return roots
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> GetAuthorizedRememberedRoots(
+        IReadOnlyList<string> rememberedRoots,
+        IReadOnlyList<string> currentWorkspaceRoots)
+    {
+        if (currentWorkspaceRoots.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        // Compare final directory targets. A remembered directory inside the solution can be a link or
+        // junction that points outside it, and a lexical comparison would promote that outside target
+        // to a trusted root for attachment validation.
+        var canonicalCurrentRoots = new List<string>(currentWorkspaceRoots.Count);
+        foreach (var currentRoot in currentWorkspaceRoots)
+        {
+            if (WorkspaceFileAttachmentResolver.TryGetCanonicalDirectory(currentRoot, out var canonicalCurrentRoot))
+            {
+                canonicalCurrentRoots.Add(canonicalCurrentRoot);
+            }
+        }
+
+        if (canonicalCurrentRoots.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var authorized = new List<string>(rememberedRoots.Count);
+        foreach (var rememberedRoot in rememberedRoots)
+        {
+            if (WorkspaceFileAttachmentResolver.TryGetCanonicalDirectory(rememberedRoot, out var canonicalRememberedRoot) &&
+                canonicalCurrentRoots.Any(canonicalCurrentRoot => IsPathUnderRoot(canonicalRememberedRoot, canonicalCurrentRoot)))
+            {
+                authorized.Add(rememberedRoot);
+            }
+        }
+
+        return authorized;
+    }
+
+    private static bool IsPathUnderRoot(string path, string root)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(fullPath, fullRoot, StringComparison.OrdinalIgnoreCase) ||
+                fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                fullPath.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> PickWorkspaceFilesAsync(string? initialDirectory, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var selectedFiles = await extensibility.Shell()
+            .ShowOpenMultipleFilesDialogAsync(CreateFileDialogOptions(initialDirectory), cancellationToken)
+            .ConfigureAwait(false) ?? Array.Empty<string>();
+        RememberWorkspaceRootsFromSelectedFiles(selectedFiles);
+        return selectedFiles;
+    }
+
+    public async Task<string?> PickWorkspaceFolderAsync(string? initialDirectory, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var selectedFolder = await extensibility.Shell()
+            .ShowOpenFolderDialogAsync(CreateFolderDialogOptions(initialDirectory), cancellationToken)
+            .ConfigureAwait(false);
+        RememberWorkspaceRoot(selectedFolder);
+        return selectedFolder;
+    }
+
+    private static FileDialogOptions CreateFileDialogOptions(string? initialDirectory)
+    {
+        var initialDirectoryValue = !string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory)
+            ? initialDirectory
+            : string.Empty;
+
+        return new FileDialogOptions
+        {
+            Title = ContextRelayLocalizedStrings.AddFilesDialogTitle,
+            InitialDirectory = initialDirectoryValue,
+            Filters = CreateAllFilesDialogFilter()
+        };
+    }
+
+    private static DialogFilters CreateAllFilesDialogFilter()
+    {
+        var filterText = ContextRelayLocalizedStrings.AddFilesDialogFilter;
+        var separatorIndex = filterText.IndexOf('|', StringComparison.Ordinal);
+        var displayValue = separatorIndex > 0
+            ? filterText[..separatorIndex]
+            : filterText;
+        var filters = separatorIndex >= 0 && separatorIndex + 1 < filterText.Length
+            ? filterText[(separatorIndex + 1)..].Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : new[] { "*.*" };
+
+        return new DialogFilters(new DialogFilter(displayValue, filters));
+    }
+
+    private static FolderDialogOptions CreateFolderDialogOptions(string? initialDirectory)
+    {
+        var initialDirectoryValue = !string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory)
+            ? initialDirectory
+            : string.Empty;
+
+        return new FolderDialogOptions
+        {
+            Title = ContextRelayLocalizedStrings.CreatedFilesFolderDialogTitle,
+            InitialDirectory = initialDirectoryValue
+        };
+    }
+
+    public async Task<string?> GetSolutionRootAsync(CancellationToken cancellationToken = default)
+    {
+        var roots = await GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        return roots.Count > 0 ? roots[0] : null;
+    }
+
+    public async Task<IReadOnlyList<string>> GetWorkspaceFilesAsync(CancellationToken cancellationToken = default)
+    {
+        var workspaceRoots = await GetWorkspaceRootsAsync(cancellationToken).ConfigureAwait(false);
+        var normalizedRoots = workspaceRoots
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        lock (workspaceFileCacheGate)
+        {
+            if (normalizedRoots.SequenceEqual(cachedWorkspaceFileRoots, StringComparer.OrdinalIgnoreCase))
+            {
+                return cachedWorkspaceFiles;
+            }
+        }
+
+        var files = EnumerateWorkspaceFiles(normalizedRoots, cancellationToken).ToArray();
+
+        lock (workspaceFileCacheGate)
+        {
+            cachedWorkspaceFileRoots = normalizedRoots;
+            cachedWorkspaceFiles = files;
+        }
+
+        return files;
+    }
+
+    public async Task<int> TryAddFilesToSolutionAsync(IReadOnlyList<string> filePaths, CancellationToken cancellationToken = default)
+    {
+        if (filePaths.Count == 0)
+        {
+            return 0;
+        }
+
+        var normalizedPaths = filePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedPaths.Length == 0)
+        {
+            return 0;
+        }
+
+        try
+        {
+            await extensibility.Workspaces()
+                .UpdateSolutionAsync(
+                    solutions => solutions,
+                    solutions => solutions.AddFiles(normalizedPaths),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return normalizedPaths.Length;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // Best effort — swallow non-cancellation failures
+            return 0;
+        }
     }
 
     public async Task OpenDocumentAsync(string filePath, CancellationToken cancellationToken = default)
@@ -53,6 +321,51 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
     {
         // Editor API stub — requires checking exact VS Extensibility SDK 17.14 editor API signatures
         return Task.FromResult(false);
+    }
+
+    public async Task<ActiveEditorSnapshot?> GetActiveEditorSnapshotAsync(
+        IClientContext clientContext,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clientContext);
+        var textView = await clientContext.GetActiveTextViewAsync(cancellationToken).ConfigureAwait(false);
+        if (textView is null || string.IsNullOrWhiteSpace(textView.FilePath))
+        {
+            return null;
+        }
+
+        var selection = textView.Selection;
+        int? startLine = null;
+        int? endLine = null;
+
+        // Selection offsets come from the live buffer, but the attachment is read from the saved file.
+        // With unsaved edits the line numbers no longer match on disk, so attach the whole saved file
+        // instead of a range that would point at unrelated lines.
+        if (!selection.IsEmpty && !textView.Document.IsDirty)
+        {
+            startLine = textView.Document.GetLineNumberFromPosition(selection.Start.Offset) + 1;
+            // Selection.End is exclusive. When it lands at column zero, the selected
+            // content ends on the preceding line.
+            var endOffset = GetInclusiveSelectionEndOffset(
+                selection.Start.Offset,
+                selection.End.Offset,
+                textView.Document.GetLineNumberFromPosition);
+
+            endLine = textView.Document.GetLineNumberFromPosition(endOffset) + 1;
+        }
+
+        return new ActiveEditorSnapshot(textView.FilePath, startLine, endLine);
+    }
+
+    private static int GetInclusiveSelectionEndOffset(
+        int startOffset,
+        int exclusiveEndOffset,
+        Func<int, int> getLineNumber)
+    {
+        return exclusiveEndOffset > startOffset &&
+            getLineNumber(exclusiveEndOffset) > getLineNumber(exclusiveEndOffset - 1)
+                ? exclusiveEndOffset - 1
+                : exclusiveEndOffset;
     }
 
     public Task<bool> TryOpenCopilotChatAsync(CancellationToken cancellationToken = default)
@@ -96,4 +409,163 @@ internal sealed class ContextRelayVsServices : IContextRelayPackageServices
         await settingsService.UpdateUiLanguageAsync(uiLanguage, cancellationToken).ConfigureAwait(false);
         ContextRelayLocalizedStrings.SetUiLanguage(ContextRelaySettingsService.NormalizeUiLanguage(uiLanguage));
     }
+
+    private void RememberWorkspaceRootsFromSelectedFiles(IReadOnlyList<string> selectedFiles)
+    {
+        if (selectedFiles.Count == 0)
+        {
+            return;
+        }
+
+        var inferredRoots = selectedFiles
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path))
+            .Where(File.Exists)
+            .Select(path =>
+            {
+                var inferred = WorkspaceRootInference.InferWorkspaceRootFromPath(path);
+                return string.IsNullOrWhiteSpace(inferred)
+                    ? Path.GetDirectoryName(path)
+                    : inferred;
+            })
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Select(path => Path.GetFullPath(path!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (inferredRoots.Length == 0)
+        {
+            return;
+        }
+
+        lock (selectedWorkspaceRootsGate)
+        {
+            selectedWorkspaceRoots = selectedWorkspaceRoots
+                .Concat(inferredRoots)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+    }
+
+    private static IReadOnlyList<string> EnumerateWorkspaceFiles(IReadOnlyList<string> workspaceRoots, CancellationToken cancellationToken)
+    {
+        const int maxFiles = 2_000;
+        var files = new List<string>(capacity: Math.Min(maxFiles, 256));
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var workspaceRoot in workspaceRoots
+                     .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                     .Select(Path.GetFullPath)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var path in SafeEnumerateWorkspaceFiles(workspaceRoot))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!Core.FileContext.CopilotSupportedFilePolicy.IsSupported(path))
+                {
+                    continue;
+                }
+
+                var relativePath = Path.GetRelativePath(workspaceRoot, path)
+                    .Replace(Path.DirectorySeparatorChar, '/')
+                    .Replace(Path.AltDirectorySeparatorChar, '/');
+                if (!seenPaths.Add(relativePath))
+                {
+                    continue;
+                }
+
+                files.Add(relativePath);
+                if (files.Count >= maxFiles)
+                {
+                    return files;
+                }
+            }
+        }
+
+        return files;
+    }
+
+    private static IEnumerable<string> SafeEnumerateWorkspaceFiles(string workspaceRoot)
+    {
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(workspaceRoot);
+
+        while (pendingDirectories.Count > 0)
+        {
+            var currentDirectory = pendingDirectories.Pop();
+            IEnumerable<string> subDirectories;
+            try
+            {
+                subDirectories = Directory.EnumerateDirectories(currentDirectory);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var subDirectory in subDirectories)
+            {
+                if (ShouldSkipDirectory(subDirectory) || IsReparsePoint(subDirectory))
+                {
+                    continue;
+                }
+
+                pendingDirectories.Push(subDirectory);
+            }
+
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(currentDirectory);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                yield return file;
+            }
+        }
+    }
+
+    private static bool ShouldSkipDirectory(string directoryPath)
+    {
+        var directoryName = Path.GetFileName(directoryPath);
+        return directoryName.StartsWith(".", StringComparison.Ordinal) ||
+            directoryName.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+            directoryName.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+            directoryName.Equals("node_modules", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsReparsePoint(string directoryPath)
+    {
+        try
+        {
+            return (File.GetAttributes(directoryPath) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private void RememberWorkspaceRoot(string? rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+        {
+            return;
+        }
+
+        var normalizedRoot = Path.GetFullPath(rootPath);
+        lock (selectedWorkspaceRootsGate)
+        {
+            selectedWorkspaceRoots = selectedWorkspaceRoots
+                .Concat(new[] { normalizedRoot })
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+    }
+
 }

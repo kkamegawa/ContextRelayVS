@@ -2,11 +2,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.SharedStore;
 using ContextRelay.VSExtension.Services;
+using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.UI;
 
 namespace ContextRelay.VSExtension.ToolWindows;
@@ -14,23 +18,33 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [DataContract]
 internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject, IDisposable
 {
+    private const int StreamingPreviewMaxChars = 1200;
+    private const int StreamingPreviewMaxLines = 12;
+
     private const int MaxVisibleCommandSuggestions = 4;
     private readonly ContextRelayHost host;
     private bool isBusy;
+    private bool isChatRequestActive;
     private bool isCommandPopupOpen;
     private int commandSuggestionWindowStart;
     private string queryText = string.Empty;
+    private bool? collectionsUseJapanese;
     private string helpText = ContextRelayLocalizedStrings.GenericHelpText;
     private string statusMessage = ContextRelayLocalizedStrings.ReadyStatus;
     private string signedInUserText = ContextRelayLocalizedStrings.SignedOutText;
+    private string searchSummary = string.Empty;
     private IReadOnlyList<ContextItemViewModel> searchResults = Array.Empty<ContextItemViewModel>();
     private IReadOnlyList<SnippetItemViewModel> snippets = Array.Empty<SnippetItemViewModel>();
     private IReadOnlyList<ChatHistoryItemViewModel> chatHistory = Array.Empty<ChatHistoryItemViewModel>();
     private IReadOnlyList<SlashCommandSuggestion> commandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private IReadOnlyList<SlashCommandSuggestion> visibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private SlashCommandSuggestion? selectedCommandSuggestion;
+    private IReadOnlyList<string> workspaceFiles = Array.Empty<string>();
     private bool isApplyingState;
     private string windowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+    private bool isStreaming;
+    private string streamingResponseText = string.Empty;
+    private IReadOnlyList<PendingAttachmentViewModel> pendingAttachments = Array.Empty<PendingAttachmentViewModel>();
 
     public ContextRelayWindowViewModel(ContextRelayHost host)
     {
@@ -39,7 +53,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         RefreshLocalizedUiTexts();
 
-        SearchCommand = new AsyncCommand(async (_, ct) => await SubmitAsync(ct).ConfigureAwait(false));
+        SearchCommand = new AsyncCommand(async (_, context, ct) =>
+        {
+            // The composer keeps one primary button so keyboard focus survives the switch
+            // between sending and stopping.
+            if (IsStreaming)
+            {
+                host.StopGeneration();
+                return;
+            }
+
+            await SubmitAsync(context, ct).ConfigureAwait(false);
+        });
         GenerateHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.GenerateHandoffAsync(ct)).ConfigureAwait(false));
         CopyPromptCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.CopyHandoffPromptAsync(ct)).ConfigureAwait(false));
         OpenHandoffCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.OpenHandoffDocumentAsync(ct)).ConfigureAwait(false));
@@ -47,12 +72,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         ClearChatCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearChatAsync(ct)).ConfigureAwait(false));
         ClearSnippetsCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearSnippetsAsync(ct)).ConfigureAwait(false));
         ClearCacheCommand = new AsyncCommand(async (_, ct) => await RunBusyAsync(() => host.ClearCacheAsync(ct)).ConfigureAwait(false));
-        ShowDebugLogCommand = new AsyncCommand((_, _) => { host.ShowDebugLog(); return Task.CompletedTask; });
+        AddFilesCommand = new AsyncCommand(async (_, ct) => await host.AddFilesToQueryAsync(ct).ConfigureAwait(false));
+        StopGenerationCommand = new AsyncCommand((_, _) =>
+        {
+            host.StopGeneration();
+            return Task.CompletedTask;
+        });
         MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
         MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
         ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
-        ConfirmQueryInputCommand = new AsyncCommand(async (_, ct) => await ConfirmQueryInputAsync(ct).ConfigureAwait(false));
+        ConfirmQueryInputCommand = new AsyncCommand(async (_, context, ct) => await ConfirmQueryInputAsync(context, ct).ConfigureAwait(false));
         CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
+        UpdateSuggestionKeyBindingAvailability();
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -68,13 +99,56 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public string ClearChatButtonText { get; private set; } = string.Empty;
     [DataMember] public string ClearSnippetsButtonText { get; private set; } = string.Empty;
     [DataMember] public string ClearCacheButtonText { get; private set; } = string.Empty;
-    [DataMember] public string DebugLogButtonText { get; private set; } = string.Empty;
     [DataMember] public string SearchButtonText { get; private set; } = string.Empty;
     [DataMember] public string SearchResultsHeaderText { get; private set; } = string.Empty;
+    [DataMember] public string SearchSummaryHeaderText { get; private set; } = string.Empty;
     [DataMember] public string SnippetsHeaderText { get; private set; } = string.Empty;
     [DataMember] public string ChatHistoryHeaderText { get; private set; } = string.Empty;
     [DataMember] public string SearchToolTipText { get; private set; } = string.Empty;
     [DataMember] public string CommandPopupHeaderText { get; private set; } = string.Empty;
+    [DataMember] public string AddFilesButtonText { get; private set; } = string.Empty;
+    [DataMember] public string AddFilesToolTipText { get; private set; } = string.Empty;
+    [DataMember] public string StopGenerationButtonText { get; private set; } = string.Empty;
+    [DataMember] public IReadOnlyList<PendingAttachmentViewModel> PendingAttachments { get => pendingAttachments; private set { pendingAttachments = value; RaiseNotifyPropertyChangedEvent(nameof(PendingAttachments)); } }
+
+    [DataMember]
+    public bool IsStreaming
+    {
+        get => isStreaming;
+        private set
+        {
+            if (isStreaming == value)
+            {
+                return;
+            }
+
+            isStreaming = value;
+            RaiseNotifyPropertyChangedEvent(nameof(IsStreaming));
+            RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+        }
+    }
+
+    /// <summary>
+    /// Gets the label of the composer's primary button, which sends a query and becomes the
+    /// stop action while a response is being generated.
+    /// </summary>
+    [DataMember]
+    public string PrimaryActionButtonText => isStreaming ? StopGenerationButtonText : SearchButtonText;
+
+    /// <summary>
+    /// Gets a value indicating whether the composer's primary button is enabled. Stopping stays
+    /// available while the request that made the view model busy is still running.
+    /// </summary>
+    [DataMember]
+    public bool IsPrimaryActionEnabled => isChatRequestActive || isStreaming || !isBusy;
+
+    [DataMember]
+    public string StreamingResponseText
+    {
+        get => streamingResponseText;
+        private set { if (streamingResponseText != value) { streamingResponseText = value; RaiseNotifyPropertyChangedEvent(nameof(StreamingResponseText)); } }
+    }
 
     [DataMember]
     public string WindowTitleText
@@ -98,7 +172,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand ClearChatCommand { get; }
     [DataMember] public AsyncCommand ClearSnippetsCommand { get; }
     [DataMember] public AsyncCommand ClearCacheCommand { get; }
-    [DataMember] public AsyncCommand ShowDebugLogCommand { get; }
+    [DataMember] public AsyncCommand AddFilesCommand { get; }
+    [DataMember] public AsyncCommand StopGenerationCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionDownCommand { get; }
     [DataMember] public AsyncCommand MoveSelectionUpCommand { get; }
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
@@ -116,10 +191,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 return;
             }
 
+            var previousQuery = queryText;
             queryText = value;
+            host.UpdateDraftQueryText(queryText);
             RaiseNotifyPropertyChangedEvent(nameof(QueryText));
             if (!isApplyingState)
             {
+                if (ShouldLogComposerTransition(previousQuery, queryText))
+                {
+                    host.LogUiDiagnostic(
+                        $"QueryText changed previousLength={previousQuery.Length} currentLength={queryText.Length} startsWithSlash={queryText.StartsWith("/", StringComparison.Ordinal)}");
+                }
+
                 UpdateCommandSuggestions();
                 UpdateTransientHelpText();
             }
@@ -169,6 +252,24 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     }
 
     [DataMember]
+    public string SearchSummary
+    {
+        get => searchSummary;
+        private set
+        {
+            if (searchSummary != value)
+            {
+                searchSummary = value;
+                RaiseNotifyPropertyChangedEvent(nameof(SearchSummary));
+                RaiseNotifyPropertyChangedEvent(nameof(HasSearchSummary));
+            }
+        }
+    }
+
+    [DataMember]
+    public bool HasSearchSummary => !string.IsNullOrWhiteSpace(SearchSummary);
+
+    [DataMember]
     public bool IsCommandPopupOpen
     {
         get => isCommandPopupOpen;
@@ -178,6 +279,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             {
                 isCommandPopupOpen = value;
                 RaiseNotifyPropertyChangedEvent(nameof(IsCommandPopupOpen));
+
+                // The query box binds Tab, Up, Down, and Escape to these commands. While the
+                // popup is closed the key bindings must not handle the key, so Tab keeps moving
+                // focus to the next control instead of being swallowed by the input.
+                UpdateSuggestionKeyBindingAvailability();
             }
         }
     }
@@ -252,6 +358,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             }
 
             selectedCommandSuggestion = value;
+
+            // IsSelected is baked into fresh display clones by BuildVisibleWindow, not toggled here —
+            // every caller of this setter is immediately followed by a call that rebuilds
+            // VisibleCommandSuggestions from new instances (Remote UI does not re-serialize in-place
+            // mutations on objects it already knows by identity).
             RaiseNotifyPropertyChangedEvent(nameof(SelectedCommandSuggestion));
             if (!isApplyingState && IsCommandPopupOpen)
             {
@@ -303,6 +414,16 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         await RunBusyAsync(() => host.ReplaceEditorWithAssistantTextAsync(text, ct)).ConfigureAwait(false);
     }
 
+    internal async Task ContinueAssistantResponseAsync(string itemId, string text, CancellationToken ct)
+    {
+        await RunBusyAsync(() => host.ContinueAssistantResponseAsync(itemId, text, ct)).ConfigureAwait(false);
+    }
+
+    internal async Task RemovePendingAttachmentAsync(string attachmentId, CancellationToken ct)
+    {
+        await host.RemovePendingAttachmentAsync(attachmentId, ct).ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         host.StateChanged -= OnHostStateChanged;
@@ -323,29 +444,27 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private void OnHostStateChanged(object? sender, ContextRelayStateChangedEventArgs e)
     {
+        if (e.StreamingOnly)
+        {
+            ApplyStreamingState(e.State);
+            return;
+        }
+
         ApplyState(e.State);
     }
 
-    private void ApplyState(ContextRelayHostState state)
+    /// <summary>
+    /// Applies a streaming progress snapshot. One arrives per response frame, so this notifies only the
+    /// streaming properties instead of rescanning every collection and refreshing all localized labels.
+    /// </summary>
+    /// <param name="state">The host state carrying the current streaming snapshot.</param>
+    private void ApplyStreamingState(ContextRelayHostState state)
     {
         isApplyingState = true;
         try
         {
-            QueryText = state.QueryText;
-            HelpText = state.HelpText;
-            StatusMessage = state.StatusMessage;
-            RefreshLocalizedUiTexts();
-            SignedInUserText = string.IsNullOrWhiteSpace(state.SignedInUser)
-                ? ContextRelayLocalizedStrings.SignedOutText
-                : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
-            SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
-            Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
-            ChatHistory = state.ChatHistory.Select(item => new ChatHistoryItemViewModel(item, this)).ToArray();
-            CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
-            VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
-            SelectedCommandSuggestion = null;
-            commandSuggestionWindowStart = 0;
-            IsCommandPopupOpen = false;
+            IsStreaming = state.IsStreaming;
+            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
         }
         finally
         {
@@ -353,32 +472,195 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
     }
 
-    private async Task SubmitAsync(CancellationToken ct)
+    /// <summary>
+    /// Returns the tail of a streamed response for the height-bounded preview. A bound text block
+    /// cannot scroll a Remote UI scroll viewer to the new extent, so showing the end of the text keeps
+    /// the latest output visible while the response is still arriving. The full reply is stored in
+    /// chat history when the request completes.
+    /// </summary>
+    /// <param name="text">The cumulative streamed text.</param>
+    /// <returns>The text to display in the streaming preview.</returns>
+    private static string TrimStreamingPreview(string text)
     {
-        var query = QueryText;
-        CloseCommandPopup();
-        await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, ct).ConfigureAwait(false); }).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var tail = text;
+        if (tail.Length > StreamingPreviewMaxChars)
+        {
+            tail = tail.Substring(tail.Length - StreamingPreviewMaxChars);
+        }
+
+        var lines = tail.Split('\n');
+        if (lines.Length > StreamingPreviewMaxLines)
+        {
+            tail = string.Join("\n", lines, lines.Length - StreamingPreviewMaxLines, StreamingPreviewMaxLines);
+        }
+
+        return tail.Length == text.Length ? text : "…" + tail;
     }
 
-    private async Task ConfirmQueryInputAsync(CancellationToken ct)
+    private void ApplyState(ContextRelayHostState state)
     {
+        var queryChanged = !string.Equals(queryText, state.QueryText, StringComparison.Ordinal);
+        isApplyingState = true;
+        try
+        {
+            QueryText = state.QueryText;
+            HelpText = state.HelpText;
+            StatusMessage = state.StatusMessage;
+            RefreshLocalizedUiTexts();
+            var collectionLanguageChanged = collectionsUseJapanese != ContextRelayLocalizedStrings.UseJapanese;
+            collectionsUseJapanese = ContextRelayLocalizedStrings.UseJapanese;
+            SignedInUserText = string.IsNullOrWhiteSpace(state.SignedInUser)
+                ? ContextRelayLocalizedStrings.SignedOutText
+                : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
+            SearchSummary = state.SearchSummary;
+            IsStreaming = state.IsStreaming;
+            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
+            if (collectionLanguageChanged || !PendingAttachmentsEqual(state.PendingAttachments))
+            {
+                PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();
+            }
+            if (collectionLanguageChanged || !SearchResultsEqual(state.SearchResults))
+            {
+                SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
+            }
+            if (collectionLanguageChanged || !SnippetsEqual(state.Snippets))
+            {
+                Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
+            }
+            if (collectionLanguageChanged || !ChatHistoryEqual(state.ChatHistory, state.ContinuableCopilotAssistantItemId))
+            {
+                ChatHistory = state.ChatHistory
+                    .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, state.ContinuableCopilotAssistantItemId, StringComparison.Ordinal)))
+                    .ToArray();
+            }
+            workspaceFiles = state.WorkspaceFiles;
+            if (queryChanged)
+            {
+                CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+                VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+                SelectedCommandSuggestion = null;
+                commandSuggestionWindowStart = 0;
+                IsCommandPopupOpen = false;
+            }
+            else if (collectionLanguageChanged && IsCommandPopupOpen)
+            {
+                // The query is unchanged, so the popup would otherwise keep showing suggestion
+                // descriptions and help text built in the previous UI language.
+                RebuildCommandSuggestionsForLanguageChange();
+            }
+        }
+        finally
+        {
+            isApplyingState = false;
+        }
+
+        if (!queryChanged && IsCommandPopupOpen)
+        {
+            UpdateTransientHelpText();
+        }
+    }
+
+    private async Task SubmitAsync(IClientContext clientContext, CancellationToken ct)
+    {
+        var query = QueryText;
+        host.LogUiDiagnostic($"SubmitAsync invoked queryLength={query.Length} startsWithSlash={query.StartsWith("/", StringComparison.Ordinal)}");
+
+        // Both the primary button and Enter in the query box submit through here, so the enabled
+        // state has to be maintained here rather than in either caller. Checking busy first keeps
+        // a second submission from clearing the flag of the request that is already running.
+        if (isBusy)
+        {
+            host.LogUiDiagnostic("Submit ignored because the view model is already busy.");
+            return;
+        }
+
+        CloseCommandPopup();
+
+        // Authentication and conversation setup run before the first streaming update. Keep the
+        // button enabled across that gap for routes that can stream and be stopped; disabling it
+        // would move keyboard focus away, and WPF does not restore it when the control is enabled
+        // again. Other routes keep the ordinary disabled-while-busy state.
+        var stoppable = IsStoppableRoute(query);
+        if (stoppable)
+        {
+            isChatRequestActive = true;
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+        }
+
+        try
+        {
+            await RunBusyAsync(async () => { await host.SubmitQueryAsync(query, clientContext, ct).ConfigureAwait(false); }).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (stoppable)
+            {
+                isChatRequestActive = false;
+                RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
+            }
+        }
+    }
+
+    private bool PendingAttachmentsEqual(IReadOnlyList<ResolvedAttachment> items) =>
+        PendingAttachments.Count == items.Count && PendingAttachments.Zip(items, (current, next) =>
+            string.Equals(current.Id, next.Id, StringComparison.Ordinal) &&
+            string.Equals(current.Label, next.Label, StringComparison.Ordinal)).All(value => value);
+
+    private bool SearchResultsEqual(IReadOnlyList<ContextItem> items) =>
+        SearchResults.Count == items.Count && SearchResults.Zip(items, (current, next) =>
+            string.Equals(current.Title, next.Title, StringComparison.Ordinal) &&
+            string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
+            string.Equals(current.Source, next.Source.ToString(), StringComparison.Ordinal) &&
+            string.Equals(current.Timestamp, next.Timestamp ?? string.Empty, StringComparison.Ordinal) &&
+            string.Equals(current.Url, next.Url ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+
+    private bool SnippetsEqual(IReadOnlyList<SharedSnippetItem> items) =>
+        Snippets.Count == items.Count && Snippets.Zip(items, (current, next) =>
+            string.Equals(current.Id, next.Id, StringComparison.Ordinal) &&
+            string.Equals(current.Name, next.Name, StringComparison.Ordinal) &&
+            string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
+            string.Equals(current.Source, next.Source, StringComparison.Ordinal) &&
+            string.Equals(current.SourceUrl, next.SourceUrl ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+
+    private bool ChatHistoryEqual(IReadOnlyList<SharedChatHistoryItem> items, string? continuableId) =>
+        ChatHistory.Count == items.Count && ChatHistory.Zip(items, (current, next) =>
+            string.Equals(current.Id, next.Id, StringComparison.Ordinal) &&
+            string.Equals(current.Role, next.Role, StringComparison.Ordinal) &&
+            string.Equals(current.Text, next.Text, StringComparison.Ordinal) &&
+            string.Equals(current.Timestamp, next.Timestamp, StringComparison.Ordinal) &&
+            current.IsActionableAssistant == next.IsActionableAssistant &&
+            current.IsCopilotAssistant == next.IsCopilotAssistant &&
+            current.IsLatestCopilotAssistant == (next.IsCopilotAssistant && string.Equals(next.Id, continuableId, StringComparison.Ordinal)) &&
+            current.HasContextLabels == next.HasContextLabels &&
+            string.Equals(current.ContextLabelsJoinedDisplay, next.ContextLabelsJoinedDisplay, StringComparison.Ordinal)).All(value => value);
+
+    private async Task ConfirmQueryInputAsync(IClientContext clientContext, CancellationToken ct)
+    {
+        host.LogUiDiagnostic($"ConfirmQueryInput invoked popupOpen={IsCommandPopupOpen} suggestionCount={commandSuggestions.Count}");
         if (ApplySelectedCommandSuggestion())
         {
             return;
         }
 
-        await SubmitAsync(ct).ConfigureAwait(false);
+        await SubmitAsync(clientContext, ct).ConfigureAwait(false);
     }
 
     private async Task RunBusyAsync(Func<Task> action)
     {
         if (isBusy)
         {
+            host.LogUiDiagnostic("RunBusyAsync ignored because the view model is already busy.");
             return;
         }
 
         isBusy = true;
         RaiseNotifyPropertyChangedEvent(nameof(IsNotBusy));
+        RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
         try
         {
             await action().ConfigureAwait(false);
@@ -387,6 +669,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             isBusy = false;
             RaiseNotifyPropertyChangedEvent(nameof(IsNotBusy));
+            RaiseNotifyPropertyChangedEvent(nameof(IsPrimaryActionEnabled));
         }
     }
 
@@ -394,6 +677,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     {
         if (commandSuggestions.Count == 0)
         {
+            host.LogUiDiagnostic($"MoveCommandSelection ignored delta={delta} because no suggestions are available.");
             return;
         }
 
@@ -409,6 +693,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         SelectCommandSuggestion(nextIndex);
+        host.LogUiDiagnostic($"MoveCommandSelection applied delta={delta} selectedIndex={nextIndex}");
     }
 
     private bool ApplySelectedCommandSuggestion()
@@ -420,18 +705,20 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     {
         if (!SlashCommandSuggestion.TryBuildCommittedQuery(IsCommandPopupOpen, suggestion, out var committedQuery))
         {
+            host.LogUiDiagnostic("ApplyCommandSuggestion skipped because popup was closed or no suggestion was selected.");
             return false;
         }
 
         SelectedCommandSuggestion = suggestion;
         QueryText = committedQuery;
+        host.LogUiDiagnostic($"ApplyCommandSuggestion committed command={suggestion?.Name ?? "(unknown)"}");
         CloseCommandPopup();
         return true;
     }
 
     private void UpdateCommandSuggestions()
     {
-        var suggestions = ContextRelayLocalizedStrings.GetCommandSuggestions(QueryText);
+        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles);
         CommandSuggestions = suggestions
             .Select(CreateInteractiveSuggestion)
             .ToArray();
@@ -439,6 +726,50 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         SelectedCommandSuggestion = commandSuggestions.Count > 0 ? commandSuggestions[0] : null;
         UpdateVisibleCommandSuggestions();
         IsCommandPopupOpen = commandSuggestions.Count > 0;
+        CommandPopupHeaderText = commandSuggestions.Count > 0 && IsFileMentionSuggestion(commandSuggestions[0])
+            ? ContextRelayLocalizedStrings.FileMentionPopupHeaderText
+            : ContextRelayLocalizedStrings.CommandPopupHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
+        host.LogUiDiagnostic($"UpdateCommandSuggestions updated count={commandSuggestions.Count} popupOpen={IsCommandPopupOpen}");
+    }
+
+    /// <summary>
+    /// Rebuilds an already-open popup's suggestions after a UI language change, so their descriptions and
+    /// header text follow the new language instead of staying in the language they were typed in.
+    /// </summary>
+    private void RebuildCommandSuggestionsForLanguageChange()
+    {
+        // A suggestion's Name (the literal command or file token) is language-invariant, unlike its
+        // localized Description, so it identifies the same row across a rebuild.
+        var selectedName = selectedCommandSuggestion?.Name;
+
+        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles);
+        CommandSuggestions = suggestions
+            .Select(CreateInteractiveSuggestion)
+            .ToArray();
+
+        if (commandSuggestions.Count == 0)
+        {
+            VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
+            SelectedCommandSuggestion = null;
+            commandSuggestionWindowStart = 0;
+            IsCommandPopupOpen = false;
+            return;
+        }
+
+        var reselected = selectedName is null
+            ? null
+            : commandSuggestions.FirstOrDefault(suggestion => string.Equals(suggestion.Name, selectedName, StringComparison.Ordinal));
+        SelectedCommandSuggestion = reselected ?? commandSuggestions[0];
+        commandSuggestionWindowStart = Math.Min(
+            commandSuggestionWindowStart,
+            Math.Max(0, commandSuggestions.Count - MaxVisibleCommandSuggestions));
+        UpdateVisibleCommandSuggestions();
+        CommandPopupHeaderText = IsFileMentionSuggestion(commandSuggestions[0])
+            ? ContextRelayLocalizedStrings.FileMentionPopupHeaderText
+            : ContextRelayLocalizedStrings.CommandPopupHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
+        host.LogUiDiagnostic($"RebuildCommandSuggestionsForLanguageChange updated count={commandSuggestions.Count}");
     }
 
     private void UpdateTransientHelpText()
@@ -464,12 +795,12 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(ClearSnippetsButtonText));
         ClearCacheButtonText = ContextRelayLocalizedStrings.ClearCacheButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(ClearCacheButtonText));
-        DebugLogButtonText = ContextRelayLocalizedStrings.DebugLogButtonText;
-        RaiseNotifyPropertyChangedEvent(nameof(DebugLogButtonText));
         SearchButtonText = ContextRelayLocalizedStrings.SearchButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchButtonText));
         SearchResultsHeaderText = ContextRelayLocalizedStrings.SearchResultsHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(SearchResultsHeaderText));
+        SearchSummaryHeaderText = ContextRelayLocalizedStrings.SearchSummaryHeaderText;
+        RaiseNotifyPropertyChangedEvent(nameof(SearchSummaryHeaderText));
         SnippetsHeaderText = ContextRelayLocalizedStrings.SnippetsHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(SnippetsHeaderText));
         ChatHistoryHeaderText = ContextRelayLocalizedStrings.ChatHistoryHeaderText;
@@ -478,16 +809,61 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(SearchToolTipText));
         CommandPopupHeaderText = ContextRelayLocalizedStrings.CommandPopupHeaderText;
         RaiseNotifyPropertyChangedEvent(nameof(CommandPopupHeaderText));
+        AddFilesButtonText = ContextRelayLocalizedStrings.AddFilesButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(AddFilesButtonText));
+        AddFilesToolTipText = ContextRelayLocalizedStrings.AddFilesToolTip;
+        RaiseNotifyPropertyChangedEvent(nameof(AddFilesToolTipText));
+        StopGenerationButtonText = ContextRelayLocalizedStrings.StopGenerationButtonText;
+        RaiseNotifyPropertyChangedEvent(nameof(StopGenerationButtonText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+
+        // Notify the derived caption last. It reads whichever label matches the current state,
+        // so notifying before both labels are assigned would publish the previous language.
+        RaiseNotifyPropertyChangedEvent(nameof(PrimaryActionButtonText));
+    }
+
+    /// <summary>
+    /// Returns whether a query routes to a Copilot chat turn, which is the only kind of request
+    /// that streams and can be stopped from the composer.
+    /// </summary>
+    /// <param name="query">The query text about to be submitted.</param>
+    /// <returns><see langword="true"/> for non-empty plain chat and <c>/ask</c> submissions.</returns>
+    private static bool IsStoppableRoute(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        var target = SlashCommandRouter.Parse(query.Trim()).Target;
+        return target is RouteTarget.Chat or RouteTarget.Ask;
+    }
+
+    /// <summary>
+    /// Enables the suggestion key bindings only while the slash-command popup is open, so the
+    /// query box does not consume Tab, Up, Down, or Escape when there is nothing to navigate.
+    /// </summary>
+    private void UpdateSuggestionKeyBindingAvailability()
+    {
+        var popupOpen = isCommandPopupOpen;
+        ApplyCommandSelectionCommand.CanExecute = popupOpen;
+        MoveSelectionDownCommand.CanExecute = popupOpen;
+        MoveSelectionUpCommand.CanExecute = popupOpen;
+        CloseCommandPopupCommand.CanExecute = popupOpen;
     }
 
     private void CloseCommandPopup()
     {
+        var hadSuggestions = commandSuggestions.Count > 0;
         CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
         VisibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
         SelectedCommandSuggestion = null;
         commandSuggestionWindowStart = 0;
         IsCommandPopupOpen = false;
+        if (hadSuggestions)
+        {
+            host.LogUiDiagnostic("CloseCommandPopup cleared command suggestions.");
+        }
     }
 
     private void SelectCommandSuggestion(int index)
@@ -497,18 +873,18 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             return;
         }
 
-        var nextWindowStart = CalculateVisibleWindowStart(
+        commandSuggestionWindowStart = CalculateVisibleWindowStart(
             totalCount: commandSuggestions.Count,
             selectedIndex: index,
             currentWindowStart: commandSuggestionWindowStart,
             maxVisibleCount: MaxVisibleCommandSuggestions);
-        if (nextWindowStart != commandSuggestionWindowStart)
-        {
-            commandSuggestionWindowStart = nextWindowStart;
-            UpdateVisibleCommandSuggestions();
-        }
 
         SelectedCommandSuggestion = commandSuggestions[index];
+
+        // Always rebuild VisibleCommandSuggestions from fresh display clones, even when the scroll
+        // window didn't move: Remote UI de-duplicates already-transmitted item objects by identity,
+        // so reassigning the collection with the same instances would not repaint the highlight.
+        UpdateVisibleCommandSuggestions();
     }
 
     private void UpdateVisibleCommandSuggestions()
@@ -522,9 +898,43 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         var maxStartIndex = Math.Max(0, commandSuggestions.Count - MaxVisibleCommandSuggestions);
         commandSuggestionWindowStart = Math.Clamp(commandSuggestionWindowStart, 0, maxStartIndex);
-        VisibleCommandSuggestions = commandSuggestions
-            .Skip(commandSuggestionWindowStart)
-            .Take(MaxVisibleCommandSuggestions)
+        var window = BuildVisibleWindow(
+            commandSuggestions,
+            commandSuggestionWindowStart,
+            MaxVisibleCommandSuggestions,
+            selectedCommandSuggestion);
+        for (var i = 0; i < window.Length; i++)
+        {
+            // Target the master suggestion so selection bookkeeping (IndexOf over
+            // commandSuggestions) keeps working on the canonical instances.
+            var master = commandSuggestions[commandSuggestionWindowStart + i];
+            window[i].ApplyCommand = new AsyncCommand((_, _) =>
+            {
+                ApplyCommandSuggestion(master);
+                return Task.CompletedTask;
+            });
+        }
+
+        VisibleCommandSuggestions = window;
+    }
+
+    /// <summary>
+    /// Builds the visible popup window as brand-new <see cref="SlashCommandSuggestion"/> display
+    /// clones with <see cref="SlashCommandSuggestion.IsSelected"/> baked in at construction.
+    /// Fresh instances are required on every selection change because Remote UI tracks
+    /// already-transmitted objects by identity and does not re-serialize in-place property
+    /// mutations on them; the master items in <paramref name="suggestions"/> are never mutated.
+    /// </summary>
+    internal static SlashCommandSuggestion[] BuildVisibleWindow(
+        IReadOnlyList<SlashCommandSuggestion> suggestions,
+        int windowStart,
+        int maxVisibleCount,
+        SlashCommandSuggestion? selected)
+    {
+        return suggestions
+            .Skip(windowStart)
+            .Take(maxVisibleCount)
+            .Select(master => SlashCommandSuggestion.CreateDisplayClone(master, ReferenceEquals(master, selected)))
             .ToArray();
     }
 
@@ -536,7 +946,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             Icon = suggestion.Icon,
             Name = suggestion.Name,
-            Description = suggestion.Description
+            Description = suggestion.Description,
+            CommittedQuery = suggestion.CommittedQuery
         };
 
         interactiveSuggestion.ApplyCommand = new AsyncCommand((_, _) =>
@@ -589,5 +1000,78 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         return -1;
+    }
+
+    private static bool ShouldLogComposerTransition(string previousQuery, string currentQuery)
+    {
+        return currentQuery.Length == 0 ||
+            currentQuery.StartsWith("/", StringComparison.Ordinal) ||
+            previousQuery.StartsWith("/", StringComparison.Ordinal) ||
+            currentQuery.IndexOf('#') >= 0 ||
+            previousQuery.IndexOf('#') >= 0;
+    }
+
+    private static IReadOnlyList<SlashCommandSuggestion> BuildComposerSuggestions(string queryText, IReadOnlyList<string> workspaceFiles)
+    {
+        var fileSuggestions = BuildFileMentionSuggestions(queryText, workspaceFiles);
+        return fileSuggestions.Count > 0
+            ? fileSuggestions
+            : ContextRelayLocalizedStrings.GetCommandSuggestions(queryText);
+    }
+
+    private static IReadOnlyList<SlashCommandSuggestion> BuildFileMentionSuggestions(string queryText, IReadOnlyList<string> workspaceFiles)
+    {
+        if (string.IsNullOrWhiteSpace(queryText) ||
+            char.IsWhiteSpace(queryText[^1]))
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var match = Regex.Match(queryText, "(^|\\s)(#(?:\"[^\"]*\"|'[^']*'|[^\\s#]*))$", RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var token = match.Groups[2].Value;
+        if (!token.StartsWith("#", StringComparison.Ordinal))
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var tokenStart = match.Index + match.Groups[1].Length;
+        var tokenEnd = match.Index + match.Length;
+        var partialPath = token.Substring(1).Trim('"', '\'');
+        var filteredFiles = workspaceFiles
+            .Where(path => path.Contains(partialPath, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .ToArray();
+        if (filteredFiles.Length == 0)
+        {
+            return Array.Empty<SlashCommandSuggestion>();
+        }
+
+        var suggestions = new List<SlashCommandSuggestion>(filteredFiles.Length);
+        foreach (var file in filteredFiles)
+        {
+            var fileToken = file.IndexOf(' ') >= 0 ? $"#\"{file}\"" : $"#{file}";
+            var prefix = queryText[..tokenStart];
+            var suffix = queryText[tokenEnd..];
+            var separator = suffix.StartsWith(" ", StringComparison.Ordinal) || suffix.Length == 0 ? string.Empty : " ";
+            suggestions.Add(new SlashCommandSuggestion
+            {
+                Icon = "#",
+                Name = file,
+                Description = ContextRelayLocalizedStrings.GetLocalFileContextLabel(file),
+                CommittedQuery = $"{prefix}{fileToken}{separator}{suffix}"
+            });
+        }
+
+        return suggestions;
+    }
+
+    private static bool IsFileMentionSuggestion(SlashCommandSuggestion suggestion)
+    {
+        return string.Equals(suggestion.Icon, "#", StringComparison.Ordinal);
     }
 }

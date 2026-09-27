@@ -260,7 +260,7 @@
     - SourceManifestPath: Full path to source.extension.vsixmanifest.
     - PackageDllPath: Full path to the in-proc package DLL.
     - PackagePkgdefPath: Full path to the generated package pkgdef.
-    - SupportingAssemblies: Optional semicolon-separated list of supporting assemblies (e.g., Community.VisualStudio.Toolkit.dll) to copy into the VSIX.
+    - SupportingAssemblies: Optional semicolon-separated list of supporting assemblies to copy into the VSIX. Use source|relative/path for satellite assemblies.
   -->
   <UsingTask TaskName="PatchVsixForInProcPackage" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
@@ -275,10 +275,26 @@
       <Using Namespace="System.IO" />
       <Using Namespace="System.IO.Compression" />
       <Using Namespace="System.Linq" />
+      <Using Namespace="System.Text" />
       <Using Namespace="System.Xml" />
       <Code>
         <![CDATA[
         const string Ns = "http://schemas.microsoft.com/developer/vsx-schema/2011";
+        const string NsDesign = "http://schemas.microsoft.com/developer/vsx-schema-design/2011";
+
+        string GetSupportingAssemblySource(string specification)
+        {
+            int separator = specification.IndexOf('|');
+            return (separator >= 0 ? specification.Substring(0, separator) : specification).Trim();
+        }
+
+        string GetSupportingAssemblyDestination(string specification)
+        {
+            int separator = specification.IndexOf('|');
+            string source = GetSupportingAssemblySource(specification);
+            string destination = separator >= 0 ? specification.Substring(separator + 1).Trim() : Path.GetFileName(source);
+            return destination.Replace('\\', '/').TrimStart('/');
+        }
 
         try
         {
@@ -381,25 +397,354 @@
                     outRoot.AppendChild(outAssets);
                 }
 
-                string pkgdefFileName = Path.GetFileName(PackagePkgdefPath);
-                bool hasVsPackage = outAssets.ChildNodes
-                    .OfType<XmlNode>()
-                    .Any(n => n.NodeType == XmlNodeType.Element
-                        && n.LocalName == "Asset"
-                        && n.NamespaceURI == Ns
-                        && ((XmlElement)n).GetAttribute("Type") == "Microsoft.VisualStudio.VsPackage");
-                if (!hasVsPackage)
+                void EnsureAsset(string assetType, string assetPath)
                 {
-                    XmlElement vsPackage = outDoc.CreateElement("Asset", Ns);
-                    vsPackage.SetAttribute("Type", "Microsoft.VisualStudio.VsPackage");
-                    vsPackage.SetAttribute("Path", pkgdefFileName);
-                    outAssets.AppendChild(vsPackage);
+                    XmlElement existing = outAssets.ChildNodes
+                        .OfType<XmlNode>()
+                        .Where(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Asset" && n.NamespaceURI == Ns)
+                        .Cast<XmlElement>()
+                        .FirstOrDefault(n =>
+                            string.Equals(n.GetAttribute("Type"), assetType, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(n.GetAttribute("Path"), assetPath, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        return;
+                    }
+
+                    XmlElement asset = outDoc.CreateElement("Asset", Ns);
+                    asset.SetAttribute("Type", assetType);
+                    asset.SetAttribute("Path", assetPath);
+                    asset.SetAttribute("Source", NsDesign, "File");
+                    outAssets.AppendChild(asset);
                 }
 
-                // Save patched manifest
+                string pkgdefFileName = Path.GetFileName(PackagePkgdefPath);
+                EnsureAsset("Microsoft.VisualStudio.VsPackage", pkgdefFileName);
+                EnsureAsset("Microsoft.VisualStudio.Assembly", Path.GetFileName(PackageDllPath));
+                if (!string.IsNullOrWhiteSpace(SupportingAssemblies))
+                {
+                    foreach (string supportingAssembly in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string assemblyPath = GetSupportingAssemblySource(supportingAssembly);
+                        if (string.IsNullOrEmpty(assemblyPath))
+                        {
+                            continue;
+                        }
+
+                        EnsureAsset("Microsoft.VisualStudio.Assembly", GetSupportingAssemblyDestination(supportingAssembly));
+                    }
+                }
+
+                // Save patched extension.vsixmanifest
                 using (var writer = new StreamWriter(manifestPath, false, new System.Text.UTF8Encoding(true)))
                 {
                     outDoc.Save(writer);
+                }
+
+                // Patch setup-engine manifest.json as well. VSIXInstaller validates this file
+                // before deployment, and stale values can fail installation even when
+                // extension.vsixmanifest has already been corrected.
+                string setupManifestPath = Path.Combine(workDir, "manifest.json");
+                if (File.Exists(setupManifestPath))
+                {
+                    string setupManifestText = File.ReadAllText(setupManifestPath, Encoding.UTF8);
+                    string EnsureManifestFileEntry(string manifestText, string fileName)
+                    {
+                        if (string.IsNullOrWhiteSpace(fileName))
+                        {
+                            return manifestText;
+                        }
+
+                        string escapedFileName = fileName.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                        string manifestNeedle = "\"fileName\":\"/" + escapedFileName + "\"";
+                        if (manifestText.IndexOf(manifestNeedle, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return manifestText;
+                        }
+
+                        string replacement = System.Text.RegularExpressions.Regex.Replace(
+                            manifestText,
+                            "\"files\"\\s*:\\s*\\[(.*?)\\]",
+                            m =>
+                            {
+                                string content = m.Groups[1].Value;
+                                string separator = string.IsNullOrWhiteSpace(content) ? string.Empty : ",";
+                                return "\"files\":[" + content + separator + "{\"fileName\":\"/" + escapedFileName + "\",\"sha256\":null}]";
+                            },
+                            System.Text.RegularExpressions.RegexOptions.Singleline);
+
+                        if (string.Equals(replacement, manifestText, StringComparison.Ordinal))
+                        {
+                            Log.LogError("manifest.json in produced VSIX is missing a parsable files[] array; cannot register injected file {0}.", fileName);
+                            return manifestText;
+                        }
+
+                        return replacement;
+                    }
+
+                    XmlElement sourceMetadata = sourceRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Metadata" && n.NamespaceURI == Ns) as XmlElement;
+                    XmlElement sourceIdentity = sourceMetadata == null
+                        ? null
+                        : sourceMetadata.ChildNodes
+                            .OfType<XmlNode>()
+                            .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Identity" && n.NamespaceURI == Ns) as XmlElement;
+                    string sourceId = sourceIdentity == null ? string.Empty : sourceIdentity.GetAttribute("Id");
+                    string sourceVersion = sourceIdentity == null ? string.Empty : sourceIdentity.GetAttribute("Version");
+
+                    if (!string.IsNullOrEmpty(sourceId))
+                    {
+                        setupManifestText = System.Text.RegularExpressions.Regex.Replace(
+                            setupManifestText,
+                            "\"id\"\\s*:\\s*\"[^\"]*\"",
+                            "\"id\":\"" + sourceId + "\"",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        setupManifestText = System.Text.RegularExpressions.Regex.Replace(
+                            setupManifestText,
+                            "\"vsixId\"\\s*:\\s*\"[^\"]*\"",
+                            "\"vsixId\":\"" + sourceId + "\"",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    }
+
+                    if (!string.IsNullOrEmpty(sourceVersion))
+                    {
+                        setupManifestText = System.Text.RegularExpressions.Regex.Replace(
+                            setupManifestText,
+                            "\"version\"\\s*:\\s*\"[^\"]*\"",
+                            "\"version\":\"" + sourceVersion + "\"");
+                    }
+
+                    // Installer validation for user-scoped VSIX install expects the Extensions
+                    // path family, not VSExtensions.
+                    setupManifestText = setupManifestText.Replace(
+                        "\\\\Common7\\\\IDE\\\\VSExtensions\\\\",
+                        "\\\\Common7\\\\IDE\\\\Extensions\\\\");
+
+                    // Keep setup-engine file inventory aligned with payload injection so
+                    // Marketplace validation does not reject unlisted VSIX parts.
+                    var injectedManifestFiles = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        Path.GetFileName(PackageDllPath),
+                        pkgdefFileName
+                    };
+                    if (!string.IsNullOrWhiteSpace(SupportingAssemblies))
+                    {
+                        foreach (string supportingAssembly in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            string supportingAssemblyPath = GetSupportingAssemblySource(supportingAssembly);
+                            if (string.IsNullOrEmpty(supportingAssemblyPath))
+                            {
+                                continue;
+                            }
+
+                            injectedManifestFiles.Add(GetSupportingAssemblyDestination(supportingAssembly));
+                        }
+                    }
+
+                    foreach (string injectedManifestFile in injectedManifestFiles)
+                    {
+                        setupManifestText = EnsureManifestFileEntry(setupManifestText, injectedManifestFile);
+                    }
+
+                    File.WriteAllText(setupManifestPath, setupManifestText, new UTF8Encoding(true));
+                    Log.LogMessage(MessageImportance.High, "Patched setup manifest.json inside VSIX.");
+                }
+
+                // Keep catalog.json consistent with extension.vsixmanifest / manifest.json.
+                // Setup Engine enforces cross-manifest consistency and rejects mismatched versions.
+                string catalogPath = Path.Combine(workDir, "catalog.json");
+                if (File.Exists(catalogPath))
+                {
+                    string catalogText = File.ReadAllText(catalogPath, Encoding.UTF8);
+                    XmlElement sourceMetadata = sourceRoot.ChildNodes
+                        .OfType<XmlNode>()
+                        .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Metadata" && n.NamespaceURI == Ns) as XmlElement;
+                    XmlElement sourceIdentity = sourceMetadata == null
+                        ? null
+                        : sourceMetadata.ChildNodes
+                            .OfType<XmlNode>()
+                            .FirstOrDefault(n => n.NodeType == XmlNodeType.Element && n.LocalName == "Identity" && n.NamespaceURI == Ns) as XmlElement;
+                    string sourceId = sourceIdentity == null ? string.Empty : sourceIdentity.GetAttribute("Id");
+                    string sourceVersion = sourceIdentity == null ? string.Empty : sourceIdentity.GetAttribute("Version");
+
+                    if (!string.IsNullOrEmpty(sourceVersion))
+                    {
+                        catalogText = catalogText.Replace("0.0.0.0", sourceVersion);
+                    }
+
+                    // Keep catalog package identity aligned with source manifest identity.
+                    // Mismatched IDs between extension.vsixmanifest and catalog.json can
+                    // confuse Setup Engine validation.
+                    if (!string.IsNullOrEmpty(sourceId))
+                    {
+                        System.Text.RegularExpressions.Match catalogInfoIdMatch = System.Text.RegularExpressions.Regex.Match(
+                            catalogText,
+                            "\"info\"\\s*:\\s*\\{\\s*\"id\"\\s*:\\s*\"([^\",]+),version=",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (catalogInfoIdMatch.Success)
+                        {
+                            string catalogId = catalogInfoIdMatch.Groups[1].Value;
+                            if (!string.IsNullOrEmpty(catalogId) && !string.Equals(catalogId, sourceId, StringComparison.Ordinal))
+                            {
+                                catalogText = catalogText.Replace(catalogId, sourceId);
+                            }
+                        }
+                    }
+
+                    catalogText = catalogText.Replace(
+                        "\\\\Common7\\\\IDE\\\\VSExtensions\\\\",
+                        "\\\\Common7\\\\IDE\\\\Extensions\\\\");
+
+                    // VSIXInstaller on newer VS builds requires VsixPackage to be present
+                    // in catalog package entries. Ensure the field is injected consistently.
+                    string vsixPackageFileName = Path.GetFileName(VsixPath);
+                    if (!string.IsNullOrEmpty(vsixPackageFileName))
+                    {
+                        string escapedVsixPackageFileName = System.Text.RegularExpressions.Regex.Escape(vsixPackageFileName);
+
+                        System.Text.RegularExpressions.Match payloadMatch = System.Text.RegularExpressions.Regex.Match(
+                            catalogText,
+                            "\"payloads\"\\s*:\\s*\\[\\s*\\{\\s*\"fileName\"\\s*:\\s*\"([^\"]+\\.vsix)\"",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (payloadMatch.Success)
+                        {
+                            vsixPackageFileName = payloadMatch.Groups[1].Value;
+                            escapedVsixPackageFileName = System.Text.RegularExpressions.Regex.Escape(vsixPackageFileName);
+                        }
+
+                        // Add vsixPackage to package entries where missing. Check the
+                        // containing object so an existing key later in the object is not
+                        // duplicated.
+                        bool TryFindContainingObject(string json, int propertyIndex, out int objectStart, out int objectEnd)
+                        {
+                            objectStart = -1;
+                            objectEnd = -1;
+                            var objectStarts = new System.Collections.Generic.Stack<int>();
+                            bool inString = false;
+                            bool escaped = false;
+                            for (int i = 0; i < propertyIndex; i++)
+                            {
+                                char current = json[i];
+                                if (inString)
+                                {
+                                    if (escaped)
+                                    {
+                                        escaped = false;
+                                    }
+                                    else if (current == '\\')
+                                    {
+                                        escaped = true;
+                                    }
+                                    else if (current == '"')
+                                    {
+                                        inString = false;
+                                    }
+                                    continue;
+                                }
+
+                                if (current == '"')
+                                {
+                                    inString = true;
+                                }
+                                else if (current == '{')
+                                {
+                                    objectStarts.Push(i);
+                                }
+                                else if (current == '}' && objectStarts.Count > 0)
+                                {
+                                    objectStarts.Pop();
+                                }
+                            }
+
+                            if (objectStarts.Count == 0)
+                            {
+                                return false;
+                            }
+
+                            objectStart = objectStarts.Peek();
+                            int depth = 0;
+                            inString = false;
+                            escaped = false;
+                            for (int i = objectStart; i < json.Length; i++)
+                            {
+                                char current = json[i];
+                                if (inString)
+                                {
+                                    if (escaped)
+                                    {
+                                        escaped = false;
+                                    }
+                                    else if (current == '\\')
+                                    {
+                                        escaped = true;
+                                    }
+                                    else if (current == '"')
+                                    {
+                                        inString = false;
+                                    }
+                                    continue;
+                                }
+
+                                if (current == '"')
+                                {
+                                    inString = true;
+                                }
+                                else if (current == '{')
+                                {
+                                    depth++;
+                                }
+                                else if (current == '}' && --depth == 0)
+                                {
+                                    objectEnd = i;
+                                    return true;
+                                }
+                            }
+
+                            return false;
+                        }
+
+                        var packageTypeRegex = new System.Text.RegularExpressions.Regex(
+                            "\"type\"\\s*:\\s*\"(Component|Vsix)\"\\s*(,)?",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        catalogText = packageTypeRegex.Replace(
+                            catalogText,
+                            match =>
+                            {
+                                int objectStart;
+                                int objectEnd;
+                                if (TryFindContainingObject(catalogText, match.Index, out objectStart, out objectEnd))
+                                {
+                                    string packageObject = catalogText.Substring(objectStart, objectEnd - objectStart + 1);
+                                    if (System.Text.RegularExpressions.Regex.IsMatch(
+                                            packageObject,
+                                            "\"vsixPackage\"\\s*:",
+                                            System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                                    {
+                                        return match.Value;
+                                    }
+                                }
+
+                                return "\"type\":\"" + match.Groups[1].Value + "\",\"vsixPackage\":\""
+                                    + vsixPackageFileName + "\"" + match.Groups[2].Value;
+                            });
+
+                        // Keep info-level value aligned as well for installer compatibility.
+                        if (!System.Text.RegularExpressions.Regex.IsMatch(
+                                catalogText,
+                                "\"manifestType\"\\s*:\\s*\"Extension\"\\s*,\\s*\"vsixPackage\"\\s*:\\s*\"" + escapedVsixPackageFileName + "\"",
+                                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                        {
+                            catalogText = System.Text.RegularExpressions.Regex.Replace(
+                                catalogText,
+                                "\"manifestType\"\\s*:\\s*\"Extension\"",
+                                "\"manifestType\":\"Extension\",\"vsixPackage\":\"" + vsixPackageFileName + "\"",
+                                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        }
+                    }
+
+                    File.WriteAllText(catalogPath, catalogText, new UTF8Encoding(true));
+                    Log.LogMessage(MessageImportance.High, "Patched catalog.json inside VSIX.");
                 }
 
                 // Copy in-proc package payload into the VSIX root
@@ -413,10 +758,12 @@
                 {
                     foreach (string sa in SupportingAssemblies.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
                     {
-                        string trimmed = sa.Trim();
-                        if (string.IsNullOrEmpty(trimmed) || !File.Exists(trimmed)) continue;
-                        string destSa = Path.Combine(workDir, Path.GetFileName(trimmed));
-                        File.Copy(trimmed, destSa, overwrite: true);
+                        string sourcePath = GetSupportingAssemblySource(sa);
+                        string relativeDestination = GetSupportingAssemblyDestination(sa);
+                        if (string.IsNullOrEmpty(sourcePath) || string.IsNullOrEmpty(relativeDestination) || !File.Exists(sourcePath)) continue;
+                        string destSa = Path.Combine(workDir, relativeDestination.Replace('/', Path.DirectorySeparatorChar));
+                        Directory.CreateDirectory(Path.GetDirectoryName(destSa));
+                        File.Copy(sourcePath, destSa, overwrite: true);
                     }
                 }
 

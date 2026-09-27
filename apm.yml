@@ -1,0 +1,18 @@
+name: ContextRelayVS
+version: 1.0.0
+description: APM project for ContextRelayVS
+author: Kazushi Kamegawa
+# Which agent platforms to deploy to.
+# Resolution order: --target flag > this field > auto-detect from filesystem.
+# Accepted values: agent-skills, antigravity, claude, codex, copilot, cursor, gemini, grok-build, hermes, kiro, opencode, vscode, windsurf
+targets:
+  - claude
+  - codex
+  - copilot
+dependencies:
+  apm:
+    - tfsugjp/skills
+    - dotnet/skills
+  mcp: []
+includes: auto
+scripts: {}

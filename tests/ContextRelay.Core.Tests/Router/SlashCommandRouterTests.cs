@@ -83,13 +83,28 @@ public sealed class SlashCommandRouterTests
     }
 
     [Fact]
-    public void Parse_UnknownSlashCommand_FallsBackToChat()
+    public void Parse_UnknownSlashCommand_FallsBackToAllSearch()
     {
         var result = SlashCommandRouter.Parse("/unknown test value");
 
-        Assert.Equal(RouteTarget.Chat, result.Target);
+        Assert.Equal(RouteTarget.All, result.Target);
+        Assert.Equal("/all", result.SlashCommandName);
         Assert.Equal("/unknown test value", result.Query);
         Assert.False(result.IsEmpty);
+        Assert.Equal(SearchScope.All, result.SearchScope);
+        Assert.Equal(7, result.TargetSources.Count);
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/ ")]
+    public void Parse_BareSlash_RoutesToEmptyChat(string input)
+    {
+        var result = SlashCommandRouter.Parse(input);
+
+        Assert.Equal(RouteTarget.Chat, result.Target);
+        Assert.Equal(string.Empty, result.Query);
+        Assert.True(result.IsEmpty);
         Assert.Empty(result.TargetSources);
     }
 
@@ -182,5 +197,28 @@ public sealed class SlashCommandRouterTests
 
         Assert.Contains("/mail", SlashCommandRouter.GetSupportedCommands());
         Assert.DoesNotContain("/mutated", SlashCommandRouter.GetSupportedCommands());
+    }
+
+    [Fact]
+    public void Parse_CombinableSourceCommands_RoutesToExplicitSources()
+    {
+        var result = SlashCommandRouter.Parse("/mail /onedrive architecture decisions");
+
+        Assert.Equal(RouteTarget.All, result.Target);
+        Assert.Equal("architecture decisions", result.Query);
+        Assert.Equal(SearchScope.Scoped, result.SearchScope);
+        Assert.Equal(new[] { "/mail", "/onedrive" }, result.SourceCommandNames);
+        Assert.Equal(new[] { ContextSource.Mail, ContextSource.OneDrive }, result.TargetSources);
+    }
+
+    [Fact]
+    public void Parse_AllCombinedWithExplicitSource_FallsBackToAllSearch()
+    {
+        var result = SlashCommandRouter.Parse("/all /mail architecture decisions");
+
+        Assert.Equal(RouteTarget.All, result.Target);
+        Assert.Equal("/all /mail architecture decisions", result.Query);
+        Assert.Equal(SearchScope.All, result.SearchScope);
+        Assert.Empty(result.SourceCommandNames);
     }
 }

@@ -1,3 +1,5 @@
+using System;
+using System.Net.Http;
 using ContextRelay.Core.Adapters;
 using Xunit;
 
@@ -10,6 +12,36 @@ public sealed class GraphHttpClientTests
     {
         var client = new GraphHttpClient();
         Assert.Equal("https://graph.microsoft.com", client.BaseUrl);
+    }
+
+    [Fact]
+    public void DefaultTimeout_AllowsLongCopilotResponses()
+    {
+        var client = new GraphHttpClient();
+        Assert.Equal(GraphHttpClient.DefaultTimeout, client.Timeout);
+    }
+
+    [Fact]
+    public void DefaultTimeout_AppliesToInjectedDefaultHttpClient()
+    {
+        using var httpClient = new HttpClient();
+
+        var client = new GraphHttpClient(httpClient);
+
+        Assert.Equal(GraphHttpClient.DefaultTimeout, client.Timeout);
+        Assert.Equal(GraphHttpClient.DefaultTimeout, httpClient.Timeout);
+    }
+
+    [Fact]
+    public void CustomTimeout_IsPreservedForInjectedHttpClient()
+    {
+        var timeout = TimeSpan.FromSeconds(42);
+        using var httpClient = new HttpClient { Timeout = timeout };
+
+        var client = new GraphHttpClient(httpClient);
+
+        Assert.Equal(timeout, client.Timeout);
+        Assert.Equal(timeout, httpClient.Timeout);
     }
 
     [Fact]
