@@ -4,6 +4,14 @@ ContextRelay for Visual Studio は、Visual Studio (2022 / 2026) 上で Microsof
 
 > **現状**: 実装済みプレビューです。ローカルでインストール可能な VSIX をビルドでき、ローカライズ済みツールウィンドウ、スラッシュコマンド補完、結果アクション、`/connectors`、`/ask`、`/workiq` まで含む計画済みのリポジトリ内機能を備えています。Marketplace 公開前に Experimental Instance での手動検証が必要です。
 
+---
+
+## スクリーンショット
+
+![/ask リクエストに対する Microsoft 365 Copilot の応答を表示している Visual Studio の ContextRelay ツールウィンドウ](media/screenshot-tool-window.webp)
+
+---
+
 ## 実装済み機能
 
 - 通常の Copilot チャット — スラッシュコマンドなしの入力で Microsoft 365 Copilot の会話を開始・継続する。個々の検索結果は添付せず、明示的コンテキストはピン留めスニペット、保留中の添付ファイル、`#file` メンション、有効化した場合の保存済みアクティブ エディター。直近の ContextRelay 検索要約は参考情報として送信される場合があるが、明示的コンテキストには含めない。`/ask` と異なり、明示的コンテキストがなくても実行できる
