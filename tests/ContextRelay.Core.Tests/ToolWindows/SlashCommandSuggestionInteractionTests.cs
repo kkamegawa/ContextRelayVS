@@ -248,9 +248,10 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.DoesNotContain("{Binding IsNotStreaming", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Command=\"{Binding StopGenerationCommand}\"", xaml, StringComparison.Ordinal);
 
-        // The streaming preview is outside the chat list, so its text needs an explicit themed brush.
-        Assert.Contains("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource BodyTextStyle}\"", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Text=\"{Binding StreamingResponseText}\" Style=\"{StaticResource CardBodyTextStyle}\"", xaml, StringComparison.Ordinal);
+        // The streaming preview is outside the chat list, so its blocks inherit an explicit themed brush.
+        Assert.Contains("<StackPanel TextElement.Foreground=\"{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}\">", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding StreamingBlocks}\" ItemTemplate=\"{StaticResource MarkdownBlockTemplate}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding StreamingResponseText}", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -574,7 +575,7 @@ public sealed class SlashCommandSuggestionInteractionTests
         Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<ColumnDefinition Width=\"Auto\" />", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding SearchCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding StreamingResponseText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding StreamingBlocks}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"180\"", xaml, StringComparison.Ordinal);
         Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.Name=\"{Binding RemoveAutomationName}\"", xaml, StringComparison.Ordinal);

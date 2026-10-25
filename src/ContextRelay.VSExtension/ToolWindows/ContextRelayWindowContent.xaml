@@ -249,7 +249,8 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+            <!-- Follow the inherited text color (a list item's hover/selection color, or the panel's). -->
+            <Setter Property="Foreground" Value="{Binding (TextElement.Foreground), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" />
             <Setter Property="SelectionBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}" />
             <Setter Property="SelectionTextBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}" />
             <Setter Property="SelectionOpacity" Value="1" />
@@ -262,6 +263,84 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="MonospaceSelectableTextStyle" TargetType="TextBox" BasedOn="{StaticResource SelectableTextStyle}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="FontFamily" Value="Consolas, Courier New" />
+        </Style>
+
+        <!-- Code and tables scroll horizontally instead of wrapping. Known limitation: this scroll viewer
+             also takes the mouse wheel while the pointer is over the block. -->
+        <Style x:Key="HorizontalScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+
+        <!-- One flattened Markdown block. Nesting arrives as flags: list depth and quote depth become
+             margins, a quote gets a left rule, and headings get larger text. -->
+        <DataTemplate x:Key="MarkdownBlockTemplate">
+            <Border x:Name="QuoteRule" Margin="0,2,0,2" BorderThickness="0"
+                    BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
+                <Grid>
+                    <Grid x:Name="TextRow" Visibility="{Binding IsText, Converter={StaticResource BoolToVisConverter}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Margin="0,0,6,0" Text="{Binding ListMarker}"
+                                   Visibility="{Binding IsListItem, Converter={StaticResource BoolToVisConverter}}" />
+                        <TextBox x:Name="BlockText" Grid.Column="1" Style="{StaticResource SelectableTextStyle}" Text="{Binding Text, Mode=OneWay}" />
+                    </Grid>
+                    <StackPanel Visibility="{Binding IsCode, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Margin="0,0,0,2" Text="{Binding Language}" Style="{StaticResource CardMutedTextStyle}" FontSize="11"
+                                   Visibility="{Binding HasLanguage, Converter={StaticResource BoolToVisConverter}}" />
+                        <Border Style="{StaticResource SurfaceBorderStyle}" Padding="8,6" CornerRadius="4">
+                            <ScrollViewer Style="{StaticResource HorizontalScrollViewerStyle}">
+                                <TextBox Style="{StaticResource MonospaceSelectableTextStyle}" Text="{Binding Text, Mode=OneWay}" />
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                    <Border Visibility="{Binding IsTable, Converter={StaticResource BoolToVisConverter}}" Style="{StaticResource SurfaceBorderStyle}" Padding="8,6" CornerRadius="4">
+                        <ScrollViewer Style="{StaticResource HorizontalScrollViewerStyle}">
+                            <TextBox Style="{StaticResource MonospaceSelectableTextStyle}" Text="{Binding Text, Mode=OneWay}" />
+                        </ScrollViewer>
+                    </Border>
+                    <Border Height="1" Margin="0,6,0,6"
+                            Background="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}"
+                            Visibility="{Binding IsRule, Converter={StaticResource BoolToVisConverter}}" />
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsHeading1}" Value="True">
+                    <Setter TargetName="BlockText" Property="FontSize" Value="18" />
+                    <Setter TargetName="BlockText" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHeading2}" Value="True">
+                    <Setter TargetName="BlockText" Property="FontSize" Value="16" />
+                    <Setter TargetName="BlockText" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHeading3}" Value="True">
+                    <Setter TargetName="BlockText" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsListDepth1}" Value="True">
+                    <Setter TargetName="TextRow" Property="Margin" Value="16,0,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsListDepth2}" Value="True">
+                    <Setter TargetName="TextRow" Property="Margin" Value="32,0,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsQuote}" Value="True">
+                    <Setter TargetName="QuoteRule" Property="BorderThickness" Value="3,0,0,0" />
+                    <Setter TargetName="QuoteRule" Property="Padding" Value="8,0,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsQuoteDepth2}" Value="True">
+                    <Setter TargetName="QuoteRule" Property="Margin" Value="12,2,0,2" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsQuoteDepth3}" Value="True">
+                    <Setter TargetName="QuoteRule" Property="Margin" Value="24,2,0,2" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
 
         <Style x:Key="BadgeBorderStyle" TargetType="Border">
             <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
@@ -378,12 +457,16 @@
                     </Grid.RowDefinitions>
                     <Border Grid.Row="0" Style="{StaticResource StreamingPreviewBorderStyle}"
                             Visibility="{Binding IsStreaming, Converter={StaticResource BoolToVisConverter}}">
-                        <StackPanel>
+                        <StackPanel TextElement.Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}">
                             <TextBlock Text="{Binding ChatHistoryHeaderText}"
                                        Style="{StaticResource CardTitleTextStyle}"
                                        Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
                             <ScrollViewer Margin="0,6,0,0" MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                <TextBlock Text="{Binding StreamingResponseText}" Style="{StaticResource BodyTextStyle}" />
+                                <StackPanel>
+                                    <TextBlock Text="…" Style="{StaticResource MutedTextStyle}"
+                                               Visibility="{Binding HasEarlierStreamingBlocks, Converter={StaticResource BoolToVisConverter}}" />
+                                    <ItemsControl Focusable="False" ItemsSource="{Binding StreamingBlocks}" ItemTemplate="{StaticResource MarkdownBlockTemplate}" />
+                                </StackPanel>
                             </ScrollViewer>
                         </StackPanel>
                     </Border>
@@ -396,7 +479,19 @@
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource CardTitleTextStyle}" Text="{Binding Role}" />
                                         <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Text="{Binding Timestamp}" Style="{StaticResource CardMutedTextStyle}" />
                                     </DockPanel>
-                                    <TextBlock Margin="0,6,0,0" Text="{Binding Text}" Style="{StaticResource CardBodyTextStyle}" />
+                                    <ItemsControl Margin="0,6,0,0" Focusable="False" ItemsSource="{Binding Blocks}" ItemTemplate="{StaticResource MarkdownBlockTemplate}" />
+                                    <WrapPanel Margin="0,6,0,0" Visibility="{Binding HasLinks, Converter={StaticResource BoolToVisConverter}}">
+                                        <TextBlock Margin="0,6,8,0" Text="{Binding LinksHeaderText}" Style="{StaticResource CardMutedTextStyle}" />
+                                        <ItemsControl Focusable="False" ItemsSource="{Binding Links}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" MinHeight="26" Padding="8,2"
+                                                            Content="{Binding Text}" ToolTip="{Binding Url}" AutomationProperties.Name="{Binding Text}" Command="{Binding OpenCommand}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </WrapPanel>
                                     <TextBlock Margin="0,4,0,0" Style="{StaticResource CardMutedTextStyle}"
                                                Visibility="{Binding HasContextLabels, Converter={StaticResource BoolToVisConverter}}">
                                         <Run Text="{Binding ContextLabelsPrefixText}" />

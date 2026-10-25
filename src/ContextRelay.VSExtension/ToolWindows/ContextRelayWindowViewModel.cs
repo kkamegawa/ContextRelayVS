@@ -12,6 +12,7 @@ using ContextRelay.Core.Router;
 using ContextRelay.Core.Settings;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.VSExtension.Services;
+using ContextRelay.VSExtension.ToolWindows.Markdown;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.UI;
 
@@ -20,8 +21,12 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [DataContract]
 internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject, IDisposable
 {
-    private const int StreamingPreviewMaxChars = 1200;
-    private const int StreamingPreviewMaxLines = 12;
+    // The preview cannot scroll itself to the newest output, so it shows the last few parsed blocks.
+    private const int StreamingPreviewMaxBlocks = 8;
+    private static readonly TimeSpan StreamingParseInterval = TimeSpan.FromMilliseconds(120);
+    private readonly ObservableList<MarkdownBlockViewModel> streamingBlocks = new();
+    private readonly System.Diagnostics.Stopwatch streamingParseClock = new();
+    private bool hasEarlierStreamingBlocks;
 
     private const int MaxVisibleCommandSuggestions = 4;
     private const int ChatTabIndex = 0;
@@ -187,11 +192,40 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember]
     public bool IsPrimaryActionEnabled => isChatRequestActive || isStreaming || !isBusy;
 
-    [DataMember]
+    /// <summary>
+    /// Gets the raw text streamed so far. It is not sent to the UI; the preview renders
+    /// <see cref="StreamingBlocks"/> parsed from it.
+    /// </summary>
     public string StreamingResponseText
     {
         get => streamingResponseText;
-        private set { if (streamingResponseText != value) { streamingResponseText = value; RaiseNotifyPropertyChangedEvent(nameof(StreamingResponseText)); } }
+        private set
+        {
+            if (streamingResponseText != value)
+            {
+                streamingResponseText = value;
+                RaiseNotifyPropertyChangedEvent(nameof(StreamingResponseText));
+                UpdateStreamingBlocks();
+            }
+        }
+    }
+
+    /// <summary>Gets the newest Markdown blocks of the streaming answer, updated in place as text arrives.</summary>
+    [DataMember]
+    public ObservableList<MarkdownBlockViewModel> StreamingBlocks => streamingBlocks;
+
+    [DataMember]
+    public bool HasEarlierStreamingBlocks
+    {
+        get => hasEarlierStreamingBlocks;
+        private set
+        {
+            if (hasEarlierStreamingBlocks != value)
+            {
+                hasEarlierStreamingBlocks = value;
+                RaiseNotifyPropertyChangedEvent(nameof(HasEarlierStreamingBlocks));
+            }
+        }
     }
 
     [DataMember]
@@ -612,7 +646,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         try
         {
             IsStreaming = state.IsStreaming;
-            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
+            StreamingResponseText = state.StreamingResponseText;
         }
         finally
         {
@@ -621,33 +655,26 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     }
 
     /// <summary>
-    /// Returns the tail of a streamed response for the height-bounded preview. A bound text block
-    /// cannot scroll a Remote UI scroll viewer to the new extent, so showing the end of the text keeps
-    /// the latest output visible while the response is still arriving. The full reply is stored in
-    /// chat history when the request completes.
+    /// Re-parses the whole streamed text (at most every <see cref="StreamingParseInterval"/>, except for
+    /// the first text and a reset) and updates the preview blocks in place. An unclosed code fence parses
+    /// as a code block that is still being written.
     /// </summary>
-    /// <param name="text">The cumulative streamed text.</param>
-    /// <returns>The text to display in the streaming preview.</returns>
-    private static string TrimStreamingPreview(string text)
+    private void UpdateStreamingBlocks()
     {
-        if (string.IsNullOrEmpty(text))
+        var text = streamingResponseText;
+        var isReset = string.IsNullOrEmpty(text) || streamingBlocks.Count == 0;
+        if (!isReset && streamingParseClock.IsRunning && streamingParseClock.Elapsed < StreamingParseInterval)
         {
-            return text;
+            return;
         }
 
-        var tail = text;
-        if (tail.Length > StreamingPreviewMaxChars)
-        {
-            tail = tail.Substring(tail.Length - StreamingPreviewMaxChars);
-        }
-
-        var lines = tail.Split('\n');
-        if (lines.Length > StreamingPreviewMaxLines)
-        {
-            tail = string.Join("\n", lines, lines.Length - StreamingPreviewMaxLines, StreamingPreviewMaxLines);
-        }
-
-        return tail.Length == text.Length ? text : "…" + tail;
+        streamingParseClock.Restart();
+        var blocks = SafeMarkdownParser.Parse(text).Blocks;
+        var visible = blocks.Count > StreamingPreviewMaxBlocks
+            ? blocks.Skip(blocks.Count - StreamingPreviewMaxBlocks).ToArray()
+            : blocks;
+        MarkdownBlockList.Update(streamingBlocks, visible);
+        HasEarlierStreamingBlocks = blocks.Count > visible.Count;
     }
 
     private void ApplyState(ContextRelayHostState state)
@@ -667,7 +694,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
             SearchSummary = state.SearchSummary;
             IsStreaming = state.IsStreaming;
-            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
+            StreamingResponseText = state.StreamingResponseText;
             if (collectionLanguageChanged || !PendingAttachmentsEqual(state.PendingAttachments))
             {
                 PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();
