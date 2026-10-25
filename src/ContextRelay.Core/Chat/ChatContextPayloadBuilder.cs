@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.Adapters;
+using ContextRelay.Core.Embedded;
 using ContextRelay.Core.FileContext;
 using ContextRelay.Core.SharedStore;
 
@@ -130,18 +131,7 @@ public static class ChatContextPayloadBuilder
             }
             else
             {
-                var sourceUrl = snippet.SourceUrl?.Trim();
-                var source = string.IsNullOrWhiteSpace(sourceUrl)
-                    ? snippet.Source
-                    : $"{snippet.Source} ({sourceUrl})";
-                var body = string.Join(
-                    "\n",
-                    $"Title: {GetSnippetLabel(snippet)}",
-                    $"Source: {source}",
-                    string.Empty,
-                    snippet.Snippet ?? string.Empty);
-
-                AddTextContext(additionalContext, labels, GetSnippetLabel(snippet), body, ref remainingBudget);
+                AddSnippetText(additionalContext, labels, snippet, ref remainingBudget);
             }
 
             if (additionalContext.Count > contextCount || fileResources.Count > fileResourceCount)
@@ -189,7 +179,8 @@ public static class ChatContextPayloadBuilder
         ref int remainingBudget)
     {
         var sourceUrl = snippet.SourceUrl?.Trim();
-        var source = string.IsNullOrWhiteSpace(sourceUrl) ? snippet.Source : $"{snippet.Source} ({sourceUrl})";
+        var sourceName = EmbeddedSnippetMetadata.DescribeSource(snippet);
+        var source = string.IsNullOrWhiteSpace(sourceUrl) ? sourceName : $"{sourceName} ({sourceUrl})";
         AddTextContext(additionalContext, labels, GetSnippetLabel(snippet), string.Join("\n", $"Title: {GetSnippetLabel(snippet)}", $"Source: {source}", string.Empty, snippet.Snippet ?? string.Empty), ref remainingBudget);
     }
 
@@ -205,6 +196,7 @@ public static class ChatContextPayloadBuilder
             return false;
         }
 
+        // Exact match only: sharepoint-embedded URLs are opaque and stay text context.
         if (!string.Equals(snippet.Source, "sharepoint", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(snippet.Source, "onedrive", StringComparison.OrdinalIgnoreCase))
         {

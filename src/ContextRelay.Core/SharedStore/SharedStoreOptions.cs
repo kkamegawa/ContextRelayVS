@@ -5,7 +5,8 @@ namespace ContextRelay.Core.SharedStore;
 
 public sealed class SharedStoreOptions
 {
-    public const int CurrentSchemaVersion = 1;
+    // v2 added the "sharepoint-embedded" snippet source. Older files are quarantined and reset, not migrated.
+    public const int CurrentSchemaVersion = 2;
 
     public string RootDirectory { get; set; } = string.Empty;
 

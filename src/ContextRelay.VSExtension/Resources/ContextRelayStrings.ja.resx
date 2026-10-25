@@ -152,4 +152,25 @@
   <data name="SourceLabel_connectors" xml:space="preserve"><value>コネクタ</value></data>
   <data name="SourceLabel_all" xml:space="preserve"><value>すべてのソース</value></data>
   <data name="SourceLabel_default" xml:space="preserve"><value>ソース</value></data>
+  <data name="SourceLabel_embedded" xml:space="preserve"><value>SharePoint Embedded</value></data>
+  <data name="CommandDescription_embedded" xml:space="preserve"><value>SharePoint Embedded の container type を検索します (プレビュー)。</value></data>
+  <data name="HelpFor_embedded" xml:space="preserve"><value>例: /embedded 契約の更新条件&#10;選択した SharePoint Embedded の検索元を検索します。プレビュー機能で従量課金、Global クラウドのみです。他の検索元とは組み合わせられず、/all にも含まれません。</value></data>
+  <data name="EmbeddedDisabledStatus" xml:space="preserve"><value>SharePoint Embedded は無効です。[ツール] &gt; [オプション] &gt; [ContextRelay] &gt; [SharePoint Embedded] で有効にしてください。</value></data>
+  <data name="EmbeddedUnsupportedCloudStatus" xml:space="preserve"><value>SharePoint Embedded の検索は Global クラウドでのみ使用できます。</value></data>
+  <data name="EmbeddedNoValidSourcesStatus" xml:space="preserve"><value>有効な SharePoint Embedded の検索元がありません。[ツール] &gt; [オプション] &gt; [ContextRelay] &gt; [SharePoint Embedded] で追加してください。</value></data>
+  <data name="EmbeddedSourceNotSelectedStatus" xml:space="preserve"><value>検索する前に SharePoint Embedded の検索元を選択してください。</value></data>
+  <data name="EmbeddedQueryEmptyStatus" xml:space="preserve"><value>/embedded の後に質問を入力してください。</value></data>
+  <data name="EmbeddedQueryTooLong_Format" xml:space="preserve"><value>クエリは {0} 文字です。/embedded は {1} 文字までです。短くしてからもう一度お試しください。</value></data>
+  <data name="EmbeddedConsentRequired_Format" xml:space="preserve"><value>SharePoint Embedded には委任アクセス許可 FileStorageContainer.Selected が必要です。Entra のアプリ登録にこのアクセス許可を追加し、container type の所有アプリにアプリへのアクセス付与を依頼してください。他の検索元はそのまま使えます。詳細: {0}</value></data>
+  <data name="EmbeddedBadRequestStatus" xml:space="preserve"><value>SharePoint Embedded が要求を拒否しました (400)。検索元の設定と、テナントでプレビューが提供されているかを確認してください。</value></data>
+  <data name="EmbeddedUnauthorizedStatus" xml:space="preserve"><value>SharePoint Embedded のサインインが無効です (401)。もう一度サインインしてから再試行してください。</value></data>
+  <data name="EmbeddedForbiddenStatus" xml:space="preserve"><value>SharePoint Embedded へのアクセスが拒否されました (403)。所有アプリによる container type 権限の付与、コンテンツへのアクセス権、content discoverability、課金の設定、semantic index を確認してください。</value></data>
+  <data name="EmbeddedNotFoundStatus" xml:space="preserve"><value>SharePoint Embedded から 404 が返されました。検索元の設定が誤っているか、テナントでプレビューが提供されていない可能性があります。設定を確認してください。</value></data>
+  <data name="EmbeddedThrottledStatus" xml:space="preserve"><value>SharePoint Embedded が要求を制限しています (429)。再試行しても成功しませんでした。しばらく待ってからもう一度お試しください。</value></data>
+  <data name="EmbeddedRequestFailed_Format" xml:space="preserve"><value>SharePoint Embedded の検索に失敗しました: {0}</value></data>
+  <data name="EmbeddedNoResults_Format" xml:space="preserve"><value>{0} に該当する結果はありません。インデックス済みで、アクセス権のあるコンテンツだけが結果に表示されます。</value></data>
+  <data name="EmbeddedFoundResults_Format" xml:space="preserve"><value>{1} から {0} 件の結果が見つかりました。SharePoint Embedded の検索はプレビュー機能で、従量課金です。</value></data>
+  <data name="EmbeddedSearchStoppedStatus" xml:space="preserve"><value>SharePoint Embedded の検索を停止しました。</value></data>
+  <data name="EmbeddedResultsDiscardedStatus" xml:space="preserve"><value>設定またはアカウントが変わったため、SharePoint Embedded の結果を破棄しました。もう一度検索してください。</value></data>
+  <data name="EmbeddedInvalidSources_Format" xml:space="preserve"><value>SharePoint Embedded の検索元のうち {0} 件が不正なため、対象から外しています。[ツール] &gt; [オプション] で修正してください。</value></data>
 </root>

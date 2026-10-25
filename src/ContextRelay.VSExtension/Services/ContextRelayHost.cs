@@ -16,6 +16,7 @@ using ContextRelay.Core.Auth;
 using ContextRelay.Core.Auth.Msal;
 using ContextRelay.Core.Cache;
 using ContextRelay.Core.Chat;
+using ContextRelay.Core.Embedded;
 using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Handoff;
 using ContextRelay.Core.Models;
@@ -85,6 +86,14 @@ internal sealed class ContextRelayHost : IDisposable
     private string draftQueryText = string.Empty;
     private readonly List<ResolvedAttachment> pendingAttachments = new();
     private CancellationTokenSource? activeChatRequestCancellation;
+    // Guarded by activeChatRequestSync, so StopGeneration cancels an in-flight /embedded request too.
+    private CancellationTokenSource? activeEmbeddedRequestCancellation;
+    private readonly EmbeddedSearchService embeddedSearchService;
+    private string? embeddedSettingsFingerprint;
+    // The source used by the next /embedded request; Esc in the selector clears it.
+    private string? selectedEmbeddedContainerTypeId;
+    // The last source chosen in this session, used as the selector's initial highlight.
+    private string? lastSelectedEmbeddedContainerTypeId;
     private string? cacheWorkspaceRoot;
     private int cacheTtlSeconds = 300;
     private int cacheMaxEntries = 200;
@@ -121,6 +130,7 @@ internal sealed class ContextRelayHost : IDisposable
             [ContextSource.Planner] = new PlannerSearchAdapter(graphClient),
             [ContextSource.Todo] = new TodoSearchAdapter(graphClient)
         };
+        embeddedSearchService = new EmbeddedSearchService(new EmbeddedRetrievalAdapter(new RetrievalClient(graphClient)));
         copilotChatAdapter = new CopilotChatAdapter(graphClient);
         workIqAdapter = new WorkIqAdapter(new System.Net.Http.HttpClient(), logger, ownsHttpClient: true);
         handoffDocumentGenerator = new HandoffDocumentGenerator(sharedStore);
@@ -324,6 +334,12 @@ internal sealed class ContextRelayHost : IDisposable
             throw new IOException("Unable to read the shared settings file while applying a UI language change.");
         }
 
+        if (ObserveEmbeddedSettings(settings))
+        {
+            // Bumped outside gate so an in-flight /embedded request (which holds gate) sees it and is discarded.
+            await RemoveEmbeddedResultsAsync(ContextRelayLocalizedStrings.EmbeddedResultsDiscardedStatus).ConfigureAwait(false);
+        }
+
         if (!string.Equals(
                 ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage),
                 ContextRelayLocalizedStrings.CurrentUiLanguage,
@@ -394,6 +410,13 @@ internal sealed class ContextRelayHost : IDisposable
                 copilotConversationAssistantItemId = null;
                 workIqContextId = null;
                 return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.ChatAndSnippetsClearedStatus, trimmed, cancellationToken).ConfigureAwait(false);
+            }
+
+            // /embedded has its own pre-validation (activation, source, query length) before IsEmpty,
+            // and its own dedicated token instead of the shared one below.
+            if (route.Target == RouteTarget.SharePointEmbedded)
+            {
+                return await HandleEmbeddedCommandAsync(trimmed, route, cancellationToken).ConfigureAwait(false);
             }
 
             if (route.IsEmpty)
@@ -467,6 +490,8 @@ internal sealed class ContextRelayHost : IDisposable
                 logger.LogError("Authentication failed.", ex);
                 return await RefreshStateCoreAsync(ex.Message, trimmed, cancellationToken).ConfigureAwait(false);
             }
+
+            ObserveEmbeddedAccount(token);
 
             if (route.Target == RouteTarget.Chat)
             {
@@ -615,12 +640,20 @@ internal sealed class ContextRelayHost : IDisposable
             {
                 ["contextItemKey"] = JsonSerializer.SerializeToElement(itemKey)
             };
+            var snippetText = hydrationResult.Item.Snippet;
+            if (hydrationResult.Item.Source == ContextSource.SharePointEmbedded)
+            {
+                // Keep every extract so Chat, /ask, and handoff get the same text as the preview.
+                EmbeddedSnippetMetadata.AddPinMetadata(hydrationResult.Item, metadata);
+                snippetText = EmbeddedSnippetMetadata.BuildContextText(hydrationResult.Item);
+            }
+
             await snippetRepository.SaveAsync(new SaveSnippetRequest
             {
                 Name = hydrationResult.Item.Title,
-                Source = ToSnippetSource(hydrationResult.Item.Source),
+                Source = ContextSourceSchema.ToSnippetSource(hydrationResult.Item.Source),
                 SourceUrl = hydrationResult.Item.Url,
-                Snippet = hydrationResult.Item.Snippet,
+                Snippet = snippetText,
                 Metadata = metadata
             }, cancellationToken).ConfigureAwait(false);
 
@@ -719,10 +752,14 @@ internal sealed class ContextRelayHost : IDisposable
 
     public async Task<ContextRelayHostState> ClearCacheAsync(CancellationToken cancellationToken = default)
     {
+        // Invalidate before waiting for gate: an in-flight /embedded request holds gate and must see the
+        // new generation when its response arrives, so it is neither cached nor shown.
+        embeddedSearchService.Invalidate();
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             searchCache.Clear();
+            StripEmbeddedResults();
             var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
             logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
             await PersistCacheIfNeededAsync(settings, cancellationToken).ConfigureAwait(false);
@@ -1416,6 +1453,7 @@ internal sealed class ContextRelayHost : IDisposable
         lock (activeChatRequestSync)
         {
             activeChatRequestCancellation?.Cancel();
+            activeEmbeddedRequestCancellation?.Cancel();
         }
     }
 
@@ -1648,7 +1686,7 @@ internal sealed class ContextRelayHost : IDisposable
         var payload = await ChatContextPayloadBuilder.BuildAsync(
             selection.Attachments,
             snippets,
-            lastSearchSummary,
+            SelectChatSearchSummary(lastSearchRoute, lastSearchSummary),
             cancellationToken).ConfigureAwait(false);
         payload.SendOptions.StreamResponses = settings.ChatStreamResponses;
         return (selection, payload);
@@ -1934,6 +1972,13 @@ internal sealed class ContextRelayHost : IDisposable
             lastSearchSummary = BuildSearchSummary(lastSearchRoute, currentSearchResults);
         }
 
+        // Read the file directly: GetSettingsSnapshotAsync also applies the UI language as a side effect,
+        // which a state publish must not do.
+        var embeddedActivation = ContextRelaySettingsStore.TryLoadSettings(out var currentSettings)
+            ? EmbeddedActivation.Evaluate(currentSettings)
+            : null;
+        var selectedEmbeddedSource = embeddedActivation?.ResolveSource(selectedEmbeddedContainerTypeId);
+
         state = new ContextRelayHostState
         {
             QueryText = effectiveQueryText,
@@ -1949,11 +1994,244 @@ internal sealed class ContextRelayHost : IDisposable
             WorkspaceFiles = workspaceFiles,
             IsStreaming = isStreaming,
             StreamingResponseText = streamingResponseText,
-            PendingAttachments = pendingAttachmentSnapshot
+            PendingAttachments = pendingAttachmentSnapshot,
+            IsEmbeddedActive = embeddedActivation?.IsActive ?? state.IsEmbeddedActive,
+            EmbeddedSources = embeddedActivation?.ValidSources ?? state.EmbeddedSources,
+            SelectedEmbeddedContainerTypeId = embeddedActivation is null ? state.SelectedEmbeddedContainerTypeId : selectedEmbeddedSource?.ContainerTypeId,
+            LastSelectedEmbeddedContainerTypeId = lastSelectedEmbeddedContainerTypeId,
+            EmbeddedInvalidSourceCount = embeddedActivation?.InvalidSourceCount ?? state.EmbeddedInvalidSourceCount
         };
 
         StateChanged?.Invoke(this, new ContextRelayStateChangedEventArgs(state));
         return state;
+    }
+
+    /// <summary>
+    /// Sets the Embedded source for the next /embedded request. Null clears the selection (Esc in the
+    /// selector), after which a submit with several sources asks the user to choose instead of sending.
+    /// </summary>
+    public async Task<ContextRelayHostState> SelectEmbeddedSourceAsync(string? containerTypeId, CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (EmbeddedSourceValidator.TryNormalizeContainerTypeId(containerTypeId, out var normalized))
+            {
+                selectedEmbeddedContainerTypeId = normalized;
+                lastSelectedEmbeddedContainerTypeId = normalized;
+            }
+            else
+            {
+                selectedEmbeddedContainerTypeId = null;
+            }
+
+            return await RefreshStateCoreAsync(state.StatusMessage, GetDraftQueryText(), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<ContextRelayHostState> HandleEmbeddedCommandAsync(
+        string originalInput,
+        SlashCommandParseResult route,
+        CancellationToken cancellationToken)
+    {
+        var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        logger.SetDebugLoggingEnabled(settings.EnableGraphDebugLogging, settings.EnableWorkIqDebugLogging);
+        if (ObserveEmbeddedSettings(settings))
+        {
+            StripEmbeddedResults();
+        }
+
+        var activation = EmbeddedActivation.Evaluate(settings);
+        var validation = EmbeddedQueryValidator.Validate(activation, selectedEmbeddedContainerTypeId, route.Query, settings.MaxResults);
+        logger.LogDiagnostic($"SubmitQuery target={route.Target} embeddedValidation={validation.Error} activation={validation.ActivationStatus} queryLength={validation.Query.Length}");
+        if (!validation.IsValid)
+        {
+            return await RefreshStateCoreAsync(GetEmbeddedValidationStatus(validation), originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        var source = validation.Source!;
+        selectedEmbeddedContainerTypeId = source.ContainerTypeId;
+        lastSelectedEmbeddedContainerTypeId = source.ContainerTypeId;
+
+        var authSettings = settings.ToAuthSettings();
+        graphClient.BaseUrl = authSettings.GraphEndpoint;
+        shouldResolveSignedInUser = true;
+        ContextRelayAccessToken token;
+        try
+        {
+            token = await authProvider.Value.GetEmbeddedAccessTokenAsync(authSettings, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContextRelayAuthenticationException ex)
+        {
+            logger.LogError("SharePoint Embedded authentication failed.", ex);
+            var status = ex.ErrorCode == ContextRelayAuthenticationErrorCode.EmbeddedConsentRequired
+                ? ContextRelayLocalizedStrings.GetEmbeddedConsentRequiredStatus(ex.InnerException?.Message ?? ex.Message)
+                : ex.Message;
+            return await RefreshStateCoreAsync(status, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        ObserveEmbeddedAccount(token);
+        embeddedSearchService.ConfigureCache(settings.CacheTtlSeconds, settings.CacheMaxEntries);
+
+        using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, disposeCancellation.Token);
+        lock (activeChatRequestSync)
+        {
+            activeEmbeddedRequestCancellation = requestCancellation;
+        }
+
+        EmbeddedSearchOutcome outcome;
+        try
+        {
+            outcome = await embeddedSearchService.SearchAsync(
+                new EmbeddedSearchRequest
+                {
+                    AccessToken = token.AccessToken,
+                    AccountKey = token.Account?.HomeAccountId ?? string.Empty,
+                    EndpointKey = $"{settings.CloudEnvironment}|{authSettings.GraphEndpoint}",
+                    Source = source,
+                    Query = validation.Query,
+                    MaxResults = validation.MaxResults
+                },
+                requestCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            requestCancellation.IsCancellationRequested &&
+            !cancellationToken.IsCancellationRequested &&
+            !disposeCancellation.IsCancellationRequested)
+        {
+            logger.LogInformation("SharePoint Embedded search was stopped by the user.");
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.EmbeddedSearchStoppedStatus, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+        catch (EmbeddedRetrievalException ex)
+        {
+            logger.LogError($"SharePoint Embedded search failed ({ex.Kind}).", ex);
+            return await RefreshStateCoreAsync(GetEmbeddedErrorStatus(ex), originalInput, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (activeChatRequestSync)
+            {
+                activeEmbeddedRequestCancellation = null;
+            }
+        }
+
+        if (outcome.IsStale || !embeddedSearchService.IsCurrent(outcome.Generation))
+        {
+            logger.LogInformation("Discarded a SharePoint Embedded response that arrived after its results were invalidated.");
+            return await RefreshStateCoreAsync(ContextRelayLocalizedStrings.EmbeddedResultsDiscardedStatus, originalInput, cancellationToken).ConfigureAwait(false);
+        }
+
+        var results = outcome.Items.ToArray();
+        currentSearchResults = results;
+        lastSearchRoute = route;
+        await AppendSearchHistoryAsync(originalInput, results, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation($"SharePoint Embedded search completed with {results.Length} result(s){(outcome.FromCache ? " from cache" : string.Empty)}.");
+        return await RefreshStateCoreAsync(
+            results.Length == 0
+                ? ContextRelayLocalizedStrings.GetEmbeddedNoResultsStatus(source.Name)
+                : ContextRelayLocalizedStrings.GetEmbeddedFoundResultsStatus(results.Length, source.Name),
+            originalInput,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Records the settings that scope Embedded results. Returns true, after invalidating the Embedded
+    /// cache, when they changed since the last observation. The first observation only records them.
+    /// </summary>
+    private bool ObserveEmbeddedSettings(ContextRelaySettingsSnapshot settings)
+    {
+        var fingerprint = EmbeddedActivation.BuildInvalidationFingerprint(settings);
+        var previous = Interlocked.Exchange(ref embeddedSettingsFingerprint, fingerprint);
+        if (previous is null || string.Equals(previous, fingerprint, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        embeddedSearchService.Invalidate();
+        return true;
+    }
+
+    /// <summary>Invalidates Embedded results when the signed-in account changed (sign-in, sign-out, or switch).</summary>
+    private void ObserveEmbeddedAccount(ContextRelayAccessToken token)
+    {
+        if (embeddedSearchService.ObserveAccount(token.Account?.HomeAccountId))
+        {
+            StripEmbeddedResults();
+        }
+    }
+
+    /// <summary>Drops displayed Embedded results and their summary. Callers hold gate.</summary>
+    private void StripEmbeddedResults()
+    {
+        if (!currentSearchResults.Any(item => item.Source == ContextSource.SharePointEmbedded))
+        {
+            return;
+        }
+
+        currentSearchResults = currentSearchResults.Where(item => item.Source != ContextSource.SharePointEmbedded).ToArray();
+        if (lastSearchRoute?.Target == RouteTarget.SharePointEmbedded)
+        {
+            lastSearchRoute = null;
+            lastSearchSummary = null;
+        }
+    }
+
+    private async Task RemoveEmbeddedResultsAsync(string statusMessage)
+    {
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var hadEmbeddedResults = currentSearchResults.Any(item => item.Source == ContextSource.SharePointEmbedded);
+            StripEmbeddedResults();
+            await RefreshStateCoreAsync(hadEmbeddedResults ? statusMessage : state.StatusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The search summary passed to Copilot as additional context. Embedded results never go there
+    /// automatically; only pins the user chose are sent.
+    /// </summary>
+    internal static string? SelectChatSearchSummary(SlashCommandParseResult? route, string? summary)
+    {
+        return route?.Target == RouteTarget.SharePointEmbedded ? null : summary;
+    }
+
+    private static string GetEmbeddedValidationStatus(EmbeddedQueryValidationResult validation)
+    {
+        return validation.Error switch
+        {
+            EmbeddedQueryError.NotActive => validation.ActivationStatus switch
+            {
+                EmbeddedActivationStatus.UnsupportedCloud => ContextRelayLocalizedStrings.EmbeddedUnsupportedCloudStatus,
+                EmbeddedActivationStatus.NoValidSources => ContextRelayLocalizedStrings.EmbeddedNoValidSourcesStatus,
+                _ => ContextRelayLocalizedStrings.EmbeddedDisabledStatus
+            },
+            EmbeddedQueryError.SourceNotSelected => ContextRelayLocalizedStrings.EmbeddedSourceNotSelectedStatus,
+            EmbeddedQueryError.QueryEmpty => ContextRelayLocalizedStrings.EmbeddedQueryEmptyStatus,
+            EmbeddedQueryError.QueryTooLong => ContextRelayLocalizedStrings.GetEmbeddedQueryTooLongStatus(validation.Query.Length, RetrievalClient.MaxQueryLength),
+            _ => ContextRelayLocalizedStrings.ReadyStatus
+        };
+    }
+
+    private static string GetEmbeddedErrorStatus(EmbeddedRetrievalException exception)
+    {
+        return exception.Kind switch
+        {
+            EmbeddedRetrievalErrorKind.BadRequest => ContextRelayLocalizedStrings.EmbeddedBadRequestStatus,
+            EmbeddedRetrievalErrorKind.Unauthorized => ContextRelayLocalizedStrings.EmbeddedUnauthorizedStatus,
+            EmbeddedRetrievalErrorKind.Forbidden => ContextRelayLocalizedStrings.EmbeddedForbiddenStatus,
+            EmbeddedRetrievalErrorKind.NotFound => ContextRelayLocalizedStrings.EmbeddedNotFoundStatus,
+            EmbeddedRetrievalErrorKind.Throttled => ContextRelayLocalizedStrings.EmbeddedThrottledStatus,
+            _ => ContextRelayLocalizedStrings.GetEmbeddedRequestFailedStatus(exception.Message)
+        };
     }
 
     private string GetDraftQueryText()
@@ -2063,7 +2341,7 @@ internal sealed class ContextRelayHost : IDisposable
         lines.Add(ContextRelayLocalizedStrings.GetSearchSummaryTotalResults(results.Count));
         lines.Add(string.Empty);
 
-        foreach (var group in results.GroupBy(item => item.Source.ToString(), StringComparer.OrdinalIgnoreCase))
+        foreach (var group in results.GroupBy(item => ContextSourceSchema.ToSchemaValue(item.Source), StringComparer.OrdinalIgnoreCase))
         {
             var titles = group
                 .Take(3)
@@ -2123,22 +2401,6 @@ internal sealed class ContextRelayHost : IDisposable
         return null;
     }
 
-    private static SnippetSource ToSnippetSource(ContextSource source)
-    {
-        return source switch
-        {
-            ContextSource.Mail => SnippetSource.Mail,
-            ContextSource.Teams => SnippetSource.Teams,
-            ContextSource.SharePoint => SnippetSource.SharePoint,
-            ContextSource.OneDrive => SnippetSource.OneDrive,
-            ContextSource.Connectors => SnippetSource.Connectors,
-            ContextSource.OneNote => SnippetSource.OneNote,
-            ContextSource.Planner => SnippetSource.Planner,
-            ContextSource.Todo => SnippetSource.Todo,
-            _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Unsupported snippet source.")
-        };
-    }
-
     private static ContextItem[] CloneItems(IEnumerable<ContextItem> items, bool cacheHit, DateTimeOffset? storedAt, int ttlSeconds)
     {
         return items.Select(item =>
@@ -2170,7 +2432,8 @@ internal sealed class ContextRelayHost : IDisposable
                 StoredAt = item.Cache.StoredAt,
                 TtlSeconds = item.Cache.TtlSeconds
             },
-            Metadata = new Dictionary<string, string>(item.Metadata)
+            Metadata = new Dictionary<string, string>(item.Metadata),
+            Extracts = item.Extracts.Select(extract => extract.Clone()).ToList()
         };
     }
 
@@ -2267,7 +2530,7 @@ internal sealed class ContextRelayHost : IDisposable
     {
         var builder = new StringBuilder();
         builder.AppendLine($"### {item.Title}");
-        builder.AppendLine($"- Source: {item.Source}");
+        builder.AppendLine($"- Source: {DescribeSource(item)}");
         if (!string.IsNullOrWhiteSpace(item.Timestamp))
         {
             builder.AppendLine($"- Timestamp: {item.Timestamp}");
@@ -2279,7 +2542,7 @@ internal sealed class ContextRelayHost : IDisposable
         }
 
         builder.AppendLine();
-        builder.AppendLine(item.Snippet);
+        builder.AppendLine(GetItemBody(item));
         return builder.ToString().TrimEnd();
     }
 
@@ -2290,11 +2553,26 @@ internal sealed class ContextRelayHost : IDisposable
             $"## Added excerpt ({DateTimeOffset.UtcNow:yyyy-MM-dd'T'HH:mm:ss'Z'})",
             string.Empty,
             $"### {item.Title}",
-            $"- **Source**: {item.Source}",
+            $"- **Source**: {DescribeSource(item)}",
             string.IsNullOrWhiteSpace(item.Timestamp) ? string.Empty : $"- **Timestamp**: {item.Timestamp}",
             string.IsNullOrWhiteSpace(item.Url) ? string.Empty : $"- **Link**: {item.Url}",
             string.Empty,
-            item.Snippet.Trim()).TrimEnd();
+            GetItemBody(item).Trim()).TrimEnd();
+    }
+
+    // Embedded results name their source and carry every extract, matching what a pin stores.
+    private static string DescribeSource(ContextItem item)
+    {
+        return item.Source == ContextSource.SharePointEmbedded
+            ? EmbeddedSnippetMetadata.GetSourceLabel(item)
+            : item.Source.ToString();
+    }
+
+    private static string GetItemBody(ContextItem item)
+    {
+        return item.Source == ContextSource.SharePointEmbedded
+            ? EmbeddedSnippetMetadata.BuildContextText(item)
+            : item.Snippet;
     }
 
     private static async Task AppendMarkdownToFileAsync(string filePath, string content, CancellationToken cancellationToken)

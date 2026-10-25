@@ -81,6 +81,61 @@ public sealed class MsalAuthProviderTests
         Assert.Equal(AuthScopeCatalog.BuildWorkIqScopes(includeOidcScopes: true), facade.LastInteractiveScopes);
     }
 
+    [Fact]
+    public async Task GetEmbeddedAccessTokenAsync_UsesDedicatedEmbeddedScopes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var facade = new FakeMsalPublicClientFacade
+        {
+            InteractiveToken = new ContextRelayAccessToken { AccessToken = "embedded-token" }
+        };
+        var provider = new MsalAuthProvider(new FakeMsalPublicClientFacadeFactory(facade));
+
+        var token = await provider.GetEmbeddedAccessTokenAsync(
+            new ContextRelayAuthSettings { ClientId = "client-id" },
+            cancellationToken);
+
+        Assert.Equal("embedded-token", token.AccessToken);
+        Assert.Equal(AuthScopeCatalog.BuildEmbeddedScopes(includeOidcScopes: true), facade.LastInteractiveScopes);
+    }
+
+    [Theory]
+    [InlineData("invalid_scope", "The scope is not valid.")]
+    [InlineData("consent_required", "Consent is required.")]
+    [InlineData("invalid_grant", "AADSTS65001: The user or administrator has not consented to use the application.")]
+    [InlineData("invalid_request", "AADSTS650057: Invalid resource.")]
+    public async Task GetEmbeddedAccessTokenAsync_MapsConsentAndScopeErrorsToEmbeddedConsentRequired(string errorCode, string message)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var facade = new FakeMsalPublicClientFacade
+        {
+            InteractiveException = new MsalServiceException(errorCode, message)
+        };
+        var provider = new MsalAuthProvider(new FakeMsalPublicClientFacadeFactory(facade));
+
+        var exception = await Assert.ThrowsAsync<ContextRelayAuthenticationException>(() =>
+            provider.GetEmbeddedAccessTokenAsync(new ContextRelayAuthSettings { ClientId = "client-id" }, cancellationToken));
+
+        Assert.Equal(ContextRelayAuthenticationErrorCode.EmbeddedConsentRequired, exception.ErrorCode);
+        Assert.Contains(AuthScopeCatalog.EmbeddedPermission, exception.Message);
+    }
+
+    [Fact]
+    public async Task GetEmbeddedAccessTokenAsync_KeepsOtherServiceErrorsGeneric()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var facade = new FakeMsalPublicClientFacade
+        {
+            InteractiveException = new MsalServiceException("temporarily_unavailable", "AADSTS50196: The server is busy.")
+        };
+        var provider = new MsalAuthProvider(new FakeMsalPublicClientFacadeFactory(facade));
+
+        var exception = await Assert.ThrowsAsync<ContextRelayAuthenticationException>(() =>
+            provider.GetEmbeddedAccessTokenAsync(new ContextRelayAuthSettings { ClientId = "client-id" }, cancellationToken));
+
+        Assert.NotEqual(ContextRelayAuthenticationErrorCode.EmbeddedConsentRequired, exception.ErrorCode);
+    }
+
     private sealed class FakeMsalPublicClientFacadeFactory : IMsalPublicClientFacadeFactory
     {
         private readonly IMsalPublicClientFacade facade;
@@ -101,6 +156,8 @@ public sealed class MsalAuthProviderTests
         public IReadOnlyList<ContextRelayAccountInfo> Accounts { get; set; } = Array.Empty<ContextRelayAccountInfo>();
 
         public Exception? SilentException { get; set; }
+
+        public Exception? InteractiveException { get; set; }
 
         public ContextRelayAccessToken SilentToken { get; set; } = new() { AccessToken = "silent-token" };
 
@@ -140,6 +197,11 @@ public sealed class MsalAuthProviderTests
         {
             InteractiveAcquireCalls++;
             LastInteractiveScopes = scopes.ToArray();
+            if (InteractiveException is not null)
+            {
+                throw InteractiveException;
+            }
+
             return Task.FromResult(InteractiveToken);
         }
     }

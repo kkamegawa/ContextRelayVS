@@ -11,6 +11,7 @@ public enum RouteTarget
     Connectors,
     OneNote,
     Task,
+    SharePointEmbedded,
     All,
     Ask,
     Clear

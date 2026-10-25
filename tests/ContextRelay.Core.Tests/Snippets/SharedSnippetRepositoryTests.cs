@@ -43,6 +43,30 @@ public sealed class SharedSnippetRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_PersistsEmbeddedSnippetAsSchemaV2SourceValue()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var repository = CreateRepository();
+
+        await repository.SaveAsync(new SaveSnippetRequest
+        {
+            Name = "Renewal terms",
+            Source = SnippetSource.SharePointEmbedded,
+            Snippet = "Renewal clause.",
+            Metadata = new System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>
+            {
+                ["sourceName"] = System.Text.Json.JsonSerializer.SerializeToElement("Contoso Legal")
+            }
+        }, cancellationToken);
+
+        var all = await repository.GetAllAsync(cancellationToken: cancellationToken);
+
+        Assert.Equal(2, SharedStoreOptions.CurrentSchemaVersion);
+        Assert.Equal("sharepoint-embedded", Assert.Single(all).Source);
+        Assert.Equal("Contoso Legal", all[0].Metadata["sourceName"].GetString());
+    }
+
+    [Fact]
     public async Task DeleteAsync_WritesTombstoneAndHidesSnippetFromDefaultReads()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

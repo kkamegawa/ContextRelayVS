@@ -9,6 +9,24 @@ namespace ContextRelay.Core.Auth.Msal;
 
 public sealed class MsalAuthProvider : IContextRelayAuthProvider
 {
+    private const string EmbeddedConsentHint =
+        "SharePoint Embedded retrieval needs the delegated FileStorageContainer.Selected permission. " +
+        "Add it to your Entra app registration and ask the owning application of the container type to grant your app access to it.";
+
+    // Consent and scope failures documented in the Microsoft Entra error code reference.
+    private static readonly string[] EmbeddedConsentErrorCodes =
+    {
+        "AADSTS65001",
+        "AADSTS65004",
+        "AADSTS65005",
+        "AADSTS70011",
+        "AADSTS650056",
+        "AADSTS650057",
+        "AADSTS90093",
+        "AADSTS90094",
+        "AADSTS90095"
+    };
+
     private readonly IMsalPublicClientFacadeFactory facadeFactory;
 
     public MsalAuthProvider(IMsalPublicClientFacadeFactory? facadeFactory = null)
@@ -78,6 +96,33 @@ public sealed class MsalAuthProvider : IContextRelayAuthProvider
             "Interactive sign-in failed. Verify broker availability, app registration, and delegated Work IQ permissions.",
             "Confirm that the Entra app registration grants WorkIQAgent.Ask delegated permission and tenant admin consent.",
             cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ContextRelayAccessToken> GetEmbeddedAccessTokenAsync(
+        ContextRelayAuthSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSettings(settings);
+        var scopes = AuthScopeCatalog.BuildEmbeddedScopes(includeOidcScopes: true);
+        try
+        {
+            return await AcquireTokenAsync(
+                settings,
+                scopes,
+                "Interactive sign-in failed. Verify broker availability, app registration, and the delegated FileStorageContainer.Selected permission.",
+                EmbeddedConsentHint,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContextRelayAuthenticationException ex) when (
+            ex.InnerException is MsalServiceException serviceException &&
+            IsEmbeddedConsentOrScopeError(serviceException))
+        {
+            // Only /embedded fails; the shared token used by the other sources is untouched.
+            throw new ContextRelayAuthenticationException(
+                ContextRelayAuthenticationErrorCode.EmbeddedConsentRequired,
+                $"{serviceException.Message} {EmbeddedConsentHint}",
+                serviceException);
+        }
     }
 
     public async Task<ContextRelayAccountInfo?> GetAccountAsync(
@@ -154,6 +199,18 @@ public sealed class MsalAuthProvider : IContextRelayAuthProvider
     {
         var accounts = await facade.GetAccountsAsync(cancellationToken).ConfigureAwait(false);
         return accounts.FirstOrDefault();
+    }
+
+    private static bool IsEmbeddedConsentOrScopeError(MsalServiceException ex)
+    {
+        if (string.Equals(ex.ErrorCode, "invalid_scope", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ex.ErrorCode, "consent_required", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var message = ex.Message ?? string.Empty;
+        return EmbeddedConsentErrorCodes.Any(code => message.IndexOf(code, StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private static ContextRelayAuthenticationException WrapServiceException(MsalServiceException ex, string consentHint)
