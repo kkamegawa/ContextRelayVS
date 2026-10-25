@@ -231,6 +231,7 @@ internal sealed class ContextRelayHost : IDisposable
             // exception detail) is left as-is rather than risk showing a wrong or malformed value.
             ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
 
+            shouldResolveSignedInUser = true;
             await RefreshStateCoreAsync(statusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
         }
         finally
@@ -492,7 +493,7 @@ internal sealed class ContextRelayHost : IDisposable
                 return await RefreshStateCoreAsync(ex.Message, trimmed, cancellationToken).ConfigureAwait(false);
             }
 
-            ObserveEmbeddedAccount(token);
+            ObserveEmbeddedAccount(token.Account);
 
             if (route.Target == RouteTarget.Chat)
             {
@@ -2068,23 +2069,7 @@ internal sealed class ContextRelayHost : IDisposable
         var authSettings = settings.ToAuthSettings();
         graphClient.BaseUrl = authSettings.GraphEndpoint;
         shouldResolveSignedInUser = true;
-        ContextRelayAccessToken token;
-        try
-        {
-            token = await authProvider.Value.GetEmbeddedAccessTokenAsync(authSettings, cancellationToken).ConfigureAwait(false);
-        }
-        catch (ContextRelayAuthenticationException ex)
-        {
-            logger.LogError("SharePoint Embedded authentication failed.", ex);
-            var status = ex.ErrorCode == ContextRelayAuthenticationErrorCode.EmbeddedConsentRequired
-                ? ContextRelayLocalizedStrings.GetEmbeddedConsentRequiredStatus(ex.InnerException?.Message ?? ex.Message)
-                : ex.Message;
-            return await RefreshStateCoreAsync(status, originalInput, cancellationToken, isError: true).ConfigureAwait(false);
-        }
-
-        ObserveEmbeddedAccount(token);
-        embeddedSearchService.ConfigureCache(settings.CacheTtlSeconds, settings.CacheMaxEntries);
-
+        // Stop covers consent and token acquisition as well as the Retrieval request.
         using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, disposeCancellation.Token);
         lock (activeChatRequestSync)
         {
@@ -2094,6 +2079,25 @@ internal sealed class ContextRelayHost : IDisposable
         EmbeddedSearchOutcome outcome;
         try
         {
+            ContextRelayAccessToken token;
+            try
+            {
+                token = await authProvider.Value.GetEmbeddedAccessTokenAsync(authSettings, requestCancellation.Token).ConfigureAwait(false);
+            }
+            catch (ContextRelayAuthenticationException ex)
+            {
+                requestCancellation.Token.ThrowIfCancellationRequested();
+                logger.LogError("SharePoint Embedded authentication failed.", ex);
+                var status = ex.ErrorCode == ContextRelayAuthenticationErrorCode.EmbeddedConsentRequired
+                    ? ContextRelayLocalizedStrings.GetEmbeddedConsentRequiredStatus(ex.InnerException?.Message ?? ex.Message)
+                    : ex.Message;
+                return await RefreshStateCoreAsync(status, originalInput, cancellationToken, isError: true).ConfigureAwait(false);
+            }
+
+            // A provider can finish concurrently with Stop, or return a cached token without observing it.
+            requestCancellation.Token.ThrowIfCancellationRequested();
+            ObserveEmbeddedAccount(token.Account);
+            embeddedSearchService.ConfigureCache(settings.CacheTtlSeconds, settings.CacheMaxEntries);
             outcome = await embeddedSearchService.SearchAsync(
                 new EmbeddedSearchRequest
                 {
@@ -2105,6 +2109,7 @@ internal sealed class ContextRelayHost : IDisposable
                     MaxResults = validation.MaxResults
                 },
                 requestCancellation.Token).ConfigureAwait(false);
+            requestCancellation.Token.ThrowIfCancellationRequested();
         }
         catch (OperationCanceledException) when (
             requestCancellation.IsCancellationRequested &&
@@ -2164,9 +2169,9 @@ internal sealed class ContextRelayHost : IDisposable
     }
 
     /// <summary>Invalidates Embedded results when the signed-in account changed (sign-in, sign-out, or switch).</summary>
-    private void ObserveEmbeddedAccount(ContextRelayAccessToken token)
+    private void ObserveEmbeddedAccount(ContextRelayAccountInfo? account)
     {
-        if (embeddedSearchService.ObserveAccount(token.Account?.HomeAccountId))
+        if (embeddedSearchService.ObserveAccount(account?.HomeAccountId))
         {
             StripEmbeddedResults();
         }
@@ -2255,12 +2260,14 @@ internal sealed class ContextRelayHost : IDisposable
         var settings = await packageServices.GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(settings.ClientId))
         {
+            ObserveEmbeddedAccount(null);
             return null;
         }
 
         try
         {
             var account = await authProvider.Value.GetAccountAsync(settings.ToAuthSettings(), cancellationToken).ConfigureAwait(false);
+            ObserveEmbeddedAccount(account);
             return account?.Username;
         }
         catch (Exception ex)
