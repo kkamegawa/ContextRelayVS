@@ -71,9 +71,21 @@ public sealed class EmbeddedHostLifecycleTests
     }
 
     [Fact]
+    public async Task InitialStateRefresh_DoesNotStartAuthenticationBeforeDeferredLookup()
+    {
+        using var fixture = new HostFixture();
+
+        await fixture.InvokeAsync("GetStateAsync");
+
+        Assert.False(((Lazy<IContextRelayAuthProvider>)fixture.GetField("authProvider")!).IsValueCreated);
+    }
+
+    [Fact]
     public async Task AccountRefresh_SignOutClearsResultsAndCacheBeforeSameAccountSignsInAgain()
     {
         using var fixture = new HostFixture();
+        // Existing results belong to a session whose auth provider has already been initialized.
+        _ = ((Lazy<IContextRelayAuthProvider>)fixture.GetField("authProvider")!).Value;
         fixture.Service.ObserveAccount("account-1");
         var first = await fixture.Service.SearchAsync(fixture.CreateRequest(), TestContext.Current.CancellationToken);
         fixture.SetField("currentSearchResults", new[] { first.Items[0], new ContextItem { Source = ContextSource.Mail, Title = "mail" } });

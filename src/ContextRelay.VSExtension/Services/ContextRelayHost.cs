@@ -231,7 +231,8 @@ internal sealed class ContextRelayHost : IDisposable
             // exception detail) is left as-is rather than risk showing a wrong or malformed value.
             ContextRelayLocalizedStrings.TryRelocalizeStaticStatus(state.StatusMessage, out var statusMessage);
 
-            shouldResolveSignedInUser = true;
+            // Preserve the deferred first account lookup; refresh an already initialized auth session.
+            shouldResolveSignedInUser |= authProvider.IsValueCreated;
             await RefreshStateCoreAsync(statusMessage, GetDraftQueryText(), CancellationToken.None).ConfigureAwait(false);
         }
         finally
