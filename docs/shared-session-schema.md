@@ -1,4 +1,4 @@
-# ContextRelay Shared-Session Schema v1
+# ContextRelay Shared-Session Schema v2
 
 This document defines the on-disk format used by **both** the VS Code extension (`ContextRelay`) and the Visual Studio extension (`ContextRelayVS`) to share per-user session data on the same machine.
 
@@ -42,7 +42,7 @@ Permissions: the store MUST remain under the user's profile directory with OS-de
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "updatedAt": "2026-04-19T12:34:56.789Z",
   "updatedBy": "vs",
   "producerVersion": "0.1.0",
@@ -64,7 +64,7 @@ Every JSON file in the shared store has this shape:
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "updatedAt": "2026-04-19T12:34:56.789Z",   // ISO 8601 UTC
   "updatedBy": "vs",                          // "vs" | "vscode"
   "producerVersion": "0.1.0",                  // extension version that wrote the file
@@ -77,7 +77,7 @@ Every JSON file in the shared store has this shape:
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "updatedAt": "...",
   "updatedBy": "vs",
   "producerVersion": "0.1.0",
@@ -88,7 +88,7 @@ Every JSON file in the shared store has this shape:
       "createdAt": "2026-04-18T09:15:00Z",
       "updatedAt": "2026-04-19T12:34:56Z",
       "name": "Weekly Q2 planning notes",
-      "source": "teams",                             // "mail" | "teams" | "sharepoint" | "onedrive" | "connectors" | "chat"
+      "source": "teams",                             // see the source list below
       "sourceUrl": "https://teams.microsoft.com/...",
       "snippet": "…user-visible extract…",
       "metadata": {
@@ -103,8 +103,28 @@ Every JSON file in the shared store has this shape:
 ```
 
 - `id` MUST be stable across edits. ULID (Crockford base32, 26 chars) or UUIDv7 is required.
-- `source` values are a closed set. New sources require a schema-version bump.
+- `source` values are a closed set. New sources require a schema-version bump. Version 2 defines: `mail`, `teams`, `sharepoint`, `onedrive`, `connectors`, `onenote`, `planner`, `todo`, `sharepoint-embedded`, `chat`.
+- Readers MUST map each `source` value explicitly. Hyphenated values such as `sharepoint-embedded` cannot be parsed as enum member names.
 - `metadata` is a free-form object; unknown fields MUST be preserved by consumers.
+
+### 4.1 SharePoint Embedded metadata
+
+Snippets with `source` = `sharepoint-embedded` use these `metadata` keys. `sourceUrl` holds the hit's `webUrl`, which is opaque and MUST NOT be parsed.
+
+```jsonc
+"metadata": {
+  "sourceName": "Contoso Projects",                            // configured display name of the source
+  "containerTypeId": "00000000-0000-0000-0000-000000000000",   // lowercase GUID, D format
+  "extracts": [                                                // in retrieval order
+    { "text": "…extract…", "relevanceScore": 0.82 }            // relevanceScore is optional
+  ],
+  "sensitivityLabelDisplayName": "General",                    // optional
+  "sensitivityLabelId": "00000000-0000-0000-0000-000000000000" // optional
+}
+```
+
+- `sourceName` and `containerTypeId` use the same names as the VS Code extension.
+- `snippet` holds the first extract.
 
 ## 5. File: `chat-history.json`
 
@@ -112,7 +132,7 @@ Append-only log, trimmed to at most 200 items (default) or the value configured 
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "items": [
     {
       "id": "01J7Z3M1S...",
@@ -131,7 +151,7 @@ Map from workspace/solution root path (normalized to a platform-native absolute 
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "items": [
     {
       "workspaceRoot": "D:\\GitHub\\kkamegawa\\oss\\ContextRelayVS",
@@ -178,6 +198,8 @@ If JSON parsing fails or `schemaVersion` is unknown and cannot be migrated:
 2. Re-initialize with an empty `items` array and the local process's envelope.
 3. Log a warning to the extension's debug output and expose a user-visible notification.
 
+`schemaVersion` is shared by every file in the store. A file whose version differs from the reader's version is handled by this procedure, so version 1 files are quarantined and re-initialized once by a version 2 writer.
+
 ## 10. Change notification
 
 - VS: `FileSystemWatcher` on the shared directory, filter `*.json`, `NotifyFilters.LastWrite | FileName`, debounce 200 ms.
@@ -194,6 +216,7 @@ If JSON parsing fails or `schemaVersion` is unknown and cannot be migrated:
 
 - Unknown fields on reading: **preserve** and write back unchanged (forward-compatible for additive changes).
 - Breaking changes: bump `schemaVersion` and ship a migration routine in both extensions **before** any writer emits the new version.
+- Version 2 adds `sharepoint-embedded` and corrects the documented source list to the values already written. It ships without a migration routine because the project is in initial development and no user data must be preserved; pinned snippets, chat history and the handoff index are reset once (§9). The VS Code extension stores snippets in `workspaceState` and does not use this store yet, so it adopts version 2 when it adopts the store. Version bumps after a public release that must preserve user data require a migration routine.
 
 ## 13. Privacy and data minimization
 
@@ -203,5 +226,5 @@ If JSON parsing fails or `schemaVersion` is unknown and cannot be migrated:
 
 ## 14. Migration from legacy stores
 
-- **VS Code**: on first run after adoption, if `globalState` contains `contextRelay.snippets` and the shared `snippets.json` has no items from this machine, copy the legacy snippets (assigning fresh `id`s if missing) and set a migration flag in `globalState` so the migration runs at most once.
-- **VS**: no legacy store exists in the initial release.
+- **VS Code**: on first run after adoption, if `workspaceState` contains `contextRelay.snippets` and the shared `snippets.json` has no items from this machine, copy the legacy snippets (assigning fresh `id`s if missing) and set a migration flag so the migration runs at most once.
+- **VS**: no legacy store exists in the initial release. Version 1 shared-store files are not migrated to version 2; they are reset once (§9, §12).
