@@ -36,6 +36,7 @@ public static class SlashCommandRouter
         "/onenote",
         "/task",
         "/connectors",
+        "/embedded",
         "/all",
         "/ask",
         "/workiq",
@@ -52,6 +53,7 @@ public static class SlashCommandRouter
             ["onenote"] = RouteTarget.OneNote,
             ["task"] = RouteTarget.Task,
             ["connectors"] = RouteTarget.Connectors,
+            ["embedded"] = RouteTarget.SharePointEmbedded,
             ["all"] = RouteTarget.All,
             ["ask"] = RouteTarget.Ask,
             ["workiq"] = RouteTarget.WorkIq,
@@ -68,6 +70,7 @@ public static class SlashCommandRouter
             ["onenote"] = "Example: /onenote architecture decision log\nExample: /onenote section notebook architecture",
             ["task"] = "Example: /task release checklist\nExample: /task metadata comments onboarding",
             ["connectors"] = "Example: /connectors incident tracker\nExample: /connectors external knowledge base",
+            ["embedded"] = "Example: /embedded contract renewal terms\nSearches the selected SharePoint Embedded container type (preview, metered billing, Global cloud only). It cannot be combined with other sources and is not part of /all.",
             ["all"] = "Example: /all architecture decisions\nExample: /mail /onedrive architecture decisions\nPlain text without a slash command starts or continues Microsoft 365 Copilot chat.",
             ["ask"] = "Example: /ask #README.md Summarize this file as a bullet list\nExample: /ask Summarize the pinned docs as a bullet list\nPinned snippets or # file mentions are used as context and the Microsoft 365 Copilot response is shown in the panel.",
             ["workiq"] = "Example: /workiq Summarize my recent emails from Alice\nExample: /workiq #docs/plan.md Find related workplace context\nSends a natural language query to the Work IQ Gateway (A2A protocol). # file mentions send bounded local file text only when explicitly enabled.",
@@ -155,7 +158,9 @@ public static class SlashCommandRouter
             }
 
             var normalizedCommandName = rawCommandName.ToLowerInvariant();
-            if (target == RouteTarget.Connectors && commandNames.Count > 0)
+            // /connectors and /embedded stand alone: reject them in either position of a combination.
+            if ((IsStandaloneTarget(target) && commandNames.Count > 0) ||
+                commandNames.Exists(name => IsStandaloneTarget(SlashCommands[name]) && !string.Equals(name, normalizedCommandName, StringComparison.Ordinal)))
             {
                 return BuildFallbackAllQuery(normalized);
             }
@@ -246,6 +251,11 @@ public static class SlashCommandRouter
         return new List<string>(CombinableSlashCommands);
     }
 
+    private static bool IsStandaloneTarget(RouteTarget target)
+    {
+        return target is RouteTarget.Connectors or RouteTarget.SharePointEmbedded;
+    }
+
     private static int FindCommandEnd(string value)
     {
         for (var index = 1; index < value.Length; index++)
@@ -270,6 +280,7 @@ public static class SlashCommandRouter
             RouteTarget.OneNote => new[] { ContextSource.OneNote },
             RouteTarget.Task => new[] { ContextSource.Planner, ContextSource.Todo },
             RouteTarget.Connectors => new[] { ContextSource.Connectors },
+            RouteTarget.SharePointEmbedded => new[] { ContextSource.SharePointEmbedded },
             RouteTarget.All => SearchAllSources,
             _ => Array.Empty<ContextSource>()
         };

@@ -73,6 +73,49 @@ public sealed class SlashCommandRouterTests
     }
 
     [Fact]
+    public void Parse_EmbeddedCommand_RoutesToSharePointEmbeddedOnly()
+    {
+        var result = SlashCommandRouter.Parse("/embedded  renewal   terms ");
+
+        Assert.Equal(RouteTarget.SharePointEmbedded, result.Target);
+        Assert.Equal("/embedded", result.SlashCommandName);
+        Assert.Equal("renewal terms", result.Query);
+        Assert.Equal(new[] { ContextSource.SharePointEmbedded }, result.TargetSources);
+    }
+
+    [Theory]
+    [InlineData("/mail /embedded renewal")]
+    [InlineData("/embedded /mail renewal")]
+    [InlineData("/connectors /embedded renewal")]
+    [InlineData("/embedded /connectors renewal")]
+    [InlineData("/mail /connectors renewal")]
+    [InlineData("/connectors /mail renewal")]
+    [InlineData("/all /embedded renewal")]
+    public void Parse_StandaloneCommandInACombination_FallsBackToAllWithoutEmbedded(string input)
+    {
+        var result = SlashCommandRouter.Parse(input);
+
+        Assert.Equal(RouteTarget.All, result.Target);
+        Assert.Equal("/all", result.SlashCommandName);
+        Assert.DoesNotContain(ContextSource.SharePointEmbedded, result.TargetSources);
+    }
+
+    [Fact]
+    public void Parse_AllCommand_NeverSearchesSharePointEmbedded()
+    {
+        var result = SlashCommandRouter.Parse("/all renewal");
+
+        Assert.DoesNotContain(ContextSource.SharePointEmbedded, result.TargetSources);
+    }
+
+    [Fact]
+    public void GetSupportedCommands_IncludesEmbeddedWithHelp()
+    {
+        Assert.Contains("/embedded", SlashCommandRouter.GetSupportedCommands());
+        Assert.Contains("/embedded", SlashCommandRouter.GetHelpText("/embedded"));
+    }
+
+    [Fact]
     public void Parse_ClearCommand_IsNeverEmpty()
     {
         var result = SlashCommandRouter.Parse("/clear");

@@ -22,6 +22,10 @@ public interface IContextRelayAuthProvider
         ContextRelayAuthSettings settings,
         CancellationToken cancellationToken = default);
 
+    Task<ContextRelayAccessToken> GetEmbeddedAccessTokenAsync(
+        ContextRelayAuthSettings settings,
+        CancellationToken cancellationToken = default);
+
     Task<ContextRelayAccountInfo?> GetAccountAsync(
         ContextRelayAuthSettings settings,
         CancellationToken cancellationToken = default);

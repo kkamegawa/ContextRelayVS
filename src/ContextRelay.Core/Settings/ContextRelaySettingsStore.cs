@@ -1,6 +1,9 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 
 namespace ContextRelay.Core.Settings;
 
@@ -10,6 +13,7 @@ namespace ContextRelay.Core.Settings;
 public static class ContextRelaySettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly TimeSpan UpdateLockTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Gets the path to the shared settings file.
@@ -44,82 +48,21 @@ public static class ContextRelaySettingsStore
     /// <returns><see langword="true"/> if the file was absent or was read and parsed successfully.</returns>
     public static bool TryLoadSettings(out ContextRelaySettingsSnapshot settings)
     {
-        if (!File.Exists(SettingsFilePath))
-        {
-            settings = new ContextRelaySettingsSnapshot();
-            return true;
-        }
-
-        try
-        {
-            using var stream = File.OpenRead(SettingsFilePath);
-            var deserialized = JsonSerializer.Deserialize<ContextRelaySettingsSnapshot>(stream, JsonOptions);
-            if (deserialized is null)
-            {
-                // The file exists but its content is JSON null (or otherwise deserializes to null) rather
-                // than an object — not a legitimate "no settings yet" case, since that is File.Exists being
-                // false above. Report failure instead of silently substituting a default snapshot.
-                settings = new ContextRelaySettingsSnapshot();
-                return false;
-            }
-
-            settings = deserialized;
-            return true;
-        }
-        catch
-        {
-            settings = new ContextRelaySettingsSnapshot();
-            return false;
-        }
+        return TryLoadSettings(SettingsFilePath, out settings);
     }
 
     /// <summary>
-    /// Saves the specified settings snapshot.
+    /// Reads the latest persisted settings, applies only the caller's changes, and saves the result
+    /// atomically. The whole read-modify-write runs under a cross-process named mutex, so a page or
+    /// process that updates its own fields never discards fields another writer saved meanwhile.
     /// </summary>
-    /// <param name="settings">The settings to persist.</param>
-    public static void SaveSettings(ContextRelaySettingsSnapshot settings)
+    /// <param name="update">Applies the caller's changes to the latest persisted settings.</param>
+    /// <returns>The settings that were saved.</returns>
+    /// <exception cref="IOException">The existing settings file could not be read, so nothing was saved.</exception>
+    /// <exception cref="TimeoutException">Another writer held the settings lock for too long.</exception>
+    public static ContextRelaySettingsSnapshot UpdateSettings(Action<ContextRelaySettingsSnapshot> update)
     {
-        if (settings is null)
-        {
-            throw new ArgumentNullException(nameof(settings));
-        }
-
-        var directory = Path.GetDirectoryName(SettingsFilePath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        var tempPath = SettingsFilePath + ".tmp";
-        try
-        {
-            using (var stream = File.Create(tempPath))
-            {
-                JsonSerializer.Serialize(stream, settings, JsonOptions);
-            }
-
-            if (File.Exists(SettingsFilePath))
-            {
-                // Use atomic replace to avoid losing settings if the process crashes between delete and move.
-                File.Replace(tempPath, SettingsFilePath, null);
-            }
-            else
-            {
-                File.Move(tempPath, SettingsFilePath);
-            }
-        }
-        catch
-        {
-            try
-            {
-                File.Delete(tempPath);
-            }
-            catch
-            {
-            }
-
-            throw;
-        }
+        return UpdateSettings(SettingsFilePath, update);
     }
 
     /// <summary>
@@ -140,5 +83,139 @@ public static class ContextRelaySettingsStore
             "ja-jp" => "ja",
             _ => "auto",
         };
+    }
+
+    internal static bool TryLoadSettings(string path, out ContextRelaySettingsSnapshot settings)
+    {
+        if (!File.Exists(path))
+        {
+            settings = new ContextRelaySettingsSnapshot();
+            return true;
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var deserialized = JsonSerializer.Deserialize<ContextRelaySettingsSnapshot>(stream, JsonOptions);
+            if (deserialized is null)
+            {
+                // The file exists but its content is JSON null (or otherwise deserializes to null) rather
+                // than an object — not a legitimate "no settings yet" case, since that is File.Exists being
+                // false above. Report failure instead of silently substituting a default snapshot.
+                settings = new ContextRelaySettingsSnapshot();
+                return false;
+            }
+
+            settings = deserialized;
+            return true;
+        }
+        catch
+        {
+            settings = new ContextRelaySettingsSnapshot();
+            return false;
+        }
+    }
+
+    internal static ContextRelaySettingsSnapshot UpdateSettings(string path, Action<ContextRelaySettingsSnapshot> update)
+    {
+        if (update is null)
+        {
+            throw new ArgumentNullException(nameof(update));
+        }
+
+        using var mutex = new Mutex(initiallyOwned: false, GetUpdateMutexName(path));
+        var acquired = false;
+        try
+        {
+            try
+            {
+                acquired = mutex.WaitOne(UpdateLockTimeout);
+            }
+            catch (AbandonedMutexException)
+            {
+                // A writer exited while holding the lock. The file is still whole because saves replace it
+                // atomically, and this thread now owns the mutex.
+                acquired = true;
+            }
+
+            if (!acquired)
+            {
+                throw new TimeoutException("Timed out waiting for another ContextRelay process to finish saving settings.");
+            }
+
+            // Merging onto defaults after a failed read would silently reset every field this caller does not
+            // own, so an unreadable file fails the update instead.
+            if (!TryLoadSettings(path, out var settings))
+            {
+                throw new IOException($"The ContextRelay settings file '{path}' could not be read, so the change was not saved. Fix or delete the file and try again.");
+            }
+
+            update(settings);
+            Save(path, settings);
+            return settings;
+        }
+        finally
+        {
+            if (acquired)
+            {
+                mutex.ReleaseMutex();
+            }
+        }
+    }
+
+    private static void Save(string path, ContextRelaySettingsSnapshot settings)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var tempPath = path + ".tmp";
+        try
+        {
+            using (var stream = File.Create(tempPath))
+            {
+                JsonSerializer.Serialize(stream, settings, JsonOptions);
+            }
+
+            if (File.Exists(path))
+            {
+                // Use atomic replace to avoid losing settings if the process crashes between delete and move.
+                File.Replace(tempPath, path, null);
+            }
+            else
+            {
+                File.Move(tempPath, path);
+            }
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(tempPath);
+            }
+            catch
+            {
+            }
+
+            throw;
+        }
+    }
+
+    private static string GetUpdateMutexName(string path)
+    {
+        // Devenv (the Options pages) and the out-of-process extension host run in the same user session, so a
+        // session-local name is enough. Hashing the full path keeps test files from sharing the real lock.
+        var normalized = Path.GetFullPath(path).ToUpperInvariant();
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+        var builder = new StringBuilder(@"Local\ContextRelay.Settings.");
+        for (var index = 0; index < 16; index++)
+        {
+            builder.Append(hash[index].ToString("x2"));
+        }
+
+        return builder.ToString();
     }
 }

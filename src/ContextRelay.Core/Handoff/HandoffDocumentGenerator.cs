@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.Embedded;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Utilities;
 
@@ -47,7 +48,7 @@ public sealed class HandoffDocumentGenerator : IHandoffDocumentGenerator
         {
             foreach (var snippet in context.Snippets)
             {
-                builder.AppendLine($"- **{snippet.Name}** ({snippet.Source}) — {TruncateSnippet(snippet.Snippet)}...");
+                builder.AppendLine($"- **{snippet.Name}** ({EmbeddedSnippetMetadata.DescribeSource(snippet)}) —{TruncateSnippet(snippet.Snippet)}...");
             }
         }
         else
@@ -116,7 +117,7 @@ public sealed class HandoffDocumentGenerator : IHandoffDocumentGenerator
             foreach (var snippet in context.Snippets)
             {
                 builder.AppendLine($"### {snippet.Name}");
-                builder.AppendLine($"- **Source**: {snippet.Source}");
+                builder.AppendLine($"- **Source**: {EmbeddedSnippetMetadata.DescribeSource(snippet)}");
                 builder.AppendLine($"- **Saved**: {snippet.UpdatedAt}");
                 if (!string.IsNullOrWhiteSpace(snippet.SourceUrl))
                 {

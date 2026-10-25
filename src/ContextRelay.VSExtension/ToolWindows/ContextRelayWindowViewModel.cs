@@ -40,6 +40,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private IReadOnlyList<SlashCommandSuggestion> visibleCommandSuggestions = Array.Empty<SlashCommandSuggestion>();
     private SlashCommandSuggestion? selectedCommandSuggestion;
     private IReadOnlyList<string> workspaceFiles = Array.Empty<string>();
+    private bool isEmbeddedActive;
     private bool isApplyingState;
     private string windowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
     private bool isStreaming;
@@ -373,20 +374,17 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     internal async Task PinResultAsync(ContextItemViewModel item, CancellationToken ct)
     {
-        var contextItem = ReconstructContextItem(item);
-        await RunBusyAsync(() => host.PinSnippetAsync(contextItem, ct)).ConfigureAwait(false);
+        await RunBusyAsync(() => host.PinSnippetAsync(item.Item, ct)).ConfigureAwait(false);
     }
 
     internal async Task CopyResultAsync(ContextItemViewModel item, CancellationToken ct)
     {
-        var contextItem = ReconstructContextItem(item);
-        await RunBusyAsync(() => host.CopyResultToClipboardAsync(contextItem, ct)).ConfigureAwait(false);
+        await RunBusyAsync(() => host.CopyResultToClipboardAsync(item.Item, ct)).ConfigureAwait(false);
     }
 
     internal async Task AppendResultAsync(ContextItemViewModel item, CancellationToken ct)
     {
-        var contextItem = ReconstructContextItem(item);
-        await RunBusyAsync(() => host.AppendResultToHandoffAsync(contextItem, ct)).ConfigureAwait(false);
+        await RunBusyAsync(() => host.AppendResultToHandoffAsync(item.Item, ct)).ConfigureAwait(false);
     }
 
     internal void OpenUrl(string? url)
@@ -427,19 +425,6 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     public void Dispose()
     {
         host.StateChanged -= OnHostStateChanged;
-    }
-
-    private static ContextItem ReconstructContextItem(ContextItemViewModel item)
-    {
-        Enum.TryParse<ContextSource>(item.Source, out var source);
-        return new ContextItem
-        {
-            Title = item.Title,
-            Snippet = item.Snippet,
-            Source = source,
-            Url = item.Url,
-            Timestamp = item.Timestamp
-        };
     }
 
     private void OnHostStateChanged(object? sender, ContextRelayStateChangedEventArgs e)
@@ -539,6 +524,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                     .ToArray();
             }
             workspaceFiles = state.WorkspaceFiles;
+            isEmbeddedActive = state.IsEmbeddedActive;
             if (queryChanged)
             {
                 CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
@@ -615,7 +601,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         SearchResults.Count == items.Count && SearchResults.Zip(items, (current, next) =>
             string.Equals(current.Title, next.Title, StringComparison.Ordinal) &&
             string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
-            string.Equals(current.Source, next.Source.ToString(), StringComparison.Ordinal) &&
+            string.Equals(current.Source, ContextSourceSchema.ToSchemaValue(next.Source), StringComparison.Ordinal) &&
+            ReferenceEquals(current.Item, next) &&
             string.Equals(current.Timestamp, next.Timestamp ?? string.Empty, StringComparison.Ordinal) &&
             string.Equals(current.Url, next.Url ?? string.Empty, StringComparison.Ordinal)).All(value => value);
 
@@ -718,7 +705,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     private void UpdateCommandSuggestions()
     {
-        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles);
+        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles, isEmbeddedActive);
         CommandSuggestions = suggestions
             .Select(CreateInteractiveSuggestion)
             .ToArray();
@@ -743,7 +730,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         // localized Description, so it identifies the same row across a rebuild.
         var selectedName = selectedCommandSuggestion?.Name;
 
-        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles);
+        var suggestions = BuildComposerSuggestions(QueryText, workspaceFiles, isEmbeddedActive);
         CommandSuggestions = suggestions
             .Select(CreateInteractiveSuggestion)
             .ToArray();
@@ -827,7 +814,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     /// that streams and can be stopped from the composer.
     /// </summary>
     /// <param name="query">The query text about to be submitted.</param>
-    /// <returns><see langword="true"/> for non-empty plain chat and <c>/ask</c> submissions.</returns>
+    /// <returns><see langword="true"/> for non-empty plain chat, <c>/ask</c>, and <c>/embedded</c> submissions.</returns>
     private static bool IsStoppableRoute(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -836,7 +823,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         var target = SlashCommandRouter.Parse(query.Trim()).Target;
-        return target is RouteTarget.Chat or RouteTarget.Ask;
+        return target is RouteTarget.Chat or RouteTarget.Ask or RouteTarget.SharePointEmbedded;
     }
 
     /// <summary>
@@ -1011,12 +998,12 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             previousQuery.IndexOf('#') >= 0;
     }
 
-    private static IReadOnlyList<SlashCommandSuggestion> BuildComposerSuggestions(string queryText, IReadOnlyList<string> workspaceFiles)
+    private static IReadOnlyList<SlashCommandSuggestion> BuildComposerSuggestions(string queryText, IReadOnlyList<string> workspaceFiles, bool includeEmbedded)
     {
         var fileSuggestions = BuildFileMentionSuggestions(queryText, workspaceFiles);
         return fileSuggestions.Count > 0
             ? fileSuggestions
-            : ContextRelayLocalizedStrings.GetCommandSuggestions(queryText);
+            : ContextRelayLocalizedStrings.GetCommandSuggestions(queryText, includeEmbedded);
     }
 
     private static IReadOnlyList<SlashCommandSuggestion> BuildFileMentionSuggestions(string queryText, IReadOnlyList<string> workspaceFiles)
