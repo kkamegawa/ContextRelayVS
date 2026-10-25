@@ -196,6 +196,7 @@ internal sealed class ContextRelayHost : IDisposable
                 QueryText = GetDraftQueryText(),
                 HelpText = ContextRelayLocalizedStrings.GenericHelpText,
                 StatusMessage = ContextRelayLocalizedStrings.GetToolWindowInitializationFailedStatus(exception.Message),
+                IsStatusError = true,
                 SignedInUser = state.SignedInUser,
                 LastHandoffPath = state.LastHandoffPath,
                 SearchResults = state.SearchResults,
@@ -603,7 +604,7 @@ internal sealed class ContextRelayHost : IDisposable
             var statusMessage = submittedRoute is RouteTarget.Chat or RouteTarget.Ask
                 ? ContextRelayLocalizedStrings.GetChatResponseFailedStatus(ex.Message)
                 : ex.Message;
-            return await RefreshStateCoreAsync(statusMessage, input?.Trim() ?? string.Empty, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(statusMessage, input?.Trim() ?? string.Empty, cancellationToken, isError: true).ConfigureAwait(false);
         }
         finally
         {
@@ -1938,7 +1939,7 @@ internal sealed class ContextRelayHost : IDisposable
         }
     }
 
-    private async Task<ContextRelayHostState> RefreshStateCoreAsync(string statusMessage, string queryText, CancellationToken cancellationToken)
+    private async Task<ContextRelayHostState> RefreshStateCoreAsync(string statusMessage, string queryText, CancellationToken cancellationToken, bool isError = false)
     {
         UpdateDraftQueryText(queryText);
         var chatHistory = await sharedStore.GetChatHistoryAsync(cancellationToken).ConfigureAwait(false);
@@ -1984,6 +1985,7 @@ internal sealed class ContextRelayHost : IDisposable
             QueryText = effectiveQueryText,
             HelpText = ContextRelayLocalizedStrings.GetHelpTextForQuery(effectiveQueryText),
             StatusMessage = statusMessage,
+            IsStatusError = isError,
             SignedInUser = signedInUser,
             LastHandoffPath = ResolveHandoffPath(workspaceRoot, handoffIndex),
             SearchResults = currentSearchResults,
@@ -2050,7 +2052,7 @@ internal sealed class ContextRelayHost : IDisposable
         logger.LogDiagnostic($"SubmitQuery target={route.Target} embeddedValidation={validation.Error} activation={validation.ActivationStatus} queryLength={validation.Query.Length}");
         if (!validation.IsValid)
         {
-            return await RefreshStateCoreAsync(GetEmbeddedValidationStatus(validation), originalInput, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(GetEmbeddedValidationStatus(validation), originalInput, cancellationToken, isError: true).ConfigureAwait(false);
         }
 
         var source = validation.Source!;
@@ -2071,7 +2073,7 @@ internal sealed class ContextRelayHost : IDisposable
             var status = ex.ErrorCode == ContextRelayAuthenticationErrorCode.EmbeddedConsentRequired
                 ? ContextRelayLocalizedStrings.GetEmbeddedConsentRequiredStatus(ex.InnerException?.Message ?? ex.Message)
                 : ex.Message;
-            return await RefreshStateCoreAsync(status, originalInput, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(status, originalInput, cancellationToken, isError: true).ConfigureAwait(false);
         }
 
         ObserveEmbeddedAccount(token);
@@ -2109,7 +2111,7 @@ internal sealed class ContextRelayHost : IDisposable
         catch (EmbeddedRetrievalException ex)
         {
             logger.LogError($"SharePoint Embedded search failed ({ex.Kind}).", ex);
-            return await RefreshStateCoreAsync(GetEmbeddedErrorStatus(ex), originalInput, cancellationToken).ConfigureAwait(false);
+            return await RefreshStateCoreAsync(GetEmbeddedErrorStatus(ex), originalInput, cancellationToken, isError: true).ConfigureAwait(false);
         }
         finally
         {

@@ -303,7 +303,7 @@
         </Style>
     </DataTemplate.Resources>
 
-    <Grid Margin="12"
+    <Grid Margin="8"
           Background="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}"
           FocusManager.IsFocusScope="True"
           FocusManager.FocusedElement="{Binding ElementName=QueryTextBox}">
@@ -313,28 +313,31 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Style="{StaticResource SurfaceBorderStyle}" Padding="12" Margin="0,0,0,12">
+        <!-- Header: account and status on one or two lines; the usage help only appears before the
+             first request, while a suggestion is highlighted, or after a failure. -->
+        <Border Grid.Row="0" Style="{StaticResource SurfaceBorderStyle}" Padding="10,6" Margin="0,0,0,8">
             <StackPanel>
-                <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="{Binding WindowTitleText}" />
-                <TextBlock Margin="0,3,0,0" Text="{Binding SignedInUserText}" Style="{StaticResource MutedTextStyle}" />
-                <TextBlock Margin="0,4,0,0" Text="{Binding StatusMessage}" Style="{StaticResource BodyTextStyle}" FontWeight="SemiBold" />
-                <TextBlock Margin="0,3,0,0" Text="{Binding HelpText}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
+                <WrapPanel>
+                    <TextBlock Margin="0,0,12,0" Style="{StaticResource SectionHeaderTextStyle}" Text="{Binding WindowTitleText}" />
+                    <TextBlock VerticalAlignment="Center" Text="{Binding SignedInUserText}" Style="{StaticResource MutedTextStyle}" />
+                </WrapPanel>
+                <TextBlock Margin="0,2,0,0" Text="{Binding StatusMessage}" Style="{StaticResource BodyTextStyle}" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,0" Text="{Binding HelpText}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}"
+                           Visibility="{Binding ShowHelpText, Converter={StaticResource BoolToVisConverter}}" />
             </StackPanel>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2.2*" />
-                <ColumnDefinition Width="1*" />
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Style="{StaticResource PanelSurfaceBorderStyle}" Margin="0,0,12,0">
-                <Border.Resources>
-                    <Style x:Key="StreamingPreviewBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
-                        <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
-                    </Style>
-                </Border.Resources>
+        <Border Grid.Row="1" Style="{StaticResource PanelSurfaceBorderStyle}">
+            <TabControl Background="Transparent"
+                        BorderThickness="0"
+                        SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+                <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding ChatTabHeaderText}">
                 <Grid>
+                    <Grid.Resources>
+                        <Style x:Key="StreamingPreviewBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
+                            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                        </Style>
+                    </Grid.Resources>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
@@ -382,12 +385,9 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
                 </Grid>
-            </Border>
+                </TabItem>
 
-            <Border Grid.Column="1" Style="{StaticResource PanelSurfaceBorderStyle}">
-                <TabControl Background="Transparent"
-                            BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
-                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding SearchResultsHeaderText}">
+                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding ResultsTabHeaderText}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -444,7 +444,7 @@
                         </Grid>
                     </TabItem>
 
-                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding SnippetsHeaderText}">
+                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding PinsTabHeaderText}">
                         <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource FluentListBoxItemStyle}" ItemsSource="{Binding Snippets}" BorderThickness="0">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
@@ -466,9 +466,8 @@
                     </TabItem>
                 </TabControl>
             </Border>
-        </Grid>
 
-        <Grid Grid.Row="2" Margin="0,12,0,0">
+        <Grid Grid.Row="2" Margin="0,8,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -539,14 +538,23 @@
 
             <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="2" Grid.Column="0"
                     Margin="0,0,8,0"
+                    VerticalAlignment="Bottom"
                     Content="{Binding AddFilesButtonText}"
                     AutomationProperties.Name="{Binding AddFilesToolTipText}"
                     ToolTip="{Binding AddFilesToolTipText}"
                     Command="{Binding AddFilesCommand}" />
 
+            <!-- Enter is the only key binding for submit; Shift+Enter falls through to the text box's
+                 own line-break command, and an IME composing Enter arrives as ImeProcessed. -->
             <TextBox x:Name="QueryTextBox"
                      Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="2" Grid.Column="1"
                       Margin="0,0,8,0"
+                      AcceptsReturn="True"
+                      TextWrapping="Wrap"
+                      MinHeight="32"
+                      MaxHeight="120"
+                      VerticalContentAlignment="Top"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                       Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
                       ToolTip="{Binding SearchToolTipText}">
                 <TextBox.InputBindings>
@@ -559,7 +567,8 @@
 
             </TextBox>
             <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="2" Grid.Column="2"
-                    MinWidth="96"
+                    MinWidth="72"
+                    VerticalAlignment="Bottom"
                     Content="{Binding PrimaryActionButtonText}"
                     ToolTip="{Binding PrimaryActionButtonText}"
                     AutomationProperties.Name="{Binding PrimaryActionButtonText}"

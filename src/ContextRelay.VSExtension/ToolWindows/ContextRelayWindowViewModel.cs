@@ -22,7 +22,15 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private const int StreamingPreviewMaxLines = 12;
 
     private const int MaxVisibleCommandSuggestions = 4;
+    private const int ChatTabIndex = 0;
+    private const int ResultsTabIndex = 1;
+    private const int PinsTabIndex = 2;
     private readonly ContextRelayHost host;
+    private int selectedTabIndex = ChatTabIndex;
+    private int unseenChatCount;
+    private int unseenResultCount;
+    private int unseenPinCount;
+    private bool isStatusError;
     private bool isBusy;
     private bool isChatRequestActive;
     private bool isCommandPopupOpen;
@@ -210,6 +218,43 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
     }
 
+    /// <summary>
+    /// Gets or sets the selected tab (chat, results, pins). The tab control binds this two-way; the
+    /// composer sits outside the tabs, so switching never loses the draft.
+    /// </summary>
+    [DataMember]
+    public int SelectedTabIndex
+    {
+        get => selectedTabIndex;
+        set
+        {
+            if (value < ChatTabIndex || value > PinsTabIndex || selectedTabIndex == value)
+            {
+                return;
+            }
+
+            selectedTabIndex = value;
+            RaiseNotifyPropertyChangedEvent(nameof(SelectedTabIndex));
+            ClearUnseenCount(value);
+        }
+    }
+
+    [DataMember]
+    public string ChatTabHeaderText => ContextRelayLocalizedStrings.GetTabHeaderText(ContextRelayLocalizedStrings.ChatTabHeaderText, unseenChatCount);
+
+    [DataMember]
+    public string ResultsTabHeaderText => ContextRelayLocalizedStrings.GetTabHeaderText(ContextRelayLocalizedStrings.ResultsTabHeaderText, unseenResultCount);
+
+    [DataMember]
+    public string PinsTabHeaderText => ContextRelayLocalizedStrings.GetTabHeaderText(ContextRelayLocalizedStrings.PinsTabHeaderText, unseenPinCount);
+
+    /// <summary>
+    /// Gets a value indicating whether the usage help is shown: only before anything was asked, while
+    /// the suggestion popup explains the highlighted command, or after a failure.
+    /// </summary>
+    [DataMember]
+    public bool ShowHelpText => (chatHistory.Count == 0 && searchResults.Count == 0) || isCommandPopupOpen || isStatusError;
+
     [DataMember]
     public string HelpText
     {
@@ -280,6 +325,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             {
                 isCommandPopupOpen = value;
                 RaiseNotifyPropertyChangedEvent(nameof(IsCommandPopupOpen));
+                RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
 
                 // The query box binds Tab, Up, Down, and Escape to these commands. While the
                 // popup is closed the key bindings must not handle the key, so Tab keeps moving
@@ -300,6 +346,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             searchResults = value;
             RaiseNotifyPropertyChangedEvent(nameof(SearchResults));
+            RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
         }
     }
 
@@ -322,6 +369,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             chatHistory = value;
             RaiseNotifyPropertyChangedEvent(nameof(ChatHistory));
+            RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
         }
     }
 
@@ -509,20 +557,31 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             {
                 PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();
             }
-            if (collectionLanguageChanged || !SearchResultsEqual(state.SearchResults))
+            if (isStatusError != state.IsStatusError)
+            {
+                isStatusError = state.IsStatusError;
+                RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
+            }
+
+            var resultsChanged = !SearchResultsEqual(state.SearchResults);
+            if (collectionLanguageChanged || resultsChanged)
             {
                 SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
             }
+            var previousPinCount = Snippets.Count;
             if (collectionLanguageChanged || !SnippetsEqual(state.Snippets))
             {
                 Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
             }
+            var previousChatCount = ChatHistory.Count;
             if (collectionLanguageChanged || !ChatHistoryEqual(state.ChatHistory, state.ContinuableCopilotAssistantItemId))
             {
                 ChatHistory = state.ChatHistory
                     .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, state.ContinuableCopilotAssistantItemId, StringComparison.Ordinal)))
                     .ToArray();
             }
+
+            UpdateUnseenCounts(resultsChanged, previousChatCount, previousPinCount, collectionLanguageChanged);
             workspaceFiles = state.WorkspaceFiles;
             isEmbeddedActive = state.IsEmbeddedActive;
             if (queryChanged)
@@ -566,6 +625,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         CloseCommandPopup();
+        var targetTab = GetTabForQuery(query);
+        if (targetTab is int tab)
+        {
+            SelectedTabIndex = tab;
+        }
 
         // Authentication and conversation setup run before the first streaming update. Keep the
         // button enabled across that gap for routes that can stream and be stopped; disabling it
@@ -803,6 +867,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         StopGenerationButtonText = ContextRelayLocalizedStrings.StopGenerationButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(StopGenerationButtonText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+        RaiseTabHeaders();
 
         // Notify the derived caption last. It reads whichever label matches the current state,
         // so notifying before both labels are assigned would publish the previous language.
@@ -824,6 +889,79 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
         var target = SlashCommandRouter.Parse(query.Trim()).Target;
         return target is RouteTarget.Chat or RouteTarget.Ask or RouteTarget.SharePointEmbedded;
+    }
+
+    /// <summary>
+    /// Returns the tab a submission's output lands in: chat turns (plain text, /ask, /workiq) show in
+    /// the chat tab and searches (including /embedded) in the results tab.
+    /// </summary>
+    /// <param name="query">The query text about to be submitted.</param>
+    /// <returns>The tab index, or <see langword="null"/> to keep the current tab.</returns>
+    internal static int? GetTabForQuery(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return null;
+        }
+
+        return SlashCommandRouter.Parse(query.Trim()).Target switch
+        {
+            RouteTarget.Clear => null,
+            RouteTarget.Chat or RouteTarget.Ask or RouteTarget.WorkIq => ChatTabIndex,
+            _ => ResultsTabIndex
+        };
+    }
+
+    /// <summary>
+    /// Counts what arrived in a tab the user is not looking at, so its header can show "(n)".
+    /// </summary>
+    private void UpdateUnseenCounts(bool resultsChanged, int previousChatCount, int previousPinCount, bool languageChanged)
+    {
+        if (resultsChanged && !languageChanged && selectedTabIndex != ResultsTabIndex)
+        {
+            // A new search replaces the list, so every result in it is unseen.
+            unseenResultCount = searchResults.Count;
+        }
+
+        if (selectedTabIndex != ChatTabIndex && chatHistory.Count > previousChatCount)
+        {
+            unseenChatCount += chatHistory.Count - previousChatCount;
+        }
+
+        if (selectedTabIndex != PinsTabIndex && snippets.Count > previousPinCount)
+        {
+            unseenPinCount += snippets.Count - previousPinCount;
+        }
+
+        unseenResultCount = Math.Min(unseenResultCount, searchResults.Count);
+        unseenChatCount = Math.Min(unseenChatCount, chatHistory.Count);
+        unseenPinCount = Math.Min(unseenPinCount, snippets.Count);
+        RaiseTabHeaders();
+    }
+
+    private void ClearUnseenCount(int tabIndex)
+    {
+        switch (tabIndex)
+        {
+            case ChatTabIndex:
+                unseenChatCount = 0;
+                break;
+            case ResultsTabIndex:
+                unseenResultCount = 0;
+                break;
+            case PinsTabIndex:
+                unseenPinCount = 0;
+                break;
+        }
+
+        RaiseTabHeaders();
+    }
+
+    private void RaiseTabHeaders()
+    {
+        RaiseNotifyPropertyChangedEvent(nameof(ChatTabHeaderText));
+        RaiseNotifyPropertyChangedEvent(nameof(ResultsTabHeaderText));
+        RaiseNotifyPropertyChangedEvent(nameof(PinsTabHeaderText));
     }
 
     /// <summary>

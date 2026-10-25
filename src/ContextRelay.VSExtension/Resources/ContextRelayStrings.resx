@@ -174,4 +174,20 @@
   <data name="EmbeddedSearchStoppedStatus" xml:space="preserve"><value>SharePoint Embedded search stopped.</value></data>
   <data name="EmbeddedResultsDiscardedStatus" xml:space="preserve"><value>SharePoint Embedded results were discarded because the settings or account changed. Search again.</value></data>
   <data name="EmbeddedInvalidSources_Format" xml:space="preserve"><value>{0} SharePoint Embedded source(s) are invalid and skipped. Fix them in Tools &gt; Options.</value></data>
+  <data name="ChatTabHeaderText" xml:space="preserve"><value>Chat</value></data>
+  <data name="ResultsTabHeaderText" xml:space="preserve"><value>Results</value></data>
+  <data name="PinsTabHeaderText" xml:space="preserve"><value>Pins</value></data>
+  <data name="TabHeaderWithCount_Format" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="UnpinButtonText" xml:space="preserve"><value>Unpin</value></data>
+  <data name="ShowPreviewButtonText" xml:space="preserve"><value>Preview</value></data>
+  <data name="HidePreviewButtonText" xml:space="preserve"><value>Hide preview</value></data>
+  <data name="CopyPreviewButtonText" xml:space="preserve"><value>Copy</value></data>
+  <data name="EmbeddedPreviewBadgeText" xml:space="preserve"><value>Preview</value></data>
+  <data name="SensitivityLabel_Format" xml:space="preserve"><value>Sensitivity: {0}</value></data>
+  <data name="EmbeddedSourceChip_Format" xml:space="preserve"><value>SharePoint Embedded source: {0}</value></data>
+  <data name="EmbeddedSourceNotSelectedChipText" xml:space="preserve"><value>SharePoint Embedded source: not selected</value></data>
+  <data name="EmbeddedSourceSelectorHeaderText" xml:space="preserve"><value>Choose a SharePoint Embedded source (Up/Down, Enter; Esc clears)</value></data>
+  <data name="ChangeEmbeddedSourceButtonText" xml:space="preserve"><value>Change</value></data>
+  <data name="EmbeddedPreviewNoticeText" xml:space="preserve"><value>SharePoint Embedded retrieval is a preview with metered billing (Copilot Studio messages).</value></data>
+  <data name="MarkdownLinksHeaderText" xml:space="preserve"><value>Links</value></data>
 </root>
