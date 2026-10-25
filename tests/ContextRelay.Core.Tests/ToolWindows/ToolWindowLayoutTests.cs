@@ -59,6 +59,57 @@ public sealed class ToolWindowLayoutTests
         Assert.DoesNotContain("Modifiers=\"Shift\"", xaml, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("https://contoso.sharepoint.com/doc", true)]
+    [InlineData("HTTPS://contoso.example/a?b=c", true)]
+    [InlineData("http://contoso.example/doc", false)]
+    [InlineData("mailto:someone@contoso.example", false)]
+    [InlineData("javascript:alert(1)", false)]
+    [InlineData("file:///C:/secret.txt", false)]
+    [InlineData("/relative/path", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void SafeLinks_OpensOnlyHttpsUrlsThatPassTheSafetyCheck(string? candidate, bool expected)
+    {
+        var type = LoadBuiltExtensionAssembly().GetType("ContextRelay.VSExtension.ToolWindows.SafeLinks", throwOnError: true);
+        var method = type!.GetMethod("TryGetOpenableUrl", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var arguments = new object?[] { candidate, null };
+
+        var result = (bool)method!.Invoke(obj: null, arguments)!;
+
+        Assert.Equal(expected, result);
+        Assert.Equal(expected, !string.IsNullOrEmpty((string?)arguments[1]));
+    }
+
+    [Fact]
+    public void EmbeddedXaml_CardsOfferPreviewPinStateAndSafeOpen()
+    {
+        var xaml = ReadXaml();
+
+        Assert.Contains("<Decorator x:Name=\"PART_ContentHost\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource SelectableTextStyle}\" Text=\"{Binding PreviewText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Matches(xaml, "Command=\"{Binding TogglePreviewCommand}\"").Count);
+        Assert.Equal(2, Regex.Matches(xaml, "Command=\"{Binding CopyPreviewCommand}\"").Count);
+        Assert.Contains("Content=\"{Binding PinButtonText}\" Command=\"{Binding PinCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Matches(xaml, "Visibility=\"{Binding CanOpen, Converter={StaticResource BoolToVisConverter}}\"").Count);
+        Assert.Contains("Text=\"{Binding SensitivityLabelText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding EmbeddedPreviewBadgeText}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmbeddedXaml_ComposerShowsTheEmbeddedSourceChipAndSelector()
+    {
+        var xaml = ReadXaml();
+
+        Assert.Contains("Visibility=\"{Binding ShowEmbeddedSourceBar, Converter={StaticResource BoolToVisConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding EmbeddedSourceChipText}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding EmbeddedSourceOptions}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DataTrigger Binding=\"{Binding IsHighlighted}\" Value=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{Binding HasEmbeddedInvalidSources, Converter={StaticResource BoolToVisConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContainerTypeId}", xaml, StringComparison.Ordinal);
+    }
+
     private static int? InvokeGetTabForQuery(string query)
     {
         var assembly = LoadBuiltExtensionAssembly();

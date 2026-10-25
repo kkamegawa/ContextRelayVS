@@ -887,6 +887,12 @@ internal sealed class ContextRelayHost : IDisposable
         await CopyTextToClipboardAsync(text, ContextRelayLocalizedStrings.AssistantResponseCopiedStatus, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Copies the text of an expanded preview (all extracts of a result or pin).</summary>
+    public async Task CopyPreviewTextAsync(string text, CancellationToken cancellationToken = default)
+    {
+        await CopyTextToClipboardAsync(text, ContextRelayLocalizedStrings.ResultCopiedStatus, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task AppendAssistantTextToEditorAsync(string text, CancellationToken cancellationToken = default)
     {
         var applied = await packageServices.AppendToActiveDocumentAsync(text, cancellationToken).ConfigureAwait(false);

@@ -7,7 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
+using ContextRelay.Core.Embedded;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.Settings;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.VSExtension.Services;
 using Microsoft.VisualStudio.Extensibility;
@@ -31,6 +33,21 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     private int unseenResultCount;
     private int unseenPinCount;
     private bool isStatusError;
+    private const string ContextItemKeyMetadataKey = "contextItemKey";
+    private static readonly Regex EmbeddedQueryPattern = new(@"^\s*/embedded(\s|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    // Display state kept here because the tab control discards the visual tree of unselected tabs.
+    private readonly HashSet<string> expandedResultKeys = new(StringComparer.Ordinal);
+    private readonly HashSet<string> expandedSnippetIds = new(StringComparer.Ordinal);
+    private HashSet<string> pinnedKeys = new(StringComparer.Ordinal);
+    private IReadOnlyList<EmbeddedSourceSettings> embeddedSources = Array.Empty<EmbeddedSourceSettings>();
+    private string? selectedEmbeddedContainerTypeId;
+    private string? lastSelectedEmbeddedContainerTypeId;
+    private int embeddedInvalidSourceCount;
+    private bool isEmbeddedSourceSelectorOpen;
+    private bool embeddedSelectorShownForEntry;
+    private int embeddedHighlightIndex;
+    private IReadOnlyList<EmbeddedSourceOptionViewModel> embeddedSourceOptions = Array.Empty<EmbeddedSourceOptionViewModel>();
     private bool isBusy;
     private bool isChatRequestActive;
     private bool isCommandPopupOpen;
@@ -87,11 +104,29 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             host.StopGeneration();
             return Task.CompletedTask;
         });
-        MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
-        MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
-        ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
+        // Up/Down/Tab/Esc serve the command popup first, then the Embedded source selector.
+        MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveSelection(1); return Task.CompletedTask; });
+        MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveSelection(-1); return Task.CompletedTask; });
+        ApplyCommandSelectionCommand = new AsyncCommand(async (_, ct) =>
+        {
+            if (!ApplySelectedCommandSuggestion() && isEmbeddedSourceSelectorOpen)
+            {
+                await ConfirmEmbeddedSourceAsync(embeddedHighlightIndex, ct).ConfigureAwait(false);
+            }
+        });
         ConfirmQueryInputCommand = new AsyncCommand(async (_, context, ct) => await ConfirmQueryInputAsync(context, ct).ConfigureAwait(false));
-        CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
+        CloseCommandPopupCommand = new AsyncCommand(async (_, ct) =>
+        {
+            if (IsCommandPopupOpen)
+            {
+                CloseCommandPopup();
+            }
+            else if (isEmbeddedSourceSelectorOpen)
+            {
+                await ClearEmbeddedSourceAsync(ct).ConfigureAwait(false);
+            }
+        });
+        ChangeEmbeddedSourceCommand = new AsyncCommand((_, _) => { OpenEmbeddedSourceSelector(); return Task.CompletedTask; });
         UpdateSuggestionKeyBindingAvailability();
     }
 
@@ -188,6 +223,48 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
     [DataMember] public AsyncCommand ConfirmQueryInputCommand { get; }
     [DataMember] public AsyncCommand CloseCommandPopupCommand { get; }
+    [DataMember] public AsyncCommand ChangeEmbeddedSourceCommand { get; }
+
+    /// <summary>Gets a value indicating whether the composer shows the Embedded source chip (an active /embedded draft).</summary>
+    [DataMember] public bool ShowEmbeddedSourceBar => isEmbeddedActive && EmbeddedQueryPattern.IsMatch(queryText);
+
+    [DataMember]
+    public string EmbeddedSourceChipText => ContextRelayLocalizedStrings.GetEmbeddedSourceChipText(
+        embeddedSources.FirstOrDefault(source => string.Equals(source.ContainerTypeId, selectedEmbeddedContainerTypeId, StringComparison.OrdinalIgnoreCase))?.Name);
+
+    [DataMember] public bool CanChangeEmbeddedSource => embeddedSources.Count > 1;
+    [DataMember] public string ChangeEmbeddedSourceButtonText => ContextRelayLocalizedStrings.ChangeEmbeddedSourceButtonText;
+    [DataMember] public string EmbeddedSourceSelectorHeaderText => ContextRelayLocalizedStrings.EmbeddedSourceSelectorHeaderText;
+    [DataMember] public string EmbeddedPreviewNoticeText => ContextRelayLocalizedStrings.EmbeddedPreviewNoticeText;
+    [DataMember] public bool HasEmbeddedInvalidSources => ShowEmbeddedSourceBar && embeddedInvalidSourceCount > 0;
+    [DataMember] public string EmbeddedInvalidSourcesText => ContextRelayLocalizedStrings.GetEmbeddedInvalidSourcesStatus(embeddedInvalidSourceCount);
+    [DataMember] public bool HasEmbeddedResults => searchResults.Any(result => result.IsEmbedded);
+
+    [DataMember]
+    public bool IsEmbeddedSourceSelectorOpen
+    {
+        get => isEmbeddedSourceSelectorOpen;
+        private set
+        {
+            if (isEmbeddedSourceSelectorOpen != value)
+            {
+                isEmbeddedSourceSelectorOpen = value;
+                RaiseNotifyPropertyChangedEvent(nameof(IsEmbeddedSourceSelectorOpen));
+                UpdateSuggestionKeyBindingAvailability();
+            }
+        }
+    }
+
+    [DataMember]
+    public IReadOnlyList<EmbeddedSourceOptionViewModel> EmbeddedSourceOptions
+    {
+        get => embeddedSourceOptions;
+        private set
+        {
+            embeddedSourceOptions = value;
+            RaiseNotifyPropertyChangedEvent(nameof(EmbeddedSourceOptions));
+        }
+    }
 
     [DataMember]
     public string QueryText
@@ -214,6 +291,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
                 UpdateCommandSuggestions();
                 UpdateTransientHelpText();
+                RefreshEmbeddedSourceBar(allowOpen: true);
             }
         }
     }
@@ -347,6 +425,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             searchResults = value;
             RaiseNotifyPropertyChangedEvent(nameof(SearchResults));
             RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
+            RaiseNotifyPropertyChangedEvent(nameof(HasEmbeddedResults));
         }
     }
 
@@ -437,7 +516,43 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     internal void OpenUrl(string? url)
     {
-        host.OpenExternalUrl(url);
+        if (SafeLinks.TryGetOpenableUrl(url, out var openableUrl))
+        {
+            host.OpenExternalUrl(openableUrl);
+        }
+    }
+
+    internal async Task CopyPreviewTextAsync(string text, CancellationToken ct)
+    {
+        await RunBusyAsync(() => host.CopyPreviewTextAsync(text, ct)).ConfigureAwait(false);
+    }
+
+    internal void SetResultPreviewExpanded(ContextItemViewModel item, bool expanded)
+    {
+        if (expanded)
+        {
+            expandedResultKeys.Add(item.Key);
+        }
+        else
+        {
+            expandedResultKeys.Remove(item.Key);
+        }
+
+        item.SetPreviewExpanded(expanded);
+    }
+
+    internal void SetSnippetPreviewExpanded(SnippetItemViewModel item, bool expanded)
+    {
+        if (expanded)
+        {
+            expandedSnippetIds.Add(item.Id);
+        }
+        else
+        {
+            expandedSnippetIds.Remove(item.Id);
+        }
+
+        item.SetPreviewExpanded(expanded);
     }
 
     internal async Task DeleteSnippetAsync(string id, CancellationToken ct)
@@ -563,15 +678,42 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
             }
 
+            pinnedKeys = new HashSet<string>(
+                state.Snippets
+                    .Select(snippet => EmbeddedSnippetMetadata.TryGetString(snippet, ContextItemKeyMetadataKey))
+                    .Where(key => !string.IsNullOrEmpty(key))
+                    .Select(key => key!),
+                StringComparer.Ordinal);
             var resultsChanged = !SearchResultsEqual(state.SearchResults);
             if (collectionLanguageChanged || resultsChanged)
             {
-                SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
+                if (resultsChanged)
+                {
+                    // A new result set starts collapsed; a language-only rebuild keeps what was expanded.
+                    expandedResultKeys.Clear();
+                }
+
+                SearchResults = state.SearchResults
+                    .Select(item =>
+                    {
+                        var key = ContextItemKeys.Build(item);
+                        return new ContextItemViewModel(item, this, pinnedKeys.Contains(key), expandedResultKeys.Contains(key));
+                    })
+                    .ToArray();
             }
+            else
+            {
+                foreach (var result in SearchResults)
+                {
+                    result.SetPinned(pinnedKeys.Contains(result.Key));
+                }
+            }
+
             var previousPinCount = Snippets.Count;
             if (collectionLanguageChanged || !SnippetsEqual(state.Snippets))
             {
-                Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
+                expandedSnippetIds.IntersectWith(state.Snippets.Select(item => item.Id));
+                Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this, expandedSnippetIds.Contains(item.Id))).ToArray();
             }
             var previousChatCount = ChatHistory.Count;
             if (collectionLanguageChanged || !ChatHistoryEqual(state.ChatHistory, state.ContinuableCopilotAssistantItemId))
@@ -584,6 +726,11 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             UpdateUnseenCounts(resultsChanged, previousChatCount, previousPinCount, collectionLanguageChanged);
             workspaceFiles = state.WorkspaceFiles;
             isEmbeddedActive = state.IsEmbeddedActive;
+            embeddedSources = state.EmbeddedSources;
+            selectedEmbeddedContainerTypeId = state.SelectedEmbeddedContainerTypeId;
+            lastSelectedEmbeddedContainerTypeId = state.LastSelectedEmbeddedContainerTypeId;
+            embeddedInvalidSourceCount = state.EmbeddedInvalidSourceCount;
+            RefreshEmbeddedSourceBar(allowOpen: false);
             if (queryChanged)
             {
                 CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
@@ -625,6 +772,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         CloseCommandPopup();
+        IsEmbeddedSourceSelectorOpen = false;
         var targetTab = GetTabForQuery(query);
         if (targetTab is int tab)
         {
@@ -667,8 +815,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
             string.Equals(current.Source, ContextSourceSchema.ToSchemaValue(next.Source), StringComparison.Ordinal) &&
             ReferenceEquals(current.Item, next) &&
-            string.Equals(current.Timestamp, next.Timestamp ?? string.Empty, StringComparison.Ordinal) &&
-            string.Equals(current.Url, next.Url ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+            string.Equals(current.Timestamp, next.Timestamp ?? string.Empty, StringComparison.Ordinal)).All(value => value);
 
     private bool SnippetsEqual(IReadOnlyList<SharedSnippetItem> items) =>
         Snippets.Count == items.Count && Snippets.Zip(items, (current, next) =>
@@ -676,7 +823,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             string.Equals(current.Name, next.Name, StringComparison.Ordinal) &&
             string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
             string.Equals(current.Source, next.Source, StringComparison.Ordinal) &&
-            string.Equals(current.SourceUrl, next.SourceUrl ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+            string.Equals(current.SourceUrl, SafeLinks.TryGetOpenableUrl(next.SourceUrl, out var url) ? url : string.Empty, StringComparison.Ordinal)).All(value => value);
 
     private bool ChatHistoryEqual(IReadOnlyList<SharedChatHistoryItem> items, string? continuableId) =>
         ChatHistory.Count == items.Count && ChatHistory.Zip(items, (current, next) =>
@@ -698,7 +845,108 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             return;
         }
 
+        if (isEmbeddedSourceSelectorOpen)
+        {
+            await ConfirmEmbeddedSourceAsync(embeddedHighlightIndex, ct).ConfigureAwait(false);
+            return;
+        }
+
         await SubmitAsync(clientContext, ct).ConfigureAwait(false);
+    }
+
+    private void MoveSelection(int delta)
+    {
+        if (IsCommandPopupOpen)
+        {
+            MoveCommandSelection(delta);
+        }
+        else if (isEmbeddedSourceSelectorOpen && embeddedSources.Count > 0)
+        {
+            embeddedHighlightIndex = (embeddedHighlightIndex + delta + embeddedSources.Count) % embeddedSources.Count;
+            RebuildEmbeddedSourceOptions();
+        }
+    }
+
+    /// <summary>
+    /// Shows or hides the Embedded source chip for the current draft. With several sources, the selector
+    /// opens once each time the draft enters the /embedded route (and the command popup is not showing).
+    /// </summary>
+    private void RefreshEmbeddedSourceBar(bool allowOpen)
+    {
+        var showBar = ShowEmbeddedSourceBar;
+        if (!showBar)
+        {
+            embeddedSelectorShownForEntry = false;
+            IsEmbeddedSourceSelectorOpen = false;
+        }
+        else if (allowOpen && !embeddedSelectorShownForEntry && !IsCommandPopupOpen && embeddedSources.Count > 1)
+        {
+            OpenEmbeddedSourceSelector();
+        }
+        else if (isEmbeddedSourceSelectorOpen)
+        {
+            RebuildEmbeddedSourceOptions();
+        }
+
+        RaiseNotifyPropertyChangedEvent(nameof(ShowEmbeddedSourceBar));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedSourceChipText));
+        RaiseNotifyPropertyChangedEvent(nameof(CanChangeEmbeddedSource));
+        RaiseNotifyPropertyChangedEvent(nameof(HasEmbeddedInvalidSources));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedInvalidSourcesText));
+    }
+
+    private void OpenEmbeddedSourceSelector()
+    {
+        if (embeddedSources.Count < 2)
+        {
+            return;
+        }
+
+        embeddedSelectorShownForEntry = true;
+        var initial = selectedEmbeddedContainerTypeId ?? lastSelectedEmbeddedContainerTypeId;
+        embeddedHighlightIndex = Math.Max(0, embeddedSources
+            .Select((source, index) => (source, index))
+            .Where(pair => string.Equals(pair.source.ContainerTypeId, initial, StringComparison.OrdinalIgnoreCase))
+            .Select(pair => pair.index)
+            .DefaultIfEmpty(0)
+            .First());
+        RebuildEmbeddedSourceOptions();
+        IsEmbeddedSourceSelectorOpen = true;
+        host.LogUiDiagnostic($"Embedded source selector opened sourceCount={embeddedSources.Count}");
+    }
+
+    private void RebuildEmbeddedSourceOptions()
+    {
+        if (embeddedHighlightIndex >= embeddedSources.Count)
+        {
+            embeddedHighlightIndex = 0;
+        }
+
+        EmbeddedSourceOptions = embeddedSources
+            .Select((source, index) => new EmbeddedSourceOptionViewModel(
+                source.Name,
+                source.ContainerTypeId,
+                index == embeddedHighlightIndex,
+                new AsyncCommand(async (_, ct) => await ConfirmEmbeddedSourceAsync(index, ct).ConfigureAwait(false))))
+            .ToArray();
+    }
+
+    private async Task ConfirmEmbeddedSourceAsync(int index, CancellationToken ct)
+    {
+        if (index < 0 || index >= embeddedSources.Count)
+        {
+            return;
+        }
+
+        IsEmbeddedSourceSelectorOpen = false;
+        await host.SelectEmbeddedSourceAsync(embeddedSources[index].ContainerTypeId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Esc in the selector: clears the choice, so a submit asks to choose instead of sending.</summary>
+    private async Task ClearEmbeddedSourceAsync(CancellationToken ct)
+    {
+        IsEmbeddedSourceSelectorOpen = false;
+        await host.SelectEmbeddedSourceAsync(null, ct).ConfigureAwait(false);
     }
 
     private async Task RunBusyAsync(Func<Task> action)
@@ -868,6 +1116,9 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         RaiseNotifyPropertyChangedEvent(nameof(StopGenerationButtonText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
         RaiseTabHeaders();
+        RaiseNotifyPropertyChangedEvent(nameof(ChangeEmbeddedSourceButtonText));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedSourceSelectorHeaderText));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedPreviewNoticeText));
 
         // Notify the derived caption last. It reads whichever label matches the current state,
         // so notifying before both labels are assigned would publish the previous language.
@@ -970,7 +1221,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     /// </summary>
     private void UpdateSuggestionKeyBindingAvailability()
     {
-        var popupOpen = isCommandPopupOpen;
+        var popupOpen = isCommandPopupOpen || isEmbeddedSourceSelectorOpen;
         ApplyCommandSelectionCommand.CanExecute = popupOpen;
         MoveSelectionDownCommand.CanExecute = popupOpen;
         MoveSelectionUpCommand.CanExecute = popupOpen;
