@@ -182,7 +182,7 @@ public static class ContextRelaySettingsStore
             if (File.Exists(path))
             {
                 // Use atomic replace to avoid losing settings if the process crashes between delete and move.
-                File.Replace(tempPath, path, null);
+                ReplaceWithRetry(tempPath, path);
             }
             else
             {
@@ -200,6 +200,25 @@ public static class ContextRelaySettingsStore
             }
 
             throw;
+        }
+    }
+
+    private static void ReplaceWithRetry(string sourcePath, string destinationPath)
+    {
+        // Readers load the file without the update lock, and antivirus or the indexer can open it briefly
+        // after a save; either makes File.Replace fail with a transient sharing violation.
+        const int maxAttempts = 5;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Replace(sourcePath, destinationPath, null);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && ex is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(20 * attempt);
+            }
         }
     }
 

@@ -7,9 +7,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using ContextRelay.Core.FileContext;
 using ContextRelay.Core.Models;
+using ContextRelay.Core.Embedded;
 using ContextRelay.Core.Router;
+using ContextRelay.Core.Settings;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.VSExtension.Services;
+using ContextRelay.VSExtension.ToolWindows.Markdown;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.UI;
 
@@ -18,11 +21,38 @@ namespace ContextRelay.VSExtension.ToolWindows;
 [DataContract]
 internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject, IDisposable
 {
-    private const int StreamingPreviewMaxChars = 1200;
-    private const int StreamingPreviewMaxLines = 12;
+    // The preview cannot scroll itself to the newest output, so it shows the last few parsed blocks.
+    private const int StreamingPreviewMaxBlocks = 8;
+    private static readonly TimeSpan StreamingParseInterval = TimeSpan.FromMilliseconds(120);
+    private readonly ObservableList<MarkdownBlockViewModel> streamingBlocks = new();
+    private readonly System.Diagnostics.Stopwatch streamingParseClock = new();
+    private bool hasEarlierStreamingBlocks;
 
     private const int MaxVisibleCommandSuggestions = 4;
+    private const int ChatTabIndex = 0;
+    private const int ResultsTabIndex = 1;
+    private const int PinsTabIndex = 2;
     private readonly ContextRelayHost host;
+    private int selectedTabIndex = ChatTabIndex;
+    private int unseenChatCount;
+    private int unseenResultCount;
+    private int unseenPinCount;
+    private bool isStatusError;
+    private const string ContextItemKeyMetadataKey = "contextItemKey";
+    private static readonly Regex EmbeddedQueryPattern = new(@"^\s*/embedded(\s|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    // Display state kept here because the tab control discards the visual tree of unselected tabs.
+    private readonly HashSet<string> expandedResultKeys = new(StringComparer.Ordinal);
+    private readonly HashSet<string> expandedSnippetIds = new(StringComparer.Ordinal);
+    private HashSet<string> pinnedKeys = new(StringComparer.Ordinal);
+    private IReadOnlyList<EmbeddedSourceSettings> embeddedSources = Array.Empty<EmbeddedSourceSettings>();
+    private string? selectedEmbeddedContainerTypeId;
+    private string? lastSelectedEmbeddedContainerTypeId;
+    private int embeddedInvalidSourceCount;
+    private bool isEmbeddedSourceSelectorOpen;
+    private bool embeddedSelectorShownForEntry;
+    private int embeddedHighlightIndex;
+    private IReadOnlyList<EmbeddedSourceOptionViewModel> embeddedSourceOptions = Array.Empty<EmbeddedSourceOptionViewModel>();
     private bool isBusy;
     private bool isChatRequestActive;
     private bool isCommandPopupOpen;
@@ -79,11 +109,29 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             host.StopGeneration();
             return Task.CompletedTask;
         });
-        MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveCommandSelection(1); return Task.CompletedTask; });
-        MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveCommandSelection(-1); return Task.CompletedTask; });
-        ApplyCommandSelectionCommand = new AsyncCommand((_, _) => { ApplySelectedCommandSuggestion(); return Task.CompletedTask; });
+        // Up/Down/Tab/Esc serve the command popup first, then the Embedded source selector.
+        MoveSelectionDownCommand = new AsyncCommand((_, _) => { MoveSelection(1); return Task.CompletedTask; });
+        MoveSelectionUpCommand = new AsyncCommand((_, _) => { MoveSelection(-1); return Task.CompletedTask; });
+        ApplyCommandSelectionCommand = new AsyncCommand(async (_, ct) =>
+        {
+            if (!ApplySelectedCommandSuggestion() && isEmbeddedSourceSelectorOpen)
+            {
+                await ConfirmEmbeddedSourceAsync(embeddedHighlightIndex, ct).ConfigureAwait(false);
+            }
+        });
         ConfirmQueryInputCommand = new AsyncCommand(async (_, context, ct) => await ConfirmQueryInputAsync(context, ct).ConfigureAwait(false));
-        CloseCommandPopupCommand = new AsyncCommand((_, _) => { CloseCommandPopup(); return Task.CompletedTask; });
+        CloseCommandPopupCommand = new AsyncCommand(async (_, ct) =>
+        {
+            if (IsCommandPopupOpen)
+            {
+                CloseCommandPopup();
+            }
+            else if (isEmbeddedSourceSelectorOpen)
+            {
+                await ClearEmbeddedSourceAsync(ct).ConfigureAwait(false);
+            }
+        });
+        ChangeEmbeddedSourceCommand = new AsyncCommand((_, _) => { OpenEmbeddedSourceSelector(); return Task.CompletedTask; });
         UpdateSuggestionKeyBindingAvailability();
     }
 
@@ -144,11 +192,40 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember]
     public bool IsPrimaryActionEnabled => isChatRequestActive || isStreaming || !isBusy;
 
-    [DataMember]
+    /// <summary>
+    /// Gets the raw text streamed so far. It is not sent to the UI; the preview renders
+    /// <see cref="StreamingBlocks"/> parsed from it.
+    /// </summary>
     public string StreamingResponseText
     {
         get => streamingResponseText;
-        private set { if (streamingResponseText != value) { streamingResponseText = value; RaiseNotifyPropertyChangedEvent(nameof(StreamingResponseText)); } }
+        private set
+        {
+            if (streamingResponseText != value)
+            {
+                streamingResponseText = value;
+                RaiseNotifyPropertyChangedEvent(nameof(StreamingResponseText));
+                UpdateStreamingBlocks();
+            }
+        }
+    }
+
+    /// <summary>Gets the newest Markdown blocks of the streaming answer, updated in place as text arrives.</summary>
+    [DataMember]
+    public ObservableList<MarkdownBlockViewModel> StreamingBlocks => streamingBlocks;
+
+    [DataMember]
+    public bool HasEarlierStreamingBlocks
+    {
+        get => hasEarlierStreamingBlocks;
+        private set
+        {
+            if (hasEarlierStreamingBlocks != value)
+            {
+                hasEarlierStreamingBlocks = value;
+                RaiseNotifyPropertyChangedEvent(nameof(HasEarlierStreamingBlocks));
+            }
+        }
     }
 
     [DataMember]
@@ -180,6 +257,48 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     [DataMember] public AsyncCommand ApplyCommandSelectionCommand { get; }
     [DataMember] public AsyncCommand ConfirmQueryInputCommand { get; }
     [DataMember] public AsyncCommand CloseCommandPopupCommand { get; }
+    [DataMember] public AsyncCommand ChangeEmbeddedSourceCommand { get; }
+
+    /// <summary>Gets a value indicating whether the composer shows the Embedded source chip (an active /embedded draft).</summary>
+    [DataMember] public bool ShowEmbeddedSourceBar => isEmbeddedActive && EmbeddedQueryPattern.IsMatch(queryText);
+
+    [DataMember]
+    public string EmbeddedSourceChipText => ContextRelayLocalizedStrings.GetEmbeddedSourceChipText(
+        embeddedSources.FirstOrDefault(source => string.Equals(source.ContainerTypeId, selectedEmbeddedContainerTypeId, StringComparison.OrdinalIgnoreCase))?.Name);
+
+    [DataMember] public bool CanChangeEmbeddedSource => embeddedSources.Count > 1;
+    [DataMember] public string ChangeEmbeddedSourceButtonText => ContextRelayLocalizedStrings.ChangeEmbeddedSourceButtonText;
+    [DataMember] public string EmbeddedSourceSelectorHeaderText => ContextRelayLocalizedStrings.EmbeddedSourceSelectorHeaderText;
+    [DataMember] public string EmbeddedPreviewNoticeText => ContextRelayLocalizedStrings.EmbeddedPreviewNoticeText;
+    [DataMember] public bool HasEmbeddedInvalidSources => ShowEmbeddedSourceBar && embeddedInvalidSourceCount > 0;
+    [DataMember] public string EmbeddedInvalidSourcesText => ContextRelayLocalizedStrings.GetEmbeddedInvalidSourcesStatus(embeddedInvalidSourceCount);
+    [DataMember] public bool HasEmbeddedResults => searchResults.Any(result => result.IsEmbedded);
+
+    [DataMember]
+    public bool IsEmbeddedSourceSelectorOpen
+    {
+        get => isEmbeddedSourceSelectorOpen;
+        private set
+        {
+            if (isEmbeddedSourceSelectorOpen != value)
+            {
+                isEmbeddedSourceSelectorOpen = value;
+                RaiseNotifyPropertyChangedEvent(nameof(IsEmbeddedSourceSelectorOpen));
+                UpdateSuggestionKeyBindingAvailability();
+            }
+        }
+    }
+
+    [DataMember]
+    public IReadOnlyList<EmbeddedSourceOptionViewModel> EmbeddedSourceOptions
+    {
+        get => embeddedSourceOptions;
+        private set
+        {
+            embeddedSourceOptions = value;
+            RaiseNotifyPropertyChangedEvent(nameof(EmbeddedSourceOptions));
+        }
+    }
 
     [DataMember]
     public string QueryText
@@ -206,9 +325,47 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
                 UpdateCommandSuggestions();
                 UpdateTransientHelpText();
+                RefreshEmbeddedSourceBar(allowOpen: true);
             }
         }
     }
+
+    /// <summary>
+    /// Gets or sets the selected tab (chat, results, pins). The tab control binds this two-way; the
+    /// composer sits outside the tabs, so switching never loses the draft.
+    /// </summary>
+    [DataMember]
+    public int SelectedTabIndex
+    {
+        get => selectedTabIndex;
+        set
+        {
+            if (value < ChatTabIndex || value > PinsTabIndex || selectedTabIndex == value)
+            {
+                return;
+            }
+
+            selectedTabIndex = value;
+            RaiseNotifyPropertyChangedEvent(nameof(SelectedTabIndex));
+            ClearUnseenCount(value);
+        }
+    }
+
+    [DataMember]
+    public string ChatTabHeaderText => ContextRelayLocalizedStrings.GetTabHeaderText(ContextRelayLocalizedStrings.ChatTabHeaderText, unseenChatCount);
+
+    [DataMember]
+    public string ResultsTabHeaderText => ContextRelayLocalizedStrings.GetTabHeaderText(ContextRelayLocalizedStrings.ResultsTabHeaderText, unseenResultCount);
+
+    [DataMember]
+    public string PinsTabHeaderText => ContextRelayLocalizedStrings.GetTabHeaderText(ContextRelayLocalizedStrings.PinsTabHeaderText, unseenPinCount);
+
+    /// <summary>
+    /// Gets a value indicating whether the usage help is shown: only before anything was asked, while
+    /// the suggestion popup explains the highlighted command, or after a failure.
+    /// </summary>
+    [DataMember]
+    public bool ShowHelpText => (chatHistory.Count == 0 && searchResults.Count == 0) || isCommandPopupOpen || isStatusError;
 
     [DataMember]
     public string HelpText
@@ -280,6 +437,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             {
                 isCommandPopupOpen = value;
                 RaiseNotifyPropertyChangedEvent(nameof(IsCommandPopupOpen));
+                RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
 
                 // The query box binds Tab, Up, Down, and Escape to these commands. While the
                 // popup is closed the key bindings must not handle the key, so Tab keeps moving
@@ -300,6 +458,8 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             searchResults = value;
             RaiseNotifyPropertyChangedEvent(nameof(SearchResults));
+            RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
+            RaiseNotifyPropertyChangedEvent(nameof(HasEmbeddedResults));
         }
     }
 
@@ -322,6 +482,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         {
             chatHistory = value;
             RaiseNotifyPropertyChangedEvent(nameof(ChatHistory));
+            RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
         }
     }
 
@@ -389,7 +550,43 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
 
     internal void OpenUrl(string? url)
     {
-        host.OpenExternalUrl(url);
+        if (SafeLinks.TryGetOpenableUrl(url, out var openableUrl))
+        {
+            host.OpenExternalUrl(openableUrl);
+        }
+    }
+
+    internal async Task CopyPreviewTextAsync(string text, CancellationToken ct)
+    {
+        await RunBusyAsync(() => host.CopyPreviewTextAsync(text, ct)).ConfigureAwait(false);
+    }
+
+    internal void SetResultPreviewExpanded(ContextItemViewModel item, bool expanded)
+    {
+        if (expanded)
+        {
+            expandedResultKeys.Add(item.Key);
+        }
+        else
+        {
+            expandedResultKeys.Remove(item.Key);
+        }
+
+        item.SetPreviewExpanded(expanded);
+    }
+
+    internal void SetSnippetPreviewExpanded(SnippetItemViewModel item, bool expanded)
+    {
+        if (expanded)
+        {
+            expandedSnippetIds.Add(item.Id);
+        }
+        else
+        {
+            expandedSnippetIds.Remove(item.Id);
+        }
+
+        item.SetPreviewExpanded(expanded);
     }
 
     internal async Task DeleteSnippetAsync(string id, CancellationToken ct)
@@ -449,7 +646,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         try
         {
             IsStreaming = state.IsStreaming;
-            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
+            StreamingResponseText = state.StreamingResponseText;
         }
         finally
         {
@@ -458,33 +655,26 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     }
 
     /// <summary>
-    /// Returns the tail of a streamed response for the height-bounded preview. A bound text block
-    /// cannot scroll a Remote UI scroll viewer to the new extent, so showing the end of the text keeps
-    /// the latest output visible while the response is still arriving. The full reply is stored in
-    /// chat history when the request completes.
+    /// Re-parses the whole streamed text (at most every <see cref="StreamingParseInterval"/>, except for
+    /// the first text and a reset) and updates the preview blocks in place. An unclosed code fence parses
+    /// as a code block that is still being written.
     /// </summary>
-    /// <param name="text">The cumulative streamed text.</param>
-    /// <returns>The text to display in the streaming preview.</returns>
-    private static string TrimStreamingPreview(string text)
+    private void UpdateStreamingBlocks()
     {
-        if (string.IsNullOrEmpty(text))
+        var text = streamingResponseText;
+        var isReset = string.IsNullOrEmpty(text) || streamingBlocks.Count == 0;
+        if (!isReset && streamingParseClock.IsRunning && streamingParseClock.Elapsed < StreamingParseInterval)
         {
-            return text;
+            return;
         }
 
-        var tail = text;
-        if (tail.Length > StreamingPreviewMaxChars)
-        {
-            tail = tail.Substring(tail.Length - StreamingPreviewMaxChars);
-        }
-
-        var lines = tail.Split('\n');
-        if (lines.Length > StreamingPreviewMaxLines)
-        {
-            tail = string.Join("\n", lines, lines.Length - StreamingPreviewMaxLines, StreamingPreviewMaxLines);
-        }
-
-        return tail.Length == text.Length ? text : "…" + tail;
+        streamingParseClock.Restart();
+        var blocks = SafeMarkdownParser.Parse(text).Blocks;
+        var visible = blocks.Count > StreamingPreviewMaxBlocks
+            ? blocks.Skip(blocks.Count - StreamingPreviewMaxBlocks).ToArray()
+            : blocks;
+        MarkdownBlockList.Update(streamingBlocks, visible);
+        HasEarlierStreamingBlocks = blocks.Count > visible.Count;
     }
 
     private void ApplyState(ContextRelayHostState state)
@@ -504,27 +694,70 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
                 : ContextRelayLocalizedStrings.GetSignedInUserText(state.SignedInUser!);
             SearchSummary = state.SearchSummary;
             IsStreaming = state.IsStreaming;
-            StreamingResponseText = TrimStreamingPreview(state.StreamingResponseText);
+            StreamingResponseText = state.StreamingResponseText;
             if (collectionLanguageChanged || !PendingAttachmentsEqual(state.PendingAttachments))
             {
                 PendingAttachments = state.PendingAttachments.Select(item => new PendingAttachmentViewModel(item, this)).ToArray();
             }
-            if (collectionLanguageChanged || !SearchResultsEqual(state.SearchResults))
+            if (isStatusError != state.IsStatusError)
             {
-                SearchResults = state.SearchResults.Select(item => new ContextItemViewModel(item, this)).ToArray();
+                isStatusError = state.IsStatusError;
+                RaiseNotifyPropertyChangedEvent(nameof(ShowHelpText));
             }
+
+            pinnedKeys = new HashSet<string>(
+                state.Snippets
+                    .Select(snippet => EmbeddedSnippetMetadata.TryGetString(snippet, ContextItemKeyMetadataKey))
+                    .Where(key => !string.IsNullOrEmpty(key))
+                    .Select(key => key!),
+                StringComparer.Ordinal);
+            var resultsChanged = !SearchResultsEqual(state.SearchResults);
+            if (collectionLanguageChanged || resultsChanged)
+            {
+                if (resultsChanged)
+                {
+                    // A new result set starts collapsed; a language-only rebuild keeps what was expanded.
+                    expandedResultKeys.Clear();
+                }
+
+                SearchResults = state.SearchResults
+                    .Select(item =>
+                    {
+                        var key = ContextItemKeys.Build(item);
+                        return new ContextItemViewModel(item, this, pinnedKeys.Contains(key), expandedResultKeys.Contains(key));
+                    })
+                    .ToArray();
+            }
+            else
+            {
+                foreach (var result in SearchResults)
+                {
+                    result.SetPinned(pinnedKeys.Contains(result.Key));
+                }
+            }
+
+            var previousPinCount = Snippets.Count;
             if (collectionLanguageChanged || !SnippetsEqual(state.Snippets))
             {
-                Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this)).ToArray();
+                expandedSnippetIds.IntersectWith(state.Snippets.Select(item => item.Id));
+                Snippets = state.Snippets.Select(item => new SnippetItemViewModel(item, this, expandedSnippetIds.Contains(item.Id))).ToArray();
             }
+            var previousChatCount = ChatHistory.Count;
             if (collectionLanguageChanged || !ChatHistoryEqual(state.ChatHistory, state.ContinuableCopilotAssistantItemId))
             {
                 ChatHistory = state.ChatHistory
                     .Select(item => new ChatHistoryItemViewModel(item, this, string.Equals(item.Id, state.ContinuableCopilotAssistantItemId, StringComparison.Ordinal)))
                     .ToArray();
             }
+
+            UpdateUnseenCounts(resultsChanged, previousChatCount, previousPinCount, collectionLanguageChanged);
             workspaceFiles = state.WorkspaceFiles;
             isEmbeddedActive = state.IsEmbeddedActive;
+            embeddedSources = state.EmbeddedSources;
+            selectedEmbeddedContainerTypeId = state.SelectedEmbeddedContainerTypeId;
+            lastSelectedEmbeddedContainerTypeId = state.LastSelectedEmbeddedContainerTypeId;
+            embeddedInvalidSourceCount = state.EmbeddedInvalidSourceCount;
+            RefreshEmbeddedSourceBar(allowOpen: false);
             if (queryChanged)
             {
                 CommandSuggestions = Array.Empty<SlashCommandSuggestion>();
@@ -566,6 +799,12 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         }
 
         CloseCommandPopup();
+        IsEmbeddedSourceSelectorOpen = false;
+        var targetTab = GetTabForQuery(query);
+        if (targetTab is int tab)
+        {
+            SelectedTabIndex = tab;
+        }
 
         // Authentication and conversation setup run before the first streaming update. Keep the
         // button enabled across that gap for routes that can stream and be stopped; disabling it
@@ -603,8 +842,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
             string.Equals(current.Source, ContextSourceSchema.ToSchemaValue(next.Source), StringComparison.Ordinal) &&
             ReferenceEquals(current.Item, next) &&
-            string.Equals(current.Timestamp, next.Timestamp ?? string.Empty, StringComparison.Ordinal) &&
-            string.Equals(current.Url, next.Url ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+            string.Equals(current.Timestamp, next.Timestamp ?? string.Empty, StringComparison.Ordinal)).All(value => value);
 
     private bool SnippetsEqual(IReadOnlyList<SharedSnippetItem> items) =>
         Snippets.Count == items.Count && Snippets.Zip(items, (current, next) =>
@@ -612,7 +850,7 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             string.Equals(current.Name, next.Name, StringComparison.Ordinal) &&
             string.Equals(current.Snippet, next.Snippet, StringComparison.Ordinal) &&
             string.Equals(current.Source, next.Source, StringComparison.Ordinal) &&
-            string.Equals(current.SourceUrl, next.SourceUrl ?? string.Empty, StringComparison.Ordinal)).All(value => value);
+            string.Equals(current.SourceUrl, SafeLinks.TryGetOpenableUrl(next.SourceUrl, out var url) ? url : string.Empty, StringComparison.Ordinal)).All(value => value);
 
     private bool ChatHistoryEqual(IReadOnlyList<SharedChatHistoryItem> items, string? continuableId) =>
         ChatHistory.Count == items.Count && ChatHistory.Zip(items, (current, next) =>
@@ -634,7 +872,108 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
             return;
         }
 
+        if (isEmbeddedSourceSelectorOpen)
+        {
+            await ConfirmEmbeddedSourceAsync(embeddedHighlightIndex, ct).ConfigureAwait(false);
+            return;
+        }
+
         await SubmitAsync(clientContext, ct).ConfigureAwait(false);
+    }
+
+    private void MoveSelection(int delta)
+    {
+        if (IsCommandPopupOpen)
+        {
+            MoveCommandSelection(delta);
+        }
+        else if (isEmbeddedSourceSelectorOpen && embeddedSources.Count > 0)
+        {
+            embeddedHighlightIndex = (embeddedHighlightIndex + delta + embeddedSources.Count) % embeddedSources.Count;
+            RebuildEmbeddedSourceOptions();
+        }
+    }
+
+    /// <summary>
+    /// Shows or hides the Embedded source chip for the current draft. With several sources, the selector
+    /// opens once each time the draft enters the /embedded route (and the command popup is not showing).
+    /// </summary>
+    private void RefreshEmbeddedSourceBar(bool allowOpen)
+    {
+        var showBar = ShowEmbeddedSourceBar;
+        if (!showBar)
+        {
+            embeddedSelectorShownForEntry = false;
+            IsEmbeddedSourceSelectorOpen = false;
+        }
+        else if (allowOpen && !embeddedSelectorShownForEntry && !IsCommandPopupOpen && embeddedSources.Count > 1)
+        {
+            OpenEmbeddedSourceSelector();
+        }
+        else if (isEmbeddedSourceSelectorOpen)
+        {
+            RebuildEmbeddedSourceOptions();
+        }
+
+        RaiseNotifyPropertyChangedEvent(nameof(ShowEmbeddedSourceBar));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedSourceChipText));
+        RaiseNotifyPropertyChangedEvent(nameof(CanChangeEmbeddedSource));
+        RaiseNotifyPropertyChangedEvent(nameof(HasEmbeddedInvalidSources));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedInvalidSourcesText));
+    }
+
+    private void OpenEmbeddedSourceSelector()
+    {
+        if (embeddedSources.Count < 2)
+        {
+            return;
+        }
+
+        embeddedSelectorShownForEntry = true;
+        var initial = selectedEmbeddedContainerTypeId ?? lastSelectedEmbeddedContainerTypeId;
+        embeddedHighlightIndex = Math.Max(0, embeddedSources
+            .Select((source, index) => (source, index))
+            .Where(pair => string.Equals(pair.source.ContainerTypeId, initial, StringComparison.OrdinalIgnoreCase))
+            .Select(pair => pair.index)
+            .DefaultIfEmpty(0)
+            .First());
+        RebuildEmbeddedSourceOptions();
+        IsEmbeddedSourceSelectorOpen = true;
+        host.LogUiDiagnostic($"Embedded source selector opened sourceCount={embeddedSources.Count}");
+    }
+
+    private void RebuildEmbeddedSourceOptions()
+    {
+        if (embeddedHighlightIndex >= embeddedSources.Count)
+        {
+            embeddedHighlightIndex = 0;
+        }
+
+        EmbeddedSourceOptions = embeddedSources
+            .Select((source, index) => new EmbeddedSourceOptionViewModel(
+                source.Name,
+                source.ContainerTypeId,
+                index == embeddedHighlightIndex,
+                new AsyncCommand(async (_, ct) => await ConfirmEmbeddedSourceAsync(index, ct).ConfigureAwait(false))))
+            .ToArray();
+    }
+
+    private async Task ConfirmEmbeddedSourceAsync(int index, CancellationToken ct)
+    {
+        if (index < 0 || index >= embeddedSources.Count)
+        {
+            return;
+        }
+
+        IsEmbeddedSourceSelectorOpen = false;
+        await host.SelectEmbeddedSourceAsync(embeddedSources[index].ContainerTypeId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Esc in the selector: clears the choice, so a submit asks to choose instead of sending.</summary>
+    private async Task ClearEmbeddedSourceAsync(CancellationToken ct)
+    {
+        IsEmbeddedSourceSelectorOpen = false;
+        await host.SelectEmbeddedSourceAsync(null, ct).ConfigureAwait(false);
     }
 
     private async Task RunBusyAsync(Func<Task> action)
@@ -803,6 +1142,10 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
         StopGenerationButtonText = ContextRelayLocalizedStrings.StopGenerationButtonText;
         RaiseNotifyPropertyChangedEvent(nameof(StopGenerationButtonText));
         WindowTitleText = ContextRelayLocalizedStrings.WindowTitleText;
+        RaiseTabHeaders();
+        RaiseNotifyPropertyChangedEvent(nameof(ChangeEmbeddedSourceButtonText));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedSourceSelectorHeaderText));
+        RaiseNotifyPropertyChangedEvent(nameof(EmbeddedPreviewNoticeText));
 
         // Notify the derived caption last. It reads whichever label matches the current state,
         // so notifying before both labels are assigned would publish the previous language.
@@ -827,12 +1170,85 @@ internal sealed class ContextRelayWindowViewModel : NotifyPropertyChangedObject,
     }
 
     /// <summary>
+    /// Returns the tab a submission's output lands in: chat turns (plain text, /ask, /workiq) show in
+    /// the chat tab and searches (including /embedded) in the results tab.
+    /// </summary>
+    /// <param name="query">The query text about to be submitted.</param>
+    /// <returns>The tab index, or <see langword="null"/> to keep the current tab.</returns>
+    internal static int? GetTabForQuery(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return null;
+        }
+
+        return SlashCommandRouter.Parse(query.Trim()).Target switch
+        {
+            RouteTarget.Clear => null,
+            RouteTarget.Chat or RouteTarget.Ask or RouteTarget.WorkIq => ChatTabIndex,
+            _ => ResultsTabIndex
+        };
+    }
+
+    /// <summary>
+    /// Counts what arrived in a tab the user is not looking at, so its header can show "(n)".
+    /// </summary>
+    private void UpdateUnseenCounts(bool resultsChanged, int previousChatCount, int previousPinCount, bool languageChanged)
+    {
+        if (resultsChanged && !languageChanged && selectedTabIndex != ResultsTabIndex)
+        {
+            // A new search replaces the list, so every result in it is unseen.
+            unseenResultCount = searchResults.Count;
+        }
+
+        if (selectedTabIndex != ChatTabIndex && chatHistory.Count > previousChatCount)
+        {
+            unseenChatCount += chatHistory.Count - previousChatCount;
+        }
+
+        if (selectedTabIndex != PinsTabIndex && snippets.Count > previousPinCount)
+        {
+            unseenPinCount += snippets.Count - previousPinCount;
+        }
+
+        unseenResultCount = Math.Min(unseenResultCount, searchResults.Count);
+        unseenChatCount = Math.Min(unseenChatCount, chatHistory.Count);
+        unseenPinCount = Math.Min(unseenPinCount, snippets.Count);
+        RaiseTabHeaders();
+    }
+
+    private void ClearUnseenCount(int tabIndex)
+    {
+        switch (tabIndex)
+        {
+            case ChatTabIndex:
+                unseenChatCount = 0;
+                break;
+            case ResultsTabIndex:
+                unseenResultCount = 0;
+                break;
+            case PinsTabIndex:
+                unseenPinCount = 0;
+                break;
+        }
+
+        RaiseTabHeaders();
+    }
+
+    private void RaiseTabHeaders()
+    {
+        RaiseNotifyPropertyChangedEvent(nameof(ChatTabHeaderText));
+        RaiseNotifyPropertyChangedEvent(nameof(ResultsTabHeaderText));
+        RaiseNotifyPropertyChangedEvent(nameof(PinsTabHeaderText));
+    }
+
+    /// <summary>
     /// Enables the suggestion key bindings only while the slash-command popup is open, so the
     /// query box does not consume Tab, Up, Down, or Escape when there is nothing to navigate.
     /// </summary>
     private void UpdateSuggestionKeyBindingAvailability()
     {
-        var popupOpen = isCommandPopupOpen;
+        var popupOpen = isCommandPopupOpen || isEmbeddedSourceSelectorOpen;
         ApplyCommandSelectionCommand.CanExecute = popupOpen;
         MoveSelectionDownCommand.CanExecute = popupOpen;
         MoveSelectionUpCommand.CanExecute = popupOpen;

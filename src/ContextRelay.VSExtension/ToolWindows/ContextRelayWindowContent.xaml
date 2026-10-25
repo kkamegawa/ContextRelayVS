@@ -238,6 +238,119 @@
             </Setter>
         </Style>
 
+        <!-- Read-only, selectable text for previews and answers. PART_ContentHost is a Decorator rather
+             than a ScrollViewer so the surrounding list keeps the mouse wheel (Remote UI has no code-behind
+             to forward it), and IsTabStop is off so long content does not add Tab stops. -->
+        <Style x:Key="SelectableTextStyle" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="IsUndoEnabled" Value="False" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <!-- Follow the inherited text color (a list item's hover/selection color, or the panel's). -->
+            <Setter Property="Foreground" Value="{Binding (TextElement.Foreground), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightBrushKey}}" />
+            <Setter Property="SelectionTextBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.SystemHighlightTextBrushKey}}" />
+            <Setter Property="SelectionOpacity" Value="1" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Decorator x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MonospaceSelectableTextStyle" TargetType="TextBox" BasedOn="{StaticResource SelectableTextStyle}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="FontFamily" Value="Consolas, Courier New" />
+        </Style>
+
+        <!-- Code and tables scroll horizontally instead of wrapping. Known limitation: this scroll viewer
+             also takes the mouse wheel while the pointer is over the block. -->
+        <Style x:Key="HorizontalScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+
+        <!-- One flattened Markdown block. Nesting arrives as flags: list depth and quote depth become
+             margins, a quote gets a left rule, and headings get larger text. -->
+        <DataTemplate x:Key="MarkdownBlockTemplate">
+            <Border x:Name="QuoteRule" Margin="0,2,0,2" BorderThickness="0"
+                    BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
+                <Grid>
+                    <Grid x:Name="TextRow" Visibility="{Binding IsText, Converter={StaticResource BoolToVisConverter}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Margin="0,0,6,0" Text="{Binding ListMarker}"
+                                   Visibility="{Binding IsListItem, Converter={StaticResource BoolToVisConverter}}" />
+                        <TextBox x:Name="BlockText" Grid.Column="1" Style="{StaticResource SelectableTextStyle}" Text="{Binding Text, Mode=OneWay}" />
+                    </Grid>
+                    <StackPanel Visibility="{Binding IsCode, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Margin="0,0,0,2" Text="{Binding Language}" Style="{StaticResource CardMutedTextStyle}" FontSize="11"
+                                   Visibility="{Binding HasLanguage, Converter={StaticResource BoolToVisConverter}}" />
+                        <Border Style="{StaticResource SurfaceBorderStyle}" Padding="8,6" CornerRadius="4">
+                            <ScrollViewer Style="{StaticResource HorizontalScrollViewerStyle}">
+                                <TextBox Style="{StaticResource MonospaceSelectableTextStyle}" Text="{Binding Text, Mode=OneWay}" />
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                    <Border Visibility="{Binding IsTable, Converter={StaticResource BoolToVisConverter}}" Style="{StaticResource SurfaceBorderStyle}" Padding="8,6" CornerRadius="4">
+                        <ScrollViewer Style="{StaticResource HorizontalScrollViewerStyle}">
+                            <TextBox Style="{StaticResource MonospaceSelectableTextStyle}" Text="{Binding Text, Mode=OneWay}" />
+                        </ScrollViewer>
+                    </Border>
+                    <Border Height="1" Margin="0,6,0,6"
+                            Background="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}"
+                            Visibility="{Binding IsRule, Converter={StaticResource BoolToVisConverter}}" />
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsHeading1}" Value="True">
+                    <Setter TargetName="BlockText" Property="FontSize" Value="18" />
+                    <Setter TargetName="BlockText" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHeading2}" Value="True">
+                    <Setter TargetName="BlockText" Property="FontSize" Value="16" />
+                    <Setter TargetName="BlockText" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHeading3}" Value="True">
+                    <Setter TargetName="BlockText" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsListDepth1}" Value="True">
+                    <Setter TargetName="TextRow" Property="Margin" Value="16,0,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsListDepth2}" Value="True">
+                    <Setter TargetName="TextRow" Property="Margin" Value="32,0,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsQuote}" Value="True">
+                    <Setter TargetName="QuoteRule" Property="BorderThickness" Value="3,0,0,0" />
+                    <Setter TargetName="QuoteRule" Property="Padding" Value="8,0,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsQuoteDepth2}" Value="True">
+                    <Setter TargetName="QuoteRule" Property="Margin" Value="12,2,0,2" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsQuoteDepth3}" Value="True">
+                    <Setter TargetName="QuoteRule" Property="Margin" Value="24,2,0,2" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <Style x:Key="BadgeBorderStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="Margin" Value="0,0,8,4" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
         <Style x:Key="SuggestionButtonStyle" TargetType="Button" BasedOn="{StaticResource ThemedButtonStyle}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="10,6" />
@@ -303,7 +416,7 @@
         </Style>
     </DataTemplate.Resources>
 
-    <Grid Margin="12"
+    <Grid Margin="8"
           Background="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}"
           FocusManager.IsFocusScope="True"
           FocusManager.FocusedElement="{Binding ElementName=QueryTextBox}">
@@ -313,40 +426,47 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Style="{StaticResource SurfaceBorderStyle}" Padding="12" Margin="0,0,0,12">
+        <!-- Header: account and status on one or two lines; the usage help only appears before the
+             first request, while a suggestion is highlighted, or after a failure. -->
+        <Border Grid.Row="0" Style="{StaticResource SurfaceBorderStyle}" Padding="10,6" Margin="0,0,0,8">
             <StackPanel>
-                <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="{Binding WindowTitleText}" />
-                <TextBlock Margin="0,3,0,0" Text="{Binding SignedInUserText}" Style="{StaticResource MutedTextStyle}" />
-                <TextBlock Margin="0,4,0,0" Text="{Binding StatusMessage}" Style="{StaticResource BodyTextStyle}" FontWeight="SemiBold" />
-                <TextBlock Margin="0,3,0,0" Text="{Binding HelpText}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}" />
+                <WrapPanel>
+                    <TextBlock Margin="0,0,12,0" Style="{StaticResource SectionHeaderTextStyle}" Text="{Binding WindowTitleText}" />
+                    <TextBlock VerticalAlignment="Center" Text="{Binding SignedInUserText}" Style="{StaticResource MutedTextStyle}" />
+                </WrapPanel>
+                <TextBlock Margin="0,2,0,0" Text="{Binding StatusMessage}" Style="{StaticResource BodyTextStyle}" FontWeight="SemiBold" />
+                <TextBlock Margin="0,2,0,0" Text="{Binding HelpText}" TextWrapping="Wrap" Style="{StaticResource MutedTextStyle}"
+                           Visibility="{Binding ShowHelpText, Converter={StaticResource BoolToVisConverter}}" />
             </StackPanel>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2.2*" />
-                <ColumnDefinition Width="1*" />
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Style="{StaticResource PanelSurfaceBorderStyle}" Margin="0,0,12,0">
-                <Border.Resources>
-                    <Style x:Key="StreamingPreviewBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
-                        <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
-                    </Style>
-                </Border.Resources>
+        <Border Grid.Row="1" Style="{StaticResource PanelSurfaceBorderStyle}">
+            <TabControl Background="Transparent"
+                        BorderThickness="0"
+                        SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+                <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding ChatTabHeaderText}">
                 <Grid>
+                    <Grid.Resources>
+                        <Style x:Key="StreamingPreviewBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
+                            <Setter Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}" />
+                        </Style>
+                    </Grid.Resources>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <Border Grid.Row="0" Style="{StaticResource StreamingPreviewBorderStyle}"
                             Visibility="{Binding IsStreaming, Converter={StaticResource BoolToVisConverter}}">
-                        <StackPanel>
+                        <StackPanel TextElement.Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}">
                             <TextBlock Text="{Binding ChatHistoryHeaderText}"
                                        Style="{StaticResource CardTitleTextStyle}"
                                        Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}" />
                             <ScrollViewer Margin="0,6,0,0" MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                <TextBlock Text="{Binding StreamingResponseText}" Style="{StaticResource BodyTextStyle}" />
+                                <StackPanel>
+                                    <TextBlock Text="…" Style="{StaticResource MutedTextStyle}"
+                                               Visibility="{Binding HasEarlierStreamingBlocks, Converter={StaticResource BoolToVisConverter}}" />
+                                    <ItemsControl Focusable="False" ItemsSource="{Binding StreamingBlocks}" ItemTemplate="{StaticResource MarkdownBlockTemplate}" />
+                                </StackPanel>
                             </ScrollViewer>
                         </StackPanel>
                     </Border>
@@ -359,7 +479,19 @@
                                         <TextBlock DockPanel.Dock="Left" Style="{StaticResource CardTitleTextStyle}" Text="{Binding Role}" />
                                         <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0" Text="{Binding Timestamp}" Style="{StaticResource CardMutedTextStyle}" />
                                     </DockPanel>
-                                    <TextBlock Margin="0,6,0,0" Text="{Binding Text}" Style="{StaticResource CardBodyTextStyle}" />
+                                    <ItemsControl Margin="0,6,0,0" Focusable="False" ItemsSource="{Binding Blocks}" ItemTemplate="{StaticResource MarkdownBlockTemplate}" />
+                                    <WrapPanel Margin="0,6,0,0" Visibility="{Binding HasLinks, Converter={StaticResource BoolToVisConverter}}">
+                                        <TextBlock Margin="0,6,8,0" Text="{Binding LinksHeaderText}" Style="{StaticResource CardMutedTextStyle}" />
+                                        <ItemsControl Focusable="False" ItemsSource="{Binding Links}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" MinHeight="26" Padding="8,2"
+                                                            Content="{Binding Text}" ToolTip="{Binding Url}" AutomationProperties.Name="{Binding Text}" Command="{Binding OpenCommand}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </WrapPanel>
                                     <TextBlock Margin="0,4,0,0" Style="{StaticResource CardMutedTextStyle}"
                                                Visibility="{Binding HasContextLabels, Converter={StaticResource BoolToVisConverter}}">
                                         <Run Text="{Binding ContextLabelsPrefixText}" />
@@ -382,27 +514,28 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
                 </Grid>
-            </Border>
+                </TabItem>
 
-            <Border Grid.Column="1" Style="{StaticResource PanelSurfaceBorderStyle}">
-                <TabControl Background="Transparent"
-                            BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
-                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding SearchResultsHeaderText}">
+                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding ResultsTabHeaderText}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <Border Grid.Row="0" Style="{StaticResource CardBorderStyle}"
-                                    Visibility="{Binding HasSearchSummary, Converter={StaticResource BoolToVisConverter}}">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="{Binding SearchSummaryHeaderText}" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               Text="{Binding SearchSummary}"
-                                               Style="{StaticResource MutedTextStyle}" />
-                                </StackPanel>
-                            </Border>
+                            <StackPanel Grid.Row="0">
+                                <Border Style="{StaticResource CardBorderStyle}"
+                                        Visibility="{Binding HasSearchSummary, Converter={StaticResource BoolToVisConverter}}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="{Binding SearchSummaryHeaderText}" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="{Binding SearchSummary}"
+                                                   Style="{StaticResource MutedTextStyle}" />
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Margin="10,6,10,0" Text="{Binding EmbeddedPreviewNoticeText}" Style="{StaticResource MutedTextStyle}"
+                                           Visibility="{Binding HasEmbeddedResults, Converter={StaticResource BoolToVisConverter}}" />
+                            </StackPanel>
 
                             <ListBox Grid.Row="1" Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource FluentListBoxItemStyle}" ItemsSource="{Binding SearchResults}" BorderThickness="0">
                                 <ListBox.ItemTemplate>
@@ -417,26 +550,38 @@
                                                     <MenuItem Header="{Binding OpenInBrowserMenuText}" Command="{Binding OpenCommand}" />
                                                 </ContextMenu>
                                             </Border.ContextMenu>
-                                            <Grid>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="Auto" />
-                                                    <RowDefinition Height="Auto" />
-                                                </Grid.RowDefinitions>
-                                                <DockPanel Grid.Row="0">
-                                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource CardTitleTextStyle}" Text="{Binding Title}" />
-                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0,0,0">
-                                                        <TextBlock Text="{Binding SourceIcon}" Margin="0,0,4,0" Style="{StaticResource CardMutedTextStyle}" />
-                                                        <TextBlock Text="{Binding SourceLabel}" Style="{StaticResource CardMutedTextStyle}" />
-                                                    </StackPanel>
-                                                </DockPanel>
-                                                <TextBlock Grid.Row="1" Margin="0,6,0,0" Text="{Binding Snippet}" Style="{StaticResource CardBodyTextStyle}" />
-                                                <WrapPanel Grid.Row="2" Margin="0,10,0,0">
-                                                    <TextBlock Margin="0,6,12,0" Text="{Binding Timestamp}" Style="{StaticResource CardMutedTextStyle}" />
-                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" Content="{Binding PinButtonText}" Command="{Binding PinCommand}" />
-                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,0,8" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}" />
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource CardTitleTextStyle}" Text="{Binding Title}" />
+                                                <WrapPanel Margin="0,4,0,0">
+                                                    <TextBlock Margin="0,0,4,4" Text="{Binding SourceIcon}" Style="{StaticResource CardMutedTextStyle}" />
+                                                    <TextBlock Margin="0,0,8,4" Text="{Binding SourceLabel}" Style="{StaticResource CardMutedTextStyle}" />
+                                                    <Border Style="{StaticResource BadgeBorderStyle}"
+                                                            Visibility="{Binding IsEmbedded, Converter={StaticResource BoolToVisConverter}}">
+                                                        <TextBlock Text="{Binding EmbeddedPreviewBadgeText}" Style="{StaticResource CardMutedTextStyle}" />
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeBorderStyle}"
+                                                            Visibility="{Binding HasSensitivityLabel, Converter={StaticResource BoolToVisConverter}}">
+                                                        <TextBlock Text="{Binding SensitivityLabelText}" Style="{StaticResource CardMutedTextStyle}" />
+                                                    </Border>
+                                                    <TextBlock Margin="0,0,0,4" Text="{Binding Timestamp}" Style="{StaticResource CardMutedTextStyle}" />
                                                 </WrapPanel>
-                                            </Grid>
+                                                <TextBlock Margin="0,4,0,0" Text="{Binding Snippet}" Style="{StaticResource CardBodyTextStyle}" />
+                                                <Border Margin="0,8,0,0" Padding="8" Style="{StaticResource SurfaceBorderStyle}" Background="Transparent"
+                                                        Visibility="{Binding IsPreviewExpanded, Converter={StaticResource BoolToVisConverter}}">
+                                                    <StackPanel>
+                                                        <TextBox Style="{StaticResource SelectableTextStyle}" Text="{Binding PreviewText, Mode=OneWay}" />
+                                                        <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                                                Content="{Binding CopyPreviewButtonText}" Command="{Binding CopyPreviewCommand}" />
+                                                    </StackPanel>
+                                                </Border>
+                                                <WrapPanel Margin="0,8,0,0">
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" Content="{Binding PreviewButtonText}" Command="{Binding TogglePreviewCommand}"
+                                                            Visibility="{Binding HasPreview, Converter={StaticResource BoolToVisConverter}}" />
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" Content="{Binding PinButtonText}" Command="{Binding PinCommand}" />
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,0,8" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}"
+                                                            Visibility="{Binding CanOpen, Converter={StaticResource BoolToVisConverter}}" />
+                                                </WrapPanel>
+                                            </StackPanel>
                                         </Border>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -444,18 +589,39 @@
                         </Grid>
                     </TabItem>
 
-                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding SnippetsHeaderText}">
+                    <TabItem Style="{StaticResource ThemedTabItemStyle}" Header="{Binding PinsTabHeaderText}">
                         <ListBox Style="{StaticResource ThemedListBoxStyle}" ItemContainerStyle="{StaticResource FluentListBoxItemStyle}" ItemsSource="{Binding Snippets}" BorderThickness="0">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border Style="{StaticResource CardContentBorderStyle}">
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource CardTitleTextStyle}" Text="{Binding Name}" />
-                                            <TextBlock Margin="0,6,0,0" Text="{Binding Snippet}" Style="{StaticResource CardBodyTextStyle}" />
-                                            <WrapPanel Margin="0,10,0,0">
-                                                <TextBlock Margin="0,6,4,0" Text="{Binding SourceIcon}" Style="{StaticResource CardMutedTextStyle}" />
-                                                <TextBlock Margin="0,6,12,0" Text="{Binding SourceLabel}" Style="{StaticResource CardMutedTextStyle}" />
-                                                <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}" />
+                                            <WrapPanel Margin="0,4,0,0">
+                                                <TextBlock Margin="0,0,4,4" Text="{Binding SourceIcon}" Style="{StaticResource CardMutedTextStyle}" />
+                                                <TextBlock Margin="0,0,8,4" Text="{Binding SourceLabel}" Style="{StaticResource CardMutedTextStyle}" />
+                                                <Border Style="{StaticResource BadgeBorderStyle}"
+                                                        Visibility="{Binding IsEmbedded, Converter={StaticResource BoolToVisConverter}}">
+                                                    <TextBlock Text="{Binding EmbeddedPreviewBadgeText}" Style="{StaticResource CardMutedTextStyle}" />
+                                                </Border>
+                                                <Border Style="{StaticResource BadgeBorderStyle}"
+                                                        Visibility="{Binding HasSensitivityLabel, Converter={StaticResource BoolToVisConverter}}">
+                                                    <TextBlock Text="{Binding SensitivityLabelText}" Style="{StaticResource CardMutedTextStyle}" />
+                                                </Border>
+                                            </WrapPanel>
+                                            <TextBlock Margin="0,4,0,0" Text="{Binding Snippet}" Style="{StaticResource CardBodyTextStyle}" />
+                                            <Border Margin="0,8,0,0" Padding="8" Style="{StaticResource SurfaceBorderStyle}" Background="Transparent"
+                                                    Visibility="{Binding IsPreviewExpanded, Converter={StaticResource BoolToVisConverter}}">
+                                                <StackPanel>
+                                                    <TextBox Style="{StaticResource SelectableTextStyle}" Text="{Binding PreviewText, Mode=OneWay}" />
+                                                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                                            Content="{Binding CopyPreviewButtonText}" Command="{Binding CopyPreviewCommand}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <WrapPanel Margin="0,8,0,0">
+                                                <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" Content="{Binding PreviewButtonText}" Command="{Binding TogglePreviewCommand}"
+                                                        Visibility="{Binding HasPreview, Converter={StaticResource BoolToVisConverter}}" />
+                                                <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,8,8" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}"
+                                                        Visibility="{Binding CanOpen, Converter={StaticResource BoolToVisConverter}}" />
                                                 <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,0,8" Content="{Binding DeleteButtonText}" Command="{Binding DeleteCommand}" />
                                             </WrapPanel>
                                         </StackPanel>
@@ -466,9 +632,8 @@
                     </TabItem>
                 </TabControl>
             </Border>
-        </Grid>
 
-        <Grid Grid.Row="2" Margin="0,12,0,0">
+        <Grid Grid.Row="2" Margin="0,8,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -480,8 +645,46 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
-                    Margin="0,0,0,8"
+            <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3">
+            <!-- The Embedded source chip and selector show only for an /embedded draft; GUIDs never appear. -->
+            <StackPanel Margin="0,0,0,8" Visibility="{Binding ShowEmbeddedSourceBar, Converter={StaticResource BoolToVisConverter}}">
+                <WrapPanel>
+                    <Border Style="{StaticResource BadgeBorderStyle}" Padding="8,4">
+                        <TextBlock Text="{Binding EmbeddedSourceChipText}" Style="{StaticResource BodyTextStyle}" />
+                    </Border>
+                    <Button Style="{StaticResource ThemedButtonStyle}" Margin="0,0,0,4" MinHeight="26" Padding="8,2"
+                            Content="{Binding ChangeEmbeddedSourceButtonText}" Command="{Binding ChangeEmbeddedSourceCommand}"
+                            Visibility="{Binding CanChangeEmbeddedSource, Converter={StaticResource BoolToVisConverter}}" />
+                </WrapPanel>
+                <TextBlock Text="{Binding EmbeddedPreviewNoticeText}" Style="{StaticResource MutedTextStyle}" />
+                <TextBlock Margin="0,2,0,0" Text="{Binding EmbeddedInvalidSourcesText}" Style="{StaticResource MutedTextStyle}"
+                           Visibility="{Binding HasEmbeddedInvalidSources, Converter={StaticResource BoolToVisConverter}}" />
+                <Border Margin="0,6,0,0" Padding="4" Style="{StaticResource SurfaceBorderStyle}"
+                        Visibility="{Binding IsEmbeddedSourceSelectorOpen, Converter={StaticResource BoolToVisConverter}}">
+                    <StackPanel>
+                        <TextBlock Margin="8,4,8,6" FontWeight="SemiBold" Text="{Binding EmbeddedSourceSelectorHeaderText}" Style="{StaticResource MutedTextStyle}" />
+                        <ListBox Style="{StaticResource SuggestionPopupListBoxStyle}" MaxHeight="180" BorderThickness="0"
+                                 ItemsSource="{Binding EmbeddedSourceOptions}"
+                                 ItemContainerStyle="{StaticResource SuggestionListBoxItemStyle}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Button x:Name="EmbeddedSourceRow" Style="{StaticResource SuggestionButtonStyle}" Command="{Binding SelectCommand}">
+                                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                                    </Button>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                            <Setter TargetName="EmbeddedSourceRow" Property="Background" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarSelectedBrushKey}}" />
+                                            <Setter TargetName="EmbeddedSourceRow" Property="Foreground" Value="{DynamicResource {x:Static colors:EnvironmentColors.CommandBarTextSelectedBrushKey}}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <Border Margin="0,0,0,8"
                     Padding="4"
                     Style="{StaticResource SurfaceBorderStyle}"
                     Visibility="{Binding IsCommandPopupOpen, Converter={StaticResource BoolToVisConverter}}">
@@ -515,6 +718,7 @@
                      </ListBox>
                 </StackPanel>
             </Border>
+            </StackPanel>
 
             <ScrollViewer Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,8" MaxHeight="96"
                           VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -539,14 +743,23 @@
 
             <Button Style="{StaticResource ThemedButtonStyle}" Grid.Row="2" Grid.Column="0"
                     Margin="0,0,8,0"
+                    VerticalAlignment="Bottom"
                     Content="{Binding AddFilesButtonText}"
                     AutomationProperties.Name="{Binding AddFilesToolTipText}"
                     ToolTip="{Binding AddFilesToolTipText}"
                     Command="{Binding AddFilesCommand}" />
 
+            <!-- Enter is the only key binding for submit; Shift+Enter falls through to the text box's
+                 own line-break command, and an IME composing Enter arrives as ImeProcessed. -->
             <TextBox x:Name="QueryTextBox"
                      Style="{StaticResource ThemedTextBoxStyle}" Grid.Row="2" Grid.Column="1"
                       Margin="0,0,8,0"
+                      AcceptsReturn="True"
+                      TextWrapping="Wrap"
+                      MinHeight="32"
+                      MaxHeight="120"
+                      VerticalContentAlignment="Top"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                       Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
                       ToolTip="{Binding SearchToolTipText}">
                 <TextBox.InputBindings>
@@ -559,7 +772,8 @@
 
             </TextBox>
             <Button Style="{StaticResource PrimaryButtonStyle}" Grid.Row="2" Grid.Column="2"
-                    MinWidth="96"
+                    MinWidth="72"
+                    VerticalAlignment="Bottom"
                     Content="{Binding PrimaryActionButtonText}"
                     ToolTip="{Binding PrimaryActionButtonText}"
                     AutomationProperties.Name="{Binding PrimaryActionButtonText}"
