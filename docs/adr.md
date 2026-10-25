@@ -1,5 +1,27 @@
 # Architecture Decision Records
 
+Decisions from Issue #223 onward are recorded as individual files under [`adr/`](adr/), with Japanese translations beside them. Each entry below links to its record.
+
+## 2026-10-25 — Issue #223: Update shared settings with read-merge-write and add an Embedded Options page
+
+- Decision: Every writer of `settings.json` reads the latest file, applies only its own changes and saves atomically under a cross-process named mutex. A WPF SharePoint Embedded page hosted by `UIElementDialogPage` joins the General page, with validation-gated Apply and per-page pkgdef registration.
+- Record: [ADR 0004](adr/0004-shared-settings-updates-and-embedded-options.md)
+
+## 2026-10-25 — Issue #223: Single-column tabbed tool window and safe Markdown answer blocks
+
+- Decision: Replace the two-column layout with `Chat` / `Results` / `Pinned` tabs, route Enter through one key binding, and render answers as selectable Markdown blocks built with Markdig (HTML disabled) in the out-of-process extension only.
+- Record: [ADR 0003](adr/0003-single-column-tool-window-and-markdown.md)
+
+## 2026-10-25 — Issue #223: Raise the shared store to schema version 2 for the Embedded source
+
+- Decision: Add `sharepoint-embedded` to the closed `source` set, correct the documented set, and raise `schemaVersion` to 2 without migration; version 1 files are reset once.
+- Record: [ADR 0002](adr/0002-shared-store-schema-v2.md)
+
+## 2026-10-25 — Issue #223: Retrieve configured SharePoint Embedded content with a dedicated token
+
+- Decision: Add opt-in `/embedded`, active only in the Global cloud with configured sources, calling the Copilot Retrieval API with a dedicated `FileStorageContainer.Selected` token that never joins the shared Graph token.
+- Record: [ADR 0001](adr/0001-sharepoint-embedded-retrieval.md)
+
 ## 2026-09-22 — Issue #200: Widen the broker timeout so the first cold-start read can complete
 
 - Context: After the audience fix above was verified end to end (broker request no longer declined with `ServiceAudienceMismatch`) and the Directory-property fix in the entry below let the tool window initialize at all, the very first open of the tool window on a freshly reinstalled VSIX still showed English. Two `ContextRelay.VisualStudioLanguage` requests appeared in the same session's `GlobalBrokeredServiceContainer` log about 1.56 seconds apart — matching `VisualStudioUiLanguageProvider`'s 1500ms `CancelAfter` budget plus overhead. Closing and reopening the tool window tab (no VS restart, so the Options package was already loaded and JIT-warm) immediately showed Japanese, confirming the first read's own timeout, not the resolved locale or the broker fix, was the cause: activating `ContextRelayOptionsPackage` on demand (assembly load/JIT, `SwitchToMainThreadAsync`, MEF `ToolkitPackage` composition, proffering the brokered service) legitimately took longer than 1500ms immediately after an install/update with no warm JIT/NGen cache, so the very first automatic-mode read gave up and fell back to English before the package finished activating.
@@ -35,13 +57,6 @@
 - Reason: This implements the user-confirmed language contract and supersedes the process-culture limitation recorded for Issue #191. A session-local service keeps concurrently running Visual Studio instances independent.
 - Follow-up: In the Experimental Instance a saved explicit `ja` kept the tool window Japanese, and the free-text `auto`/`en`/`ja` field hid that choice. The Options UI language property is now a fixed drop-down of the supported languages (Auto, English, Japanese); stored values are unchanged.
 - Verification: Cover English/Japanese host locales, unsupported and unavailable locales, opposing process cultures, explicit overrides, initial labels, broker registration, and packaged resources. Verify the actual tool window in Visual Studio.
-
-## 2026-09-21 — Issue #191: Localize command and menu names from the Visual Studio language pack
-
-- Context: A build step replaced every `%ContextRelay.*%` display token in `extension.json` with English text, because some Visual Studio channels showed unresolved tokens literally. That made the Tools > ContextRelay menu impossible to localize, and the Japanese resource file existed for one command only.
-- Decision: Keep every display token in `extension.json` and define all 15 in both `.vsextension/string-resources.json` (English, the fallback) and `.vsextension/ja/string-resources.json`. Visual Studio resolves them by its own UI language, meaning the installed and selected language pack, so the menu follows the Visual Studio language rather than the operating system language, and any other language falls back to English. The replacement patch is removed. The `ValidateContextRelayMenuMetadata` build task fails the build unless the manifest tokens, the default resource keys, and the Japanese resource keys are one identical set, checked both in the build output and on the copies packaged inside the VSIX.
-- Reason: The user switches the Visual Studio language pack, not the operating system language, and expects the menu to follow it. Only token resolution by Visual Studio can do that.
-- Consequence: On a Visual Studio channel that does not resolve the metadata, the menu shows raw tokens. This is verified in the Experimental Instance before release, and restoring a per-token English fallback would give up localization, so it needs an explicit decision. The tool window language is a separate setting: `UiLanguage` = `auto` follows the culture of the extension process, which is not guaranteed to match the Visual Studio language pack, so an explicit choice remains available.
 
 ## 2026-09-21 — Issue #191: Localize command and menu names from the Visual Studio language pack
 

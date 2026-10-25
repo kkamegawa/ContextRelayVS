@@ -1,6 +1,6 @@
-﻿# ContextRelay for Visual Studio — Issue #184 設計要約
+﻿# ContextRelay for Visual Studio — 設計要約
 
-この文書は [docs/plan.md](plan.md) 全体の日本語訳ではなく、Issue [#184](https://github.com/kkamegawa/ContextRelayVS/issues/184) に関する設計の要約と補足です。
+この文書は [docs/plan.md](plan.md) 全体の日本語訳ではなく、Issue [#184](https://github.com/kkamegawa/ContextRelayVS/issues/184) と Issue [#223](https://github.com/kkamegawa/ContextRelayVS/issues/223) に関する設計の要約と補足です。
 
 ## 製品方針
 
@@ -40,6 +40,29 @@ Tools > Options > ContextRelay > General の `Chat` カテゴリで次を設定�
 - Visual Studio の表示言語が未対応、または取得できない場合は英語へフォールバックします。言語解決は初期ツール ウィンドウの ViewModel 作成前に完了します。
 - Options の UI language は自由入力ではなく固定のドロップダウンで、サポートする言語 `Auto (follow Visual Studio)`（`auto`）、`English (en)`（`en`）、`日本語 (ja)`（`ja`）から選択します。保存値は `auto` / `en` / `ja` で、既定は `auto` です。明示的な選択が常に優先されるため、保存済みの `en` / `ja` は `Auto` に戻すまで Visual Studio の表示言語より優先されます。
 - Options のラベルも同じ Visual Studio の表示言語を使用し、設定変更時はプロパティ ディスクリプターを更新します。Options で保存した言語は、アウトオブプロセスのホストが共有設定ファイルを監視して開いたままのツール ウィンドウへ反映します（`auto` ではホストのロケールを含めて言語状態を再読み込みし、ウィンドウを開き直さずに ViewModel を更新します）。この監視の調停ロジック（再読み込み中に届いた保存を取りこぼさないこと、失敗した再読み込みを打ち切らずバックオフしながら再試行すること）は、ホストに直接書かず、単体テスト可能な小さな `ReloadCoalescer` 型に切り出しています。開いたままのコマンド・ファイル メンションのサジェスト ポップアップも新しい言語で再構築します。言語変更だけではクエリ文字列は変わらないため、選択中の行は言語に依存しないコマンド トークンまたはファイル トークンで同定して維持します。画面に表示中のステータス文言（件数などの結果メッセージ）は、引数を持たない固定のステータス リソースから生成されたものに限り新しい言語で再構築します。件数や例外メッセージを含む文言は、誤った表示を避けるためそのまま維持します。ホストのロケール取得が失敗した場合は、一定のクールダウン期間は英語にフォールバックし、以降の設定読み込みのたびにブローカーとそのタイムアウトへ再試行することはしません。パッケージが応答しない状態が続いても、通常の検索・チャット・ファイル・ハンドオフ操作が繰り返し遅延しないようにするためです。この比較のために共有設定ファイルを読み込む際は、正当な既定値（保存中の同時書き込みや壊れた内容など）を読み込み失敗と区別できる API を使います。読み込みに失敗した場合は再読み込みの失敗として扱い、バックオフしながら再試行します。既定値との比較がたまたま現在の言語と一致してしまい、実際の保存が見過ごされることを防ぐためです。Visual Studio の表示言語自体は共有ユーザー設定には保存しません。
+
+## SharePoint Embedded 検索（Issue #223）
+
+詳細は [plan.md §6.1](plan.md#61-sharepoint-embedded-retrieval)、[ADR 0001](adr/0001-sharepoint-embedded-retrieval_ja.md)、[ADR 0002](adr/0002-shared-store-schema-v2_ja.md) を参照してください。
+
+- オプトイン方式の `/embedded <自然文>` で、設定済みの container type のコンテンツを Copilot Retrieval API（`dataSource: sharePointEmbedded`）から直接取得します。`/all` には含めず、他の検索元へフォールバックしません。データソースと従量課金は preview です。
+- 有効になるのは、`EmbeddedEnabled` が true で、クラウドが Global で、有効で妥当な検索元（`Name`、`ContainerTypeId`、`Enabled`）が 1 件以上あるときだけです。
+- 有効条件、検索元の選択、trim 後に 1〜1500 文字のクエリであることを、認証の前に検証します。件数は `MaxResults` を 1〜25 に丸めて使います。
+- トークンは delegated `FileStorageContainer.Selected` 用の専用トークン（`GetEmbeddedAccessTokenAsync`）です。共有の Graph トークンには加えないため、同意が足りなくても失敗するのは `/embedded` だけです。
+- 400/401/403/404/429 はそれぞれ具体的に案内します。0 件は、200 応答で `retrievalHits` が空の場合だけ報告します。
+- キャッシュはメモリのみで、アカウント、クラウドとエンドポイント、container type、件数、クエリで分離します。認証や設定が変わると破棄し、世代番号で古い応答を捨てます。
+- ピン留めした抽出文は、チャットの `additionalContext`、Ask プロンプト、ハンドオフ文書にテキストで含めます。Work IQ には送りません。
+- 共有ストアは `sharepoint-embedded` を加えて schema バージョン 2 に上げます。移行はしないため、ピン留め、チャット履歴、ハンドオフのインデックスは一度リセットされます。
+
+## ツールウィンドウと Options（Issue #223）
+
+詳細は [plan.md §4](plan.md#4-ui)、[plan.md §8](plan.md#8-options-dialogpage)、[ADR 0003](adr/0003-single-column-tool-window-and-markdown_ja.md)、[ADR 0004](adr/0004-shared-settings-updates-and-embedded-options_ja.md) を参照してください。
+
+- ツールウィンドウは単一列の「チャット / 検索結果 / ピン留め」タブ構成です。検索すると検索結果タブに、チャットを送信するとチャットタブに切り替わります。320px でも横スクロールを出しません。
+- 入力欄は複数行で、Enter で送信、Shift+Enter で改行します。上下キーなどは候補や検索元の選択を表示している間だけ使います。
+- 回答は HTML を無効にした Markdig で解析し、見出し、リスト、引用、コードブロック、表などの選択可能なブロックで表示します。リンクは検証済みの https だけを回答の下にボタンで並べます。
+- Tools > Options > ContextRelay に、WPF の SharePoint Embedded ページを追加します。General ページは英日にローカライズし、分類を整理します。
+- `settings.json` に書き込む側はすべて、名前付きミューテックスの下で「読み込み→変更→保存」を行い、他のページやホストの変更を上書きしません。
 
 ## 検証
 
