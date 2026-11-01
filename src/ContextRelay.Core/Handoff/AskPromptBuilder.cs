@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using ContextRelay.Core.Embedded;
 using ContextRelay.Core.SharedStore;
 
 namespace ContextRelay.Core.Handoff;
@@ -31,7 +32,7 @@ public static class AskPromptBuilder
             var header = string.Join(
                 "\n",
                 $"### Pinned document {index + 1}: {GetSnippetTitle(snippet)}",
-                $"Source: {snippet.Source}{(string.IsNullOrWhiteSpace(snippet.SourceUrl) ? string.Empty : $" - {snippet.SourceUrl}")}");
+                $"Source: {EmbeddedSnippetMetadata.DescribeSource(snippet)}{(string.IsNullOrWhiteSpace(snippet.SourceUrl) ? string.Empty : $" - {snippet.SourceUrl}")}");
             var separator = contextBlocks.Length > 0 ? "\n\n" : string.Empty;
             var blockPrefix = $"{header}\n\n";
             var fixedCost = separator.Length + blockPrefix.Length;

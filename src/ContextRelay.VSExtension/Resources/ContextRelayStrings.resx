@@ -153,4 +153,25 @@
   <data name="SourceLabel_connectors" xml:space="preserve"><value>Connectors</value></data>
   <data name="SourceLabel_all" xml:space="preserve"><value>All Sources</value></data>
   <data name="SourceLabel_default" xml:space="preserve"><value>Source</value></data>
+  <data name="SourceLabel_embedded" xml:space="preserve"><value>SharePoint Embedded</value></data>
+  <data name="CommandDescription_embedded" xml:space="preserve"><value>Search a SharePoint Embedded container type (preview).</value></data>
+  <data name="HelpFor_embedded" xml:space="preserve"><value>Example: /embedded contract renewal terms&#10;Searches the selected SharePoint Embedded source. Preview with metered billing, Global cloud only. It cannot be combined with other sources and is not part of /all.</value></data>
+  <data name="EmbeddedDisabledStatus" xml:space="preserve"><value>SharePoint Embedded is turned off. Turn it on in Tools &gt; Options &gt; ContextRelay &gt; SharePoint Embedded.</value></data>
+  <data name="EmbeddedUnsupportedCloudStatus" xml:space="preserve"><value>SharePoint Embedded retrieval is available only in the Global cloud.</value></data>
+  <data name="EmbeddedNoValidSourcesStatus" xml:space="preserve"><value>No valid SharePoint Embedded source is configured. Add one in Tools &gt; Options &gt; ContextRelay &gt; SharePoint Embedded.</value></data>
+  <data name="EmbeddedSourceNotSelectedStatus" xml:space="preserve"><value>Select a SharePoint Embedded source before searching.</value></data>
+  <data name="EmbeddedQueryEmptyStatus" xml:space="preserve"><value>Type a question after /embedded.</value></data>
+  <data name="EmbeddedQueryTooLong_Format" xml:space="preserve"><value>The query has {0} characters. /embedded accepts up to {1}; shorten it and try again.</value></data>
+  <data name="EmbeddedConsentRequired_Format" xml:space="preserve"><value>SharePoint Embedded needs the delegated FileStorageContainer.Selected permission. Add it to your Entra app registration and ask the owning application of the container type to grant your app access. Other sources keep working. Details: {0}</value></data>
+  <data name="EmbeddedBadRequestStatus" xml:space="preserve"><value>SharePoint Embedded rejected the request (400). Check the source settings and whether the preview is available in your tenant.</value></data>
+  <data name="EmbeddedUnauthorizedStatus" xml:space="preserve"><value>SharePoint Embedded sign-in is no longer valid (401). Sign in again and retry.</value></data>
+  <data name="EmbeddedForbiddenStatus" xml:space="preserve"><value>SharePoint Embedded denied access (403). Check that the owning application granted your app the container type permission, that you can access the content, that content discoverability is on, that billing is set up, and that the semantic index is available.</value></data>
+  <data name="EmbeddedNotFoundStatus" xml:space="preserve"><value>SharePoint Embedded returned 404. The source settings may be wrong or the preview may not be available in your tenant. Check the settings.</value></data>
+  <data name="EmbeddedThrottledStatus" xml:space="preserve"><value>SharePoint Embedded is throttling requests (429) and the retries did not succeed. Wait and try again.</value></data>
+  <data name="EmbeddedRequestFailed_Format" xml:space="preserve"><value>SharePoint Embedded search failed: {0}</value></data>
+  <data name="EmbeddedNoResults_Format" xml:space="preserve"><value>No results from {0}. Results appear only for content that is indexed and that you can access.</value></data>
+  <data name="EmbeddedFoundResults_Format" xml:space="preserve"><value>Found {0} result(s) from {1}. SharePoint Embedded retrieval is a preview with metered billing.</value></data>
+  <data name="EmbeddedSearchStoppedStatus" xml:space="preserve"><value>SharePoint Embedded search stopped.</value></data>
+  <data name="EmbeddedResultsDiscardedStatus" xml:space="preserve"><value>SharePoint Embedded results were discarded because the settings or account changed. Search again.</value></data>
+  <data name="EmbeddedInvalidSources_Format" xml:space="preserve"><value>{0} SharePoint Embedded source(s) are invalid and skipped. Fix them in Tools &gt; Options.</value></data>
 </root>

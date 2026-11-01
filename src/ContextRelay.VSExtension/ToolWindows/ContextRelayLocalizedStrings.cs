@@ -35,6 +35,7 @@ internal static class ContextRelayLocalizedStrings
             ["/onenote"] = "CommandDescription_onenote",
             ["/task"] = "CommandDescription_task",
             ["/connectors"] = "CommandDescription_connectors",
+            ["/embedded"] = "CommandDescription_embedded",
             ["/all"] = "CommandDescription_all",
             ["/ask"] = "CommandDescription_ask",
             ["/workiq"] = "CommandDescription_workiq",
@@ -137,6 +138,25 @@ internal static class ContextRelayLocalizedStrings
     public static string SourceLabelConnectors => GetString("SourceLabel_connectors");
     public static string SourceLabelAll => GetString("SourceLabel_all");
     public static string SourceLabelDefault => GetString("SourceLabel_default");
+    public static string SourceLabelEmbedded => GetString("SourceLabel_embedded");
+    public static string EmbeddedDisabledStatus => GetString("EmbeddedDisabledStatus");
+    public static string EmbeddedUnsupportedCloudStatus => GetString("EmbeddedUnsupportedCloudStatus");
+    public static string EmbeddedNoValidSourcesStatus => GetString("EmbeddedNoValidSourcesStatus");
+    public static string EmbeddedSourceNotSelectedStatus => GetString("EmbeddedSourceNotSelectedStatus");
+    public static string EmbeddedQueryEmptyStatus => GetString("EmbeddedQueryEmptyStatus");
+    public static string EmbeddedBadRequestStatus => GetString("EmbeddedBadRequestStatus");
+    public static string EmbeddedUnauthorizedStatus => GetString("EmbeddedUnauthorizedStatus");
+    public static string EmbeddedForbiddenStatus => GetString("EmbeddedForbiddenStatus");
+    public static string EmbeddedNotFoundStatus => GetString("EmbeddedNotFoundStatus");
+    public static string EmbeddedThrottledStatus => GetString("EmbeddedThrottledStatus");
+    public static string EmbeddedSearchStoppedStatus => GetString("EmbeddedSearchStoppedStatus");
+    public static string EmbeddedResultsDiscardedStatus => GetString("EmbeddedResultsDiscardedStatus");
+    public static string GetEmbeddedQueryTooLongStatus(int length, int maxLength) => Format("EmbeddedQueryTooLong_Format", length, maxLength);
+    public static string GetEmbeddedConsentRequiredStatus(string detail) => Format("EmbeddedConsentRequired_Format", detail);
+    public static string GetEmbeddedRequestFailedStatus(string detail) => Format("EmbeddedRequestFailed_Format", detail);
+    public static string GetEmbeddedNoResultsStatus(string sourceName) => Format("EmbeddedNoResults_Format", sourceName);
+    public static string GetEmbeddedFoundResultsStatus(int count, string sourceName) => Format("EmbeddedFoundResults_Format", count, sourceName);
+    public static string GetEmbeddedInvalidSourcesStatus(int count) => Format("EmbeddedInvalidSources_Format", count);
     public static string TypeQueryStatus => GenericHelpText;
     public static string AddFilesDialogTitle => GetString("AddFilesDialogTitle");
     public static string AddFilesDialogFilter => GetString("AddFilesDialogFilter");
@@ -190,6 +210,18 @@ internal static class ContextRelayLocalizedStrings
         "AssistantContinuationEmptyStatus",
         "AssistantContinuationNoNewContentStatus",
         "NoResultsFoundStatus",
+        "EmbeddedDisabledStatus",
+        "EmbeddedUnsupportedCloudStatus",
+        "EmbeddedNoValidSourcesStatus",
+        "EmbeddedSourceNotSelectedStatus",
+        "EmbeddedQueryEmptyStatus",
+        "EmbeddedBadRequestStatus",
+        "EmbeddedUnauthorizedStatus",
+        "EmbeddedForbiddenStatus",
+        "EmbeddedNotFoundStatus",
+        "EmbeddedThrottledStatus",
+        "EmbeddedSearchStoppedStatus",
+        "EmbeddedResultsDiscardedStatus",
         "GenericHelpText", // Also covers TypeQueryStatus, which forwards to this same resource.
         "ToolWindowInitializationFailed_NoDetail", // The other branch of GetToolWindowInitializationFailedStatus
                                                     // carries captured exception text and is excluded.
@@ -322,6 +354,7 @@ internal static class ContextRelayLocalizedStrings
             "/onenote" => GetString("HelpFor_onenote"),
             "/task" => GetString("HelpFor_task"),
             "/connectors" => GetString("HelpFor_connectors"),
+            "/embedded" => GetString("HelpFor_embedded"),
             "/all" => GetString("HelpFor_all"),
             "/ask" => GetString("HelpFor_ask"),
             "/workiq" => GetString("HelpFor_workiq"),
@@ -330,7 +363,9 @@ internal static class ContextRelayLocalizedStrings
         };
     }
 
-    public static IReadOnlyList<SlashCommandSuggestion> GetCommandSuggestions(string? queryText)
+    /// <param name="queryText">The composer text.</param>
+    /// <param name="includeEmbedded">Whether SharePoint Embedded is active; /embedded is suggested only then.</param>
+    public static IReadOnlyList<SlashCommandSuggestion> GetCommandSuggestions(string? queryText, bool includeEmbedded = false)
     {
         if (!TryGetSlashSelectionContext(queryText, out var context))
         {
@@ -342,6 +377,11 @@ internal static class ContextRelayLocalizedStrings
         foreach (var command in SlashCommandRouter.GetSupportedCommands())
         {
             if (!command.StartsWith(context.Partial, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!includeEmbedded && string.Equals(command, "/embedded", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

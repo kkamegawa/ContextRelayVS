@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ContextRelay.Core.Router;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.Core.Utilities;
 
@@ -186,6 +187,7 @@ public sealed class SharedSnippetRepository : ISnippetRepository
             SnippetSource.Planner => "planner",
             SnippetSource.Todo => "todo",
             SnippetSource.Chat => "chat",
+            SnippetSource.SharePointEmbedded => ContextSourceSchema.SharePointEmbedded,
             _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Unknown snippet source.")
         };
     }

@@ -134,29 +134,26 @@ public sealed class RetrievalSearchAdapter : IContextSearchAdapter
         int maxResults,
         CancellationToken cancellationToken)
     {
-        var queryString = query.Length > 1500 ? query.Substring(0, 1500) : query;
-        var body = JsonSerializer.Serialize(new
-        {
-            queryString,
-            dataSource = "externalItem",
-            resourceMetadata = new[] { "title" },
-            maximumNumberOfResults = Math.Min(Math.Max(maxResults, 1), 25)
-        });
-
-        using var response = await graphClient
-            .SendWithRetryAsync($"{graphClient.BaseUrl}/v1.0/copilot/retrieval", accessToken, HttpMethod.Post, body, cancellationToken: cancellationToken)
+        // Connectors keep truncating long queries; /embedded rejects them during pre-validation instead.
+        var queryString = query.Length > RetrievalClient.MaxQueryLength ? query.Substring(0, RetrievalClient.MaxQueryLength) : query;
+        var hits = await new RetrievalClient(graphClient)
+            .RetrieveAsync(
+                accessToken,
+                new RetrievalRequest
+                {
+                    QueryString = queryString,
+                    DataSource = RetrievalClient.ExternalItemDataSource,
+                    MaxResults = maxResults
+                },
+                cancellationToken)
             .ConfigureAwait(false);
-        var data = await graphClient.ReadJsonAsync<RetrievalResponse>(response, cancellationToken).ConfigureAwait(false);
 
-        return (data.RetrievalHits ?? Array.Empty<RetrievalHit>())
+        return hits
             .Select(hit =>
             {
-                var extracts = (hit.Extracts ?? Array.Empty<RetrievalExtract>())
-                    .Select(extract => extract.Text ?? string.Empty)
-                    .Where(text => !string.IsNullOrWhiteSpace(text))
-                    .ToArray();
-                var title = hit.ResourceMetadata?.Title ??
-                    hit.ResourceMetadata?.Name ??
+                var extracts = hit.Extracts.Select(extract => extract.Text).ToArray();
+                var title = hit.Title ??
+                    hit.Name ??
                     RetrievalSearchUtils.GetTitleFromUrl(hit.WebUrl ?? string.Empty) ??
                     "Untitled";
 
@@ -259,41 +256,5 @@ public sealed class RetrievalSearchAdapter : IContextSearchAdapter
 
         [JsonPropertyName("path")]
         public string? Path { get; set; }
-    }
-
-    private sealed class RetrievalResponse
-    {
-        [JsonPropertyName("retrievalHits")]
-        public RetrievalHit[]? RetrievalHits { get; set; }
-    }
-
-    private sealed class RetrievalHit
-    {
-        [JsonPropertyName("webUrl")]
-        public string? WebUrl { get; set; }
-
-        [JsonPropertyName("extracts")]
-        public RetrievalExtract[]? Extracts { get; set; }
-
-        [JsonPropertyName("resourceMetadata")]
-        public RetrievalResourceMetadata? ResourceMetadata { get; set; }
-
-        [JsonPropertyName("resourceType")]
-        public string? ResourceType { get; set; }
-    }
-
-    private sealed class RetrievalExtract
-    {
-        [JsonPropertyName("text")]
-        public string? Text { get; set; }
-    }
-
-    private sealed class RetrievalResourceMetadata
-    {
-        [JsonPropertyName("title")]
-        public string? Title { get; set; }
-
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
     }
 }
