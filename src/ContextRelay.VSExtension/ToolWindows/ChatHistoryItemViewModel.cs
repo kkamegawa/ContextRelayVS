@@ -1,6 +1,10 @@
-﻿using System.Runtime.Serialization;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using ContextRelay.Core.SharedStore;
+using ContextRelay.VSExtension.ToolWindows.Markdown;
 using Microsoft.VisualStudio.Extensibility.UI;
 
 namespace ContextRelay.VSExtension.ToolWindows;
@@ -24,6 +28,16 @@ internal sealed class ChatHistoryItemViewModel
         AppendAssistantButtonText = ContextRelayLocalizedStrings.AppendAssistantButtonText;
         ReplaceAssistantButtonText = ContextRelayLocalizedStrings.ReplaceAssistantButtonText;
         ContinueAssistantButtonText = ContextRelayLocalizedStrings.ContinueAssistantButtonText;
+        // Assistant answers render as Markdown; user messages stay as typed. Copy, insert, and continue
+        // below always use the original text, never the rendered blocks.
+        var isAssistant = string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase);
+        var document = isAssistant
+            ? SafeMarkdownParser.Parse(item.Text)
+            : new MarkdownDocumentModel { Blocks = string.IsNullOrWhiteSpace(item.Text) ? Array.Empty<MarkdownBlock>() : new[] { new MarkdownBlock { Kind = MarkdownBlockKind.Paragraph, Text = item.Text } } };
+        Blocks = document.Blocks.Select(block => new MarkdownBlockViewModel(block)).ToArray();
+        Links = document.Links.Select(link => new MarkdownLinkViewModel(link, parent)).ToArray();
+        HasLinks = Links.Count > 0;
+        LinksHeaderText = ContextRelayLocalizedStrings.MarkdownLinksHeaderText;
         var text = item.Text;
         CopyAssistantCommand = new AsyncCommand(async (_, ct) => await parent.CopyAssistantTextAsync(text, ct).ConfigureAwait(false));
         AppendAssistantCommand = new AsyncCommand(async (_, ct) => await parent.AppendAssistantTextAsync(text, ct).ConfigureAwait(false));
@@ -34,6 +48,10 @@ internal sealed class ChatHistoryItemViewModel
     [DataMember] public string Id { get; private set; }
     [DataMember] public string Role { get; private set; }
     [DataMember] public string Text { get; private set; }
+    [DataMember] public IReadOnlyList<MarkdownBlockViewModel> Blocks { get; private set; }
+    [DataMember] public IReadOnlyList<MarkdownLinkViewModel> Links { get; private set; }
+    [DataMember] public bool HasLinks { get; private set; }
+    [DataMember] public string LinksHeaderText { get; private set; }
     [DataMember] public string Timestamp { get; private set; }
     [DataMember] public bool IsActionableAssistant { get; private set; }
     [DataMember] public bool IsCopilotAssistant { get; private set; }

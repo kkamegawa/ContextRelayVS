@@ -173,4 +173,20 @@
   <data name="EmbeddedSearchStoppedStatus" xml:space="preserve"><value>SharePoint Embedded の検索を停止しました。</value></data>
   <data name="EmbeddedResultsDiscardedStatus" xml:space="preserve"><value>設定またはアカウントが変わったため、SharePoint Embedded の結果を破棄しました。もう一度検索してください。</value></data>
   <data name="EmbeddedInvalidSources_Format" xml:space="preserve"><value>SharePoint Embedded の検索元のうち {0} 件が不正なため、対象から外しています。[ツール] &gt; [オプション] で修正してください。</value></data>
+  <data name="ChatTabHeaderText" xml:space="preserve"><value>チャット</value></data>
+  <data name="ResultsTabHeaderText" xml:space="preserve"><value>検索結果</value></data>
+  <data name="PinsTabHeaderText" xml:space="preserve"><value>ピン留め</value></data>
+  <data name="TabHeaderWithCount_Format" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="UnpinButtonText" xml:space="preserve"><value>ピン留め解除</value></data>
+  <data name="ShowPreviewButtonText" xml:space="preserve"><value>プレビュー</value></data>
+  <data name="HidePreviewButtonText" xml:space="preserve"><value>プレビューを閉じる</value></data>
+  <data name="CopyPreviewButtonText" xml:space="preserve"><value>コピー</value></data>
+  <data name="EmbeddedPreviewBadgeText" xml:space="preserve"><value>プレビュー版</value></data>
+  <data name="SensitivityLabel_Format" xml:space="preserve"><value>秘密度: {0}</value></data>
+  <data name="EmbeddedSourceChip_Format" xml:space="preserve"><value>SharePoint Embedded の検索元: {0}</value></data>
+  <data name="EmbeddedSourceNotSelectedChipText" xml:space="preserve"><value>SharePoint Embedded の検索元: 未選択</value></data>
+  <data name="EmbeddedSourceSelectorHeaderText" xml:space="preserve"><value>SharePoint Embedded の検索元を選択（上下キー・Enter で選択、Esc で解除）</value></data>
+  <data name="ChangeEmbeddedSourceButtonText" xml:space="preserve"><value>変更</value></data>
+  <data name="EmbeddedPreviewNoticeText" xml:space="preserve"><value>SharePoint Embedded の検索はプレビュー版で、従量課金（Copilot Studio メッセージ）の対象です。</value></data>
+  <data name="MarkdownLinksHeaderText" xml:space="preserve"><value>リンク</value></data>
 </root>

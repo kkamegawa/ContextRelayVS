@@ -16,6 +16,9 @@ internal sealed class ContextRelayHostState
 
     public string StatusMessage { get; set; } = ContextRelayLocalizedStrings.ReadyStatus;
 
+    /// <summary>Whether <see cref="StatusMessage"/> reports a failure; the tool window then shows the help text.</summary>
+    public bool IsStatusError { get; set; }
+
     public string? SignedInUser { get; set; }
 
     public string? LastHandoffPath { get; set; }
