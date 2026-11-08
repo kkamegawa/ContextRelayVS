@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using ContextRelay.Core.Auth;
 
 namespace ContextRelay.Core.Settings;
@@ -9,6 +10,7 @@ namespace ContextRelay.Core.Settings;
 public sealed class ContextRelaySettingsSnapshot
 {
     private int chatMaxAttachedFiles = 5;
+    private List<EmbeddedSourceSettings> embeddedSources = new();
 
     /// <summary>
     /// Gets or sets the maximum number of search results returned for a query.
@@ -148,6 +150,20 @@ public sealed class ContextRelaySettingsSnapshot
     /// Gets or sets a value indicating whether Microsoft To Do search is enabled.
     /// </summary>
     public bool TodoEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether SharePoint Embedded retrieval (/embedded) is enabled.
+    /// </summary>
+    public bool EmbeddedEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the SharePoint Embedded container types that /embedded can search.
+    /// </summary>
+    public List<EmbeddedSourceSettings> EmbeddedSources
+    {
+        get => embeddedSources;
+        set => embeddedSources = value ?? new List<EmbeddedSourceSettings>();
+    }
 
     /// <summary>
     /// Converts the settings into authentication settings.

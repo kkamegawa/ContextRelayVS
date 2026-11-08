@@ -9,7 +9,8 @@ public static class ContextItemKeys
         string? title,
         string? url,
         string? timestamp,
-        string? snippet)
+        string? snippet,
+        string? containerTypeId = null)
     {
         var discriminator =
             (url ?? string.Empty).Trim();
@@ -24,11 +25,20 @@ public static class ContextItemKeys
             discriminator = (snippet ?? string.Empty).Trim();
         }
 
-        return $"{source}::{discriminator}::{(title ?? string.Empty).Trim()}";
+        var normalizedTitle = (title ?? string.Empty).Trim();
+        if (source == ContextSource.SharePointEmbedded)
+        {
+            // The same document can surface from different container types, so the key keeps the
+            // container type to stay stable across preview, pin, unpin, and the shared store.
+            return $"{ContextSourceSchema.SharePointEmbedded}::{(containerTypeId ?? string.Empty).Trim().ToLowerInvariant()}::{discriminator}::{normalizedTitle}";
+        }
+
+        return $"{source}::{discriminator}::{normalizedTitle}";
     }
 
     public static string Build(ContextItem item)
     {
-        return Build(item.Source, item.Title, item.Url, item.Timestamp, item.Snippet);
+        item.Metadata.TryGetValue(EmbeddedMetadataKeys.ContainerTypeId, out var containerTypeId);
+        return Build(item.Source, item.Title, item.Url, item.Timestamp, item.Snippet, containerTypeId);
     }
 }

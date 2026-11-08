@@ -362,9 +362,9 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     /// <inheritdoc />
     public override void Save()
     {
-        var settings = CreateSettingsSnapshot();
-        settings.UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(settings.UiLanguage);
-        ContextRelaySettingsStore.SaveSettings(settings);
+        // Merge only this page's fields into the latest file so the Embedded page and the tool window's
+        // language command keep the fields they own.
+        var settings = ContextRelaySettingsStore.UpdateSettings(ApplyTo);
         LoadSnapshot(settings);
     }
 
@@ -416,40 +416,42 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     }
 
     /// <summary>
-    /// Creates a snapshot that matches the format consumed by the shared settings store.
+    /// Copies the fields this page owns into a settings snapshot, leaving every other field unchanged.
     /// </summary>
-    /// <returns>The persisted settings snapshot.</returns>
-    internal ContextRelaySettingsSnapshot CreateSettingsSnapshot()
+    /// <param name="settings">The latest persisted settings to update.</param>
+    internal void ApplyTo(ContextRelaySettingsSnapshot settings)
     {
-        return new ContextRelaySettingsSnapshot
+        if (settings is null)
         {
-            MaxResults = MaxResults,
-            OutputDirectory = OutputDirectory ?? string.Empty,
-            EnableChatPreview = EnableChatPreview,
-            ChatMaxAttachedFiles = ChatMaxAttachedFiles,
-            ChatAttachActiveEditor = ChatAttachActiveEditor,
-            ChatStreamResponses = ChatStreamResponses,
-            UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(UiLanguage),
-            EnableGraphDebugLogging = EnableGraphDebugLogging,
-            EnableWorkIqDebugLogging = EnableWorkIqDebugLogging,
-            AllowLocalFileContextForWorkIq = AllowLocalFileContextForWorkIq,
-            ClientId = ClientId ?? string.Empty,
-            TenantId = TenantId ?? string.Empty,
-            CloudEnvironment = CloudEnvironment,
-            CustomGraphEndpoint = CustomGraphEndpoint ?? string.Empty,
-            CustomAuthEndpoint = CustomAuthEndpoint ?? string.Empty,
-            UseBroker = UseBroker,
-            CacheTtlSeconds = CacheTtlSeconds,
-            CacheMaxEntries = CacheMaxEntries,
-            PersistWorkspaceState = PersistWorkspaceState,
-            MailEnabled = MailEnabled,
-            TeamsEnabled = TeamsEnabled,
-            SharePointEnabled = SharePointEnabled,
-            OneDriveEnabled = OneDriveEnabled,
-            ConnectorsEnabled = ConnectorsEnabled,
-            OneNoteEnabled = OneNoteEnabled,
-            PlannerEnabled = PlannerEnabled,
-            TodoEnabled = TodoEnabled,
-        };
+            throw new ArgumentNullException(nameof(settings));
+        }
+
+        settings.MaxResults = MaxResults;
+        settings.OutputDirectory = OutputDirectory ?? string.Empty;
+        settings.EnableChatPreview = EnableChatPreview;
+        settings.ChatMaxAttachedFiles = ChatMaxAttachedFiles;
+        settings.ChatAttachActiveEditor = ChatAttachActiveEditor;
+        settings.ChatStreamResponses = ChatStreamResponses;
+        settings.UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(UiLanguage);
+        settings.EnableGraphDebugLogging = EnableGraphDebugLogging;
+        settings.EnableWorkIqDebugLogging = EnableWorkIqDebugLogging;
+        settings.AllowLocalFileContextForWorkIq = AllowLocalFileContextForWorkIq;
+        settings.ClientId = ClientId ?? string.Empty;
+        settings.TenantId = TenantId ?? string.Empty;
+        settings.CloudEnvironment = CloudEnvironment;
+        settings.CustomGraphEndpoint = CustomGraphEndpoint ?? string.Empty;
+        settings.CustomAuthEndpoint = CustomAuthEndpoint ?? string.Empty;
+        settings.UseBroker = UseBroker;
+        settings.CacheTtlSeconds = CacheTtlSeconds;
+        settings.CacheMaxEntries = CacheMaxEntries;
+        settings.PersistWorkspaceState = PersistWorkspaceState;
+        settings.MailEnabled = MailEnabled;
+        settings.TeamsEnabled = TeamsEnabled;
+        settings.SharePointEnabled = SharePointEnabled;
+        settings.OneDriveEnabled = OneDriveEnabled;
+        settings.ConnectorsEnabled = ConnectorsEnabled;
+        settings.OneNoteEnabled = OneNoteEnabled;
+        settings.PlannerEnabled = PlannerEnabled;
+        settings.TodoEnabled = TodoEnabled;
     }
 }

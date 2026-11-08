@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using ContextRelay.Core.Models;
 using ContextRelay.Core.FileContext;
+using ContextRelay.Core.Settings;
 using ContextRelay.Core.SharedStore;
 using ContextRelay.VSExtension.ToolWindows;
 
@@ -36,4 +37,19 @@ internal sealed class ContextRelayHostState
     public string StreamingResponseText { get; set; } = string.Empty;
 
     public IReadOnlyList<ResolvedAttachment> PendingAttachments { get; set; } = Array.Empty<ResolvedAttachment>();
+
+    /// <summary>Whether /embedded can run: enabled, Global cloud, and at least one valid source.</summary>
+    public bool IsEmbeddedActive { get; set; }
+
+    /// <summary>The enabled, valid Embedded sources in configured order, for the source selector.</summary>
+    public IReadOnlyList<EmbeddedSourceSettings> EmbeddedSources { get; set; } = Array.Empty<EmbeddedSourceSettings>();
+
+    /// <summary>The source the next /embedded request uses, or null when the user must choose.</summary>
+    public string? SelectedEmbeddedContainerTypeId { get; set; }
+
+    /// <summary>The last source chosen in this session; the selector highlights it first.</summary>
+    public string? LastSelectedEmbeddedContainerTypeId { get; set; }
+
+    /// <summary>The number of enabled Embedded entries skipped because they are invalid.</summary>
+    public int EmbeddedInvalidSourceCount { get; set; }
 }
