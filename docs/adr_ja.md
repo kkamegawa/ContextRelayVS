@@ -1,5 +1,27 @@
 # アーキテクチャ決定記録
 
+Issue #223 以降の決定は、[`adr/`](adr/) の下に個別のファイルとして記録し、日本語訳を併置する。以下の各項目から記録にリンクする。
+
+## 2026-10-25 — Issue #223: 共有設定を「読み込み→変更→保存」で更新し、Embedded の Options ページを追加する
+
+- 決定: `settings.json` に書き込む側はすべて、最新のファイルを読み込み、自分の変更だけを適用し、プロセス間の名前付きミューテックスの下で原子的に保存する。`UIElementDialogPage` で表示する WPF の SharePoint Embedded ページを General ページに加え、検証付きの Apply とページごとの pkgdef 登録を行う。
+- 記録: [ADR 0004](adr/0004-shared-settings-updates-and-embedded-options_ja.md)
+
+## 2026-10-25 — Issue #223: 単一列のタブ構成のツールウィンドウと安全な Markdown の回答ブロック
+
+- 決定: 2 列構成を「チャット / 検索結果 / ピン留め」のタブに置き換え、Enter を 1 つのキーバインドで振り分け、回答を選択可能な Markdown ブロックで表示する。Markdig（HTML 無効）はプロセス外の拡張機能でのみ使う。
+- 記録: [ADR 0003](adr/0003-single-column-tool-window-and-markdown_ja.md)
+
+## 2026-10-25 — Issue #223: Embedded の検索元のために共有ストアを schema バージョン 2 に上げる
+
+- 決定: 閉集合の `source` に `sharepoint-embedded` を加え、文書の集合を訂正し、移行なしで `schemaVersion` を 2 に上げる。バージョン 1 のファイルは一度初期化される。
+- 記録: [ADR 0002](adr/0002-shared-store-schema-v2_ja.md)
+
+## 2026-10-25 — Issue #223: 設定済みの SharePoint Embedded コンテンツを専用トークンで取得する
+
+- 決定: オプトイン方式の `/embedded` を追加する。Global クラウドで検索元を設定したときだけ有効になり、共有の Graph トークンには加えない専用の `FileStorageContainer.Selected` トークンで Copilot Retrieval API を呼ぶ。
+- 記録: [ADR 0001](adr/0001-sharepoint-embedded-retrieval_ja.md)
+
 ## 2026-09-22 — Issue #200: コールドスタート時の初回読み取りが完了できるようブローカーのタイムアウトを広げる
 
 - コンテキスト: 上記の audience 修正をエンドツーエンドで検証（ブローカー要求が `ServiceAudienceMismatch` で拒否されなくなったことを確認）し、下記の Directory プロパティ修正でツール ウィンドウがそもそも初期化できるようになった後も、修正版 VSIX を再インストールした直後の最初のツール ウィンドウ オープンでは依然として英語のままだった。同一セッションの `GlobalBrokeredServiceContainer` ログに `ContextRelay.VisualStudioLanguage` への要求が約 1.56 秒間隔で 2 回記録されており、これは `VisualStudioUiLanguageProvider` の 1500ms の `CancelAfter` 予算にオーバーヘッドを加えた値とほぼ一致する。ツール ウィンドウのタブを（VS を再起動せずに）閉じて開き直したところ、Options パッケージは既にロード・JIT 済みだったため即座に日本語で表示され、原因が解決されたロケールやブローカー修正ではなく、初回読み取り自体のタイムアウトであることが確認できた。`ContextRelayOptionsPackage` をオンデマンドで有効化する処理（アセンブリ ロード/JIT、`SwitchToMainThreadAsync`、MEF の `ToolkitPackage` コンポジション、ブローカー サービスの proffer）は、インストール・更新直後で JIT/NGen のウォーム キャッシュがない状態では 1500ms を正当に超える時間がかかり、最初の自動モード読み取りはパッケージの有効化が終わる前に諦めて英語へフォールバックしていた。
