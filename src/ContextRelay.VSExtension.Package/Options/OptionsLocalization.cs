@@ -43,10 +43,10 @@ internal static class OptionsLocalization
         return Resources.GetString(key, ResolveCulture()) ?? key;
     }
 
-    private static CultureInfo ResolveCulture()
+    internal static CultureInfo ResolveCulture(string? uiLanguage = null)
     {
         var hostLcid = VisualStudioLanguageServiceExport.CapturedUiLocale;
-        return VisualStudioLanguageService.ResolveLanguage(configuredUiLanguage, hostLcid) == UiLanguageJapanese
+        return VisualStudioLanguageService.ResolveLanguage(uiLanguage ?? configuredUiLanguage, hostLcid) == UiLanguageJapanese
             ? JapaneseCulture
             : EnglishCulture;
     }

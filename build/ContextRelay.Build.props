@@ -14,9 +14,8 @@
   <!-- 
     PatchPkgdefFile Task: Performs regex-based modifications to pkgdef files
     
-    Replaces two key patterns:
-    1. IsInUnifiedSettings=1 → IsInUnifiedSettings=0 (keeps legacy options page visible)
-    2. @="#0" → literal display names like "ContextRelay" (makes options tree readable)
+    Replaces numeric resource references with literal ContextRelay options titles and keeps
+    both registered legacy Options pages visible.
     
     Parameters:
     - PkgdefPath: Full path to the pkgdef file to modify
@@ -34,17 +33,46 @@
         {
             string content = File.ReadAllText(PkgdefPath);
 
-            // Regex 1: Set IsInUnifiedSettings from 1 to 0 to keep legacy options page visible
+            // Patch only the ContextRelay category and its two legacy Options pages. This keeps
+            // each title distinct and leaves unrelated ContextRelay pages untouched.
             content = Regex.Replace(
                 content,
-                @"(=hkcu,SOFTWARE\\Microsoft\\VisualStudio\\.*?\\ToolsOptions\\.*?)\s*\n\s*""IsInUnifiedSettings""=""dword:00000001""",
-                "$1\r\n\"IsInUnifiedSettings\"=\"dword:00000000\"",
-                RegexOptions.Multiline | RegexOptions.IgnoreCase
-            );
+                @"(?ms)(^\[[^\]\r\n]*ToolsOptionsPages\\ContextRelay(?:\\(?:General|SharePoint Embedded))?\]\r?\n)(.*?)(?=^\[|\z)",
+                match =>
+                {
+                    string header = match.Groups[1].Value;
+                    string body = match.Groups[2].Value;
+                    string section = header.Substring(header.IndexOf("ToolsOptionsPages\\ContextRelay", StringComparison.OrdinalIgnoreCase));
+                    section = section.TrimEnd(']', '\r', '\n');
+                    string title = section.EndsWith("\\General", StringComparison.OrdinalIgnoreCase)
+                        ? "General"
+                        : section.EndsWith("\\SharePoint Embedded", StringComparison.OrdinalIgnoreCase)
+                            ? "SharePoint Embedded"
+                            : "ContextRelay";
 
-            // Regex 2: Replace numeric resource references (@="#0") with literal display names
-            content = Regex.Replace(content, @"@=""#0""", "@=\"ContextRelay\"", RegexOptions.IgnoreCase);
-            content = Regex.Replace(content, @"@=""#1""", "@=\"General\"", RegexOptions.IgnoreCase);
+                    body = Regex.Replace(body, @"(?m)^@=""[^""\r\n]*""(?=\r?$)", @"@=""" + title + @"""", RegexOptions.IgnoreCase);
+                    if (!string.Equals(title, "ContextRelay", StringComparison.Ordinal))
+                    {
+                        var settingPattern = @"(?m)^""IsInUnifiedSettings""=dword:[0-9a-fA-F]{8}(?=\r?$)";
+                        bool hasSetting = Regex.IsMatch(body, settingPattern, RegexOptions.IgnoreCase);
+                        body = Regex.Replace(
+                            body,
+                            settingPattern,
+                            "\"IsInUnifiedSettings\"=dword:00000000",
+                            RegexOptions.IgnoreCase);
+                        if (!hasSetting)
+                        {
+                            if (!body.EndsWith("\n", StringComparison.Ordinal))
+                            {
+                                body += "\r\n";
+                            }
+
+                            body += "\"IsInUnifiedSettings\"=dword:00000000\r\n";
+                        }
+                    }
+
+                    return header + body;
+                });
 
             File.WriteAllText(PkgdefPath, content, new System.Text.UTF8Encoding(false));
             Log.LogMessage(MessageImportance.High, "Patched pkgdef file: {0}", PkgdefPath);

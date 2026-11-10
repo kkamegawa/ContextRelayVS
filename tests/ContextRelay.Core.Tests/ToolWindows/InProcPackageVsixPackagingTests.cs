@@ -20,6 +20,26 @@ public sealed class InProcPackageVsixPackagingTests
     private const string VsxNamespace = "http://schemas.microsoft.com/developer/vsx-schema/2011";
 
     [Fact]
+    public void BuiltVsix_RegistersBothLegacyOptionsPagesWithReadableNames()
+    {
+        var vsixPath = BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.vsix");
+
+        using var archive = ZipFile.OpenRead(vsixPath);
+        var entry = archive.GetEntry("ContextRelay.VSExtension.Package.pkgdef");
+        Assert.True(entry is not null, "Built VSIX is missing required entry 'ContextRelay.VSExtension.Package.pkgdef'.");
+
+        string pkgdef;
+        using (var stream = entry!.Open())
+        using (var reader = new StreamReader(stream))
+        {
+            pkgdef = reader.ReadToEnd();
+        }
+
+        AssertOptionPageRegistration(pkgdef, "General");
+        AssertOptionPageRegistration(pkgdef, "SharePoint Embedded");
+    }
+
+    [Fact]
     public void BuiltVsix_ContainsInProcPackagePayloadAndHybridManifest()
     {
         var vsixPath = BuiltExtensionArtifactLocator.ResolveExtensionArtifactPath("ContextRelay.VSExtension.vsix");
@@ -149,5 +169,17 @@ public sealed class InProcPackageVsixPackagingTests
     {
         var entry = archive.GetEntry(entryName);
         Assert.True(entry is not null, $"Built VSIX is missing required entry '{entryName}'.");
+    }
+
+    private static void AssertOptionPageRegistration(string pkgdef, string pageName)
+    {
+        var escapedPageName = Regex.Escape(pageName);
+        var section = Regex.Match(
+            pkgdef,
+            @"(?ms)^\[\$RootKey\$\\ToolsOptionsPages\\ContextRelay\\" + escapedPageName + @"\]\r?\n(.*?)(?=^\[|\z)");
+
+        Assert.True(section.Success, $"Packaged pkgdef is missing the ContextRelay\\{pageName} options page registration.");
+        Assert.Matches(new Regex(@"(?m)^@=""" + escapedPageName + @"""(?=\r?$)"), section.Groups[1].Value);
+        Assert.Matches(new Regex(@"(?m)^""IsInUnifiedSettings""=dword:00000000(?=\r?$)"), section.Groups[1].Value);
     }
 }

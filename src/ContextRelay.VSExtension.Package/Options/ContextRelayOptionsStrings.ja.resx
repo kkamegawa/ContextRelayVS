@@ -5,6 +5,58 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0</value></resheader>
   <data name="ChatCategory" xml:space="preserve"><value>チャット</value></data>
+  <data name="GeneralCategory" xml:space="preserve"><value>全般</value></data>
+  <data name="AuthenticationCategory" xml:space="preserve"><value>認証</value></data>
+  <data name="CachingCategory" xml:space="preserve"><value>キャッシュ</value></data>
+  <data name="SearchSourcesCategory" xml:space="preserve"><value>検索ソース</value></data>
+  <data name="DiagnosticsCategory" xml:space="preserve"><value>診断</value></data>
+  <data name="PrivacyCategory" xml:space="preserve"><value>プライバシー</value></data>
+  <data name="MaxResults.DisplayName" xml:space="preserve"><value>最大検索結果数</value></data>
+  <data name="MaxResults.Description" xml:space="preserve"><value>ContextRelay の各検索で返す結果の最大数を指定します。</value></data>
+  <data name="OutputDirectory.DisplayName" xml:space="preserve"><value>出力ディレクトリ</value></data>
+  <data name="OutputDirectory.Description" xml:space="preserve"><value>引き継ぎファイルの生成に使う相対出力ディレクトリを指定します。</value></data>
+  <data name="EnableChatPreview.DisplayName" xml:space="preserve"><value>チャットのプレビューを有効にする</value></data>
+  <data name="EnableChatPreview.Description" xml:space="preserve"><value>/ask や Copilot Chat 連携などのプレビュー機能を有効にします。</value></data>
+  <data name="EnableGraphDebugLogging.DisplayName" xml:space="preserve"><value>Graph デバッグログを有効にする</value></data>
+  <data name="EnableGraphDebugLogging.Description" xml:space="preserve"><value>Microsoft Graph 要求の詳細なデバッグログを有効にします。</value></data>
+  <data name="EnableWorkIqDebugLogging.DisplayName" xml:space="preserve"><value>Work IQ デバッグログを有効にする</value></data>
+  <data name="EnableWorkIqDebugLogging.Description" xml:space="preserve"><value>Work IQ 要求の詳細なデバッグログを有効にします。</value></data>
+  <data name="AllowLocalFileContextForWorkIq.DisplayName" xml:space="preserve"><value>Work IQ でローカルファイルのコンテキストを許可する</value></data>
+  <data name="AllowLocalFileContextForWorkIq.Description" xml:space="preserve"><value>/workiq #file のプロンプトで、上限付きのローカルファイルテキストを Work IQ に送信できるようにします。ローカルのソースファイルをこのコンピューターの外へ送信できない場合は無効のままにしてください。</value></data>
+  <data name="ClientId.DisplayName" xml:space="preserve"><value>クライアント ID</value></data>
+  <data name="ClientId.Description" xml:space="preserve"><value>サインインに使う Microsoft Entra アプリケーションのクライアント ID を指定します。</value></data>
+  <data name="TenantId.DisplayName" xml:space="preserve"><value>テナント ID</value></data>
+  <data name="TenantId.Description" xml:space="preserve"><value>テナント ID を指定します。複数テナントでのサインインでは organizations を指定します。</value></data>
+  <data name="CloudEnvironment.DisplayName" xml:space="preserve"><value>クラウド環境</value></data>
+  <data name="CloudEnvironment.Description" xml:space="preserve"><value>ContextRelay が使う Microsoft クラウド環境を選択します。</value></data>
+  <data name="CustomGraphEndpoint.DisplayName" xml:space="preserve"><value>カスタム Graph エンドポイント</value></data>
+  <data name="CustomGraphEndpoint.Description" xml:space="preserve"><value>カスタムクラウド構成が必要な場合に Microsoft Graph エンドポイントを上書きします。</value></data>
+  <data name="CustomAuthEndpoint.DisplayName" xml:space="preserve"><value>カスタム認証エンドポイント</value></data>
+  <data name="CustomAuthEndpoint.Description" xml:space="preserve"><value>カスタムクラウド構成が必要な場合に Microsoft ID の認証機関エンドポイントを上書きします。</value></data>
+  <data name="UseBroker.DisplayName" xml:space="preserve"><value>ブローカーを使う</value></data>
+  <data name="UseBroker.Description" xml:space="preserve"><value>利用可能な場合にブローカー認証を使います。</value></data>
+  <data name="CacheTtlSeconds.DisplayName" xml:space="preserve"><value>キャッシュ有効期間 (秒)</value></data>
+  <data name="CacheTtlSeconds.Description" xml:space="preserve"><value>キャッシュされた検索結果を保持する時間を指定します。</value></data>
+  <data name="CacheMaxEntries.DisplayName" xml:space="preserve"><value>キャッシュの最大項目数</value></data>
+  <data name="CacheMaxEntries.Description" xml:space="preserve"><value>キャッシュする検索結果の最大数を指定します。</value></data>
+  <data name="PersistWorkspaceState.DisplayName" xml:space="preserve"><value>ワークスペースの状態を保持する</value></data>
+  <data name="PersistWorkspaceState.Description" xml:space="preserve"><value>ワークスペース固有のキャッシュと状態をセッション間で保持します。</value></data>
+  <data name="MailEnabled.DisplayName" xml:space="preserve"><value>メール</value></data>
+  <data name="MailEnabled.Description" xml:space="preserve"><value>Exchange メール検索を有効にします。</value></data>
+  <data name="TeamsEnabled.DisplayName" xml:space="preserve"><value>Teams</value></data>
+  <data name="TeamsEnabled.Description" xml:space="preserve"><value>Microsoft Teams メッセージ検索を有効にします。</value></data>
+  <data name="SharePointEnabled.DisplayName" xml:space="preserve"><value>SharePoint</value></data>
+  <data name="SharePointEnabled.Description" xml:space="preserve"><value>SharePoint コンテンツ検索を有効にします。</value></data>
+  <data name="OneDriveEnabled.DisplayName" xml:space="preserve"><value>OneDrive</value></data>
+  <data name="OneDriveEnabled.Description" xml:space="preserve"><value>OneDrive コンテンツ検索を有効にします。</value></data>
+  <data name="ConnectorsEnabled.DisplayName" xml:space="preserve"><value>コネクタ</value></data>
+  <data name="ConnectorsEnabled.Description" xml:space="preserve"><value>Microsoft 365 コネクタのコンテンツ検索を有効にします。</value></data>
+  <data name="OneNoteEnabled.DisplayName" xml:space="preserve"><value>OneNote</value></data>
+  <data name="OneNoteEnabled.Description" xml:space="preserve"><value>OneNote ページ検索を有効にします。</value></data>
+  <data name="PlannerEnabled.DisplayName" xml:space="preserve"><value>Planner</value></data>
+  <data name="PlannerEnabled.Description" xml:space="preserve"><value>Microsoft Planner タスク検索を有効にします。</value></data>
+  <data name="TodoEnabled.DisplayName" xml:space="preserve"><value>To Do</value></data>
+  <data name="TodoEnabled.Description" xml:space="preserve"><value>Microsoft To Do タスク検索を有効にします。</value></data>
   <data name="ChatMaxAttachedFiles.DisplayName" xml:space="preserve"><value>添付ファイルの最大数</value></data>
   <data name="ChatMaxAttachedFiles.Description" xml:space="preserve"><value>各チャット要求に添付できるファイルの最大数を指定します。0を指定するとファイル添付を無効にします。</value></data>
   <data name="ChatAttachActiveEditor.DisplayName" xml:space="preserve"><value>アクティブなエディターを添付</value></data>

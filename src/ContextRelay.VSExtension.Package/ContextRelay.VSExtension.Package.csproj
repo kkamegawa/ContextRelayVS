@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	<TargetFramework>net48</TargetFramework>
+	<UseWPF>true</UseWPF>
 	<VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">17.0</VisualStudioVersion>
 	<MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
 	<LangVersion>latest</LangVersion>

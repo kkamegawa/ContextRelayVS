@@ -5,6 +5,58 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0</value></resheader>
   <data name="ChatCategory" xml:space="preserve"><value>Chat</value></data>
+  <data name="GeneralCategory" xml:space="preserve"><value>General</value></data>
+  <data name="AuthenticationCategory" xml:space="preserve"><value>Authentication</value></data>
+  <data name="CachingCategory" xml:space="preserve"><value>Caching</value></data>
+  <data name="SearchSourcesCategory" xml:space="preserve"><value>Search sources</value></data>
+  <data name="DiagnosticsCategory" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="PrivacyCategory" xml:space="preserve"><value>Privacy</value></data>
+  <data name="MaxResults.DisplayName" xml:space="preserve"><value>Max results</value></data>
+  <data name="MaxResults.Description" xml:space="preserve"><value>Specifies the maximum number of results returned for each ContextRelay search.</value></data>
+  <data name="OutputDirectory.DisplayName" xml:space="preserve"><value>Output directory</value></data>
+  <data name="OutputDirectory.Description" xml:space="preserve"><value>Specifies the relative output directory used for generated handoff files.</value></data>
+  <data name="EnableChatPreview.DisplayName" xml:space="preserve"><value>Enable chat preview</value></data>
+  <data name="EnableChatPreview.Description" xml:space="preserve"><value>Enables preview chat features such as /ask and Copilot chat integration.</value></data>
+  <data name="EnableGraphDebugLogging.DisplayName" xml:space="preserve"><value>Enable Graph debug logging</value></data>
+  <data name="EnableGraphDebugLogging.Description" xml:space="preserve"><value>Enables verbose debug logging for Microsoft Graph requests.</value></data>
+  <data name="EnableWorkIqDebugLogging.DisplayName" xml:space="preserve"><value>Enable Work IQ debug logging</value></data>
+  <data name="EnableWorkIqDebugLogging.Description" xml:space="preserve"><value>Enables verbose debug logging for Work IQ requests.</value></data>
+  <data name="AllowLocalFileContextForWorkIq.DisplayName" xml:space="preserve"><value>Allow local file context for Work IQ</value></data>
+  <data name="AllowLocalFileContextForWorkIq.Description" xml:space="preserve"><value>Allows /workiq #file prompts to send bounded local file text to Work IQ. Keep disabled if local source files must not leave this machine.</value></data>
+  <data name="ClientId.DisplayName" xml:space="preserve"><value>Client ID</value></data>
+  <data name="ClientId.Description" xml:space="preserve"><value>Specifies the Microsoft Entra application client ID used for sign-in.</value></data>
+  <data name="TenantId.DisplayName" xml:space="preserve"><value>Tenant ID</value></data>
+  <data name="TenantId.Description" xml:space="preserve"><value>Specifies the tenant ID or 'organizations' when using multi-tenant sign-in.</value></data>
+  <data name="CloudEnvironment.DisplayName" xml:space="preserve"><value>Cloud environment</value></data>
+  <data name="CloudEnvironment.Description" xml:space="preserve"><value>Selects the Microsoft cloud environment used by ContextRelay.</value></data>
+  <data name="CustomGraphEndpoint.DisplayName" xml:space="preserve"><value>Custom Graph endpoint</value></data>
+  <data name="CustomGraphEndpoint.Description" xml:space="preserve"><value>Overrides the Microsoft Graph endpoint when a custom cloud configuration is required.</value></data>
+  <data name="CustomAuthEndpoint.DisplayName" xml:space="preserve"><value>Custom auth endpoint</value></data>
+  <data name="CustomAuthEndpoint.Description" xml:space="preserve"><value>Overrides the Microsoft identity authority endpoint when a custom cloud configuration is required.</value></data>
+  <data name="UseBroker.DisplayName" xml:space="preserve"><value>Use broker</value></data>
+  <data name="UseBroker.Description" xml:space="preserve"><value>Uses brokered authentication when available.</value></data>
+  <data name="CacheTtlSeconds.DisplayName" xml:space="preserve"><value>Cache TTL seconds</value></data>
+  <data name="CacheTtlSeconds.Description" xml:space="preserve"><value>Specifies how long cached search results remain valid.</value></data>
+  <data name="CacheMaxEntries.DisplayName" xml:space="preserve"><value>Cache max entries</value></data>
+  <data name="CacheMaxEntries.Description" xml:space="preserve"><value>Specifies the maximum number of cached search result entries.</value></data>
+  <data name="PersistWorkspaceState.DisplayName" xml:space="preserve"><value>Persist workspace state</value></data>
+  <data name="PersistWorkspaceState.Description" xml:space="preserve"><value>Persists workspace-specific cache and state between sessions.</value></data>
+  <data name="MailEnabled.DisplayName" xml:space="preserve"><value>Mail</value></data>
+  <data name="MailEnabled.Description" xml:space="preserve"><value>Enables Exchange mail search integration.</value></data>
+  <data name="TeamsEnabled.DisplayName" xml:space="preserve"><value>Teams</value></data>
+  <data name="TeamsEnabled.Description" xml:space="preserve"><value>Enables Microsoft Teams message search integration.</value></data>
+  <data name="SharePointEnabled.DisplayName" xml:space="preserve"><value>SharePoint</value></data>
+  <data name="SharePointEnabled.Description" xml:space="preserve"><value>Enables SharePoint content search integration.</value></data>
+  <data name="OneDriveEnabled.DisplayName" xml:space="preserve"><value>OneDrive</value></data>
+  <data name="OneDriveEnabled.Description" xml:space="preserve"><value>Enables OneDrive content search integration.</value></data>
+  <data name="ConnectorsEnabled.DisplayName" xml:space="preserve"><value>Connectors</value></data>
+  <data name="ConnectorsEnabled.Description" xml:space="preserve"><value>Enables Microsoft 365 connector content search integration.</value></data>
+  <data name="OneNoteEnabled.DisplayName" xml:space="preserve"><value>OneNote</value></data>
+  <data name="OneNoteEnabled.Description" xml:space="preserve"><value>Enables OneNote page search integration.</value></data>
+  <data name="PlannerEnabled.DisplayName" xml:space="preserve"><value>Planner</value></data>
+  <data name="PlannerEnabled.Description" xml:space="preserve"><value>Enables Microsoft Planner task search integration.</value></data>
+  <data name="TodoEnabled.DisplayName" xml:space="preserve"><value>To Do</value></data>
+  <data name="TodoEnabled.Description" xml:space="preserve"><value>Enables Microsoft To Do task search integration.</value></data>
   <data name="ChatMaxAttachedFiles.DisplayName" xml:space="preserve"><value>Maximum attached files</value></data>
   <data name="ChatMaxAttachedFiles.Description" xml:space="preserve"><value>Specifies the maximum number of files that can be attached to each chat request. Use 0 to disable file attachments.</value></data>
   <data name="ChatAttachActiveEditor.DisplayName" xml:space="preserve"><value>Attach active editor</value></data>
