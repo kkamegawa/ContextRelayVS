@@ -17,6 +17,7 @@ namespace ContextRelay.VSExtension.Package.Options;
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
 [InstalledProductRegistration("ContextRelay", "ContextRelay options integration.", "0.2.1")]
 [ProvideOptionPage(typeof(OptionsProvider.GeneralOptions), "ContextRelay", "General", 0, 0, true, new[] { "contextrelay", "settings", "options" }, IsInUnifiedSettings = false)]
+[ProvideOptionPage(typeof(SharePointEmbeddedOptionsPage), "ContextRelay", "SharePoint Embedded", 0, 0, true, new[] { "sharepoint", "embedded", "containers" }, IsInUnifiedSettings = false)]
 [ProvideProfile(typeof(OptionsProvider.GeneralOptions), "ContextRelay", "General", 0, 0, true)]
 // Audience must include PublicSdk: the out-of-process VisualStudio.Extensibility tool window
 // requests this service as "Local, PublicSdk", and the shell declines the request with

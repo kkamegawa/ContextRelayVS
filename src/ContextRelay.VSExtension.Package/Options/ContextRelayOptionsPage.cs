@@ -69,31 +69,32 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
 {
     private int chatMaxAttachedFiles = 5;
     private string uiLanguage = "auto";
+    private string loadedUiLanguage = "auto";
 
     /// <summary>
     /// Gets or sets the maximum number of results returned for each ContextRelay search.
     /// </summary>
-    [Category("General")]
-    [DisplayName("Max results")]
-    [Description("Specifies the maximum number of results returned for each ContextRelay search.")]
+    [LocalizedCategory("GeneralCategory")]
+    [LocalizedDisplayName("MaxResults.DisplayName")]
+    [LocalizedDescription("MaxResults.Description")]
     [DefaultValue(10)]
     public int MaxResults { get; set; } = 10;
 
     /// <summary>
     /// Gets or sets the relative output directory used for generated handoff files.
     /// </summary>
-    [Category("General")]
-    [DisplayName("Output directory")]
-    [Description("Specifies the relative output directory used for generated handoff files.")]
+    [LocalizedCategory("GeneralCategory")]
+    [LocalizedDisplayName("OutputDirectory.DisplayName")]
+    [LocalizedDescription("OutputDirectory.Description")]
     [DefaultValue(".contextrelay")]
     public string OutputDirectory { get; set; } = ".contextrelay";
 
     /// <summary>
     /// Gets or sets a value indicating whether preview chat features are enabled.
     /// </summary>
-    [Category("General")]
-    [DisplayName("Enable chat preview")]
-    [Description("Enables preview chat features such as /ask and Copilot chat integration.")]
+    [LocalizedCategory("ChatCategory")]
+    [LocalizedDisplayName("EnableChatPreview.DisplayName")]
+    [LocalizedDescription("EnableChatPreview.Description")]
     [DefaultValue(true)]
     public bool EnableChatPreview { get; set; } = true;
 
@@ -131,7 +132,7 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     /// <summary>
     /// Gets or sets the preferred ContextRelay UI language.
     /// </summary>
-    [Category("General")]
+    [LocalizedCategory("GeneralCategory")]
     [LocalizedDisplayName("UiLanguage.DisplayName")]
     [LocalizedDescription("UiLanguage.Description")]
     [DefaultValue("auto")]
@@ -152,180 +153,180 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
     /// <summary>
     /// Gets or sets a value indicating whether verbose Microsoft Graph logging is enabled.
     /// </summary>
-    [Category("Diagnostics")]
-    [DisplayName("Enable Graph debug logging")]
-    [Description("Enables verbose debug logging for Microsoft Graph requests.")]
+    [LocalizedCategory("DiagnosticsCategory")]
+    [LocalizedDisplayName("EnableGraphDebugLogging.DisplayName")]
+    [LocalizedDescription("EnableGraphDebugLogging.Description")]
     [DefaultValue(false)]
     public bool EnableGraphDebugLogging { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether verbose Work IQ logging is enabled.
     /// </summary>
-    [Category("Diagnostics")]
-    [DisplayName("Enable Work IQ debug logging")]
-    [Description("Enables verbose debug logging for Work IQ requests.")]
+    [LocalizedCategory("DiagnosticsCategory")]
+    [LocalizedDisplayName("EnableWorkIqDebugLogging.DisplayName")]
+    [LocalizedDescription("EnableWorkIqDebugLogging.Description")]
     [DefaultValue(false)]
     public bool EnableWorkIqDebugLogging { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether Work IQ queries may include local file content.
     /// </summary>
-    [Category("Privacy")]
-    [DisplayName("Allow local file context for Work IQ")]
-    [Description("Allows /workiq #file prompts to send bounded local file text to Work IQ. Keep disabled if local source files must not leave this machine.")]
+    [LocalizedCategory("PrivacyCategory")]
+    [LocalizedDisplayName("AllowLocalFileContextForWorkIq.DisplayName")]
+    [LocalizedDescription("AllowLocalFileContextForWorkIq.Description")]
     [DefaultValue(false)]
     public bool AllowLocalFileContextForWorkIq { get; set; }
 
     /// <summary>
     /// Gets or sets the Microsoft Entra application client identifier.
     /// </summary>
-    [Category("Authentication")]
-    [DisplayName("Client ID")]
-    [Description("Specifies the Microsoft Entra application client ID used for sign-in.")]
+    [LocalizedCategory("AuthenticationCategory")]
+    [LocalizedDisplayName("ClientId.DisplayName")]
+    [LocalizedDescription("ClientId.Description")]
     [DefaultValue("")]
     public string ClientId { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the tenant identifier used for sign-in.
     /// </summary>
-    [Category("Authentication")]
-    [DisplayName("Tenant ID")]
-    [Description("Specifies the tenant ID or 'organizations' when using multi-tenant sign-in.")]
+    [LocalizedCategory("AuthenticationCategory")]
+    [LocalizedDisplayName("TenantId.DisplayName")]
+    [LocalizedDescription("TenantId.Description")]
     [DefaultValue("organizations")]
     public string TenantId { get; set; } = "organizations";
 
     /// <summary>
     /// Gets or sets the Microsoft cloud environment used by ContextRelay.
     /// </summary>
-    [Category("Authentication")]
-    [DisplayName("Cloud environment")]
-    [Description("Selects the Microsoft cloud environment used by ContextRelay.")]
+    [LocalizedCategory("AuthenticationCategory")]
+    [LocalizedDisplayName("CloudEnvironment.DisplayName")]
+    [LocalizedDescription("CloudEnvironment.Description")]
     [DefaultValue(CloudEnvironment.Global)]
     public CloudEnvironment CloudEnvironment { get; set; } = CloudEnvironment.Global;
 
     /// <summary>
     /// Gets or sets the custom Microsoft Graph endpoint.
     /// </summary>
-    [Category("Authentication")]
-    [DisplayName("Custom Graph endpoint")]
-    [Description("Overrides the Microsoft Graph endpoint when a custom cloud configuration is required.")]
+    [LocalizedCategory("AuthenticationCategory")]
+    [LocalizedDisplayName("CustomGraphEndpoint.DisplayName")]
+    [LocalizedDescription("CustomGraphEndpoint.Description")]
     [DefaultValue("")]
     public string CustomGraphEndpoint { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the custom authentication endpoint.
     /// </summary>
-    [Category("Authentication")]
-    [DisplayName("Custom auth endpoint")]
-    [Description("Overrides the Microsoft identity authority endpoint when a custom cloud configuration is required.")]
+    [LocalizedCategory("AuthenticationCategory")]
+    [LocalizedDisplayName("CustomAuthEndpoint.DisplayName")]
+    [LocalizedDescription("CustomAuthEndpoint.Description")]
     [DefaultValue("")]
     public string CustomAuthEndpoint { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets a value indicating whether brokered authentication is used when available.
     /// </summary>
-    [Category("Authentication")]
-    [DisplayName("Use broker")]
-    [Description("Uses brokered authentication when available.")]
+    [LocalizedCategory("AuthenticationCategory")]
+    [LocalizedDisplayName("UseBroker.DisplayName")]
+    [LocalizedDescription("UseBroker.Description")]
     [DefaultValue(false)]
     public bool UseBroker { get; set; }
 
     /// <summary>
     /// Gets or sets the cache time-to-live in seconds.
     /// </summary>
-    [Category("Caching")]
-    [DisplayName("Cache TTL seconds")]
-    [Description("Specifies how long cached search results remain valid.")]
+    [LocalizedCategory("CachingCategory")]
+    [LocalizedDisplayName("CacheTtlSeconds.DisplayName")]
+    [LocalizedDescription("CacheTtlSeconds.Description")]
     [DefaultValue(300)]
     public int CacheTtlSeconds { get; set; } = 300;
 
     /// <summary>
     /// Gets or sets the maximum number of cached search result entries.
     /// </summary>
-    [Category("Caching")]
-    [DisplayName("Cache max entries")]
-    [Description("Specifies the maximum number of cached search result entries.")]
+    [LocalizedCategory("CachingCategory")]
+    [LocalizedDisplayName("CacheMaxEntries.DisplayName")]
+    [LocalizedDescription("CacheMaxEntries.Description")]
     [DefaultValue(200)]
     public int CacheMaxEntries { get; set; } = 200;
 
     /// <summary>
     /// Gets or sets a value indicating whether workspace-specific cache and state are persisted.
     /// </summary>
-    [Category("Caching")]
-    [DisplayName("Persist workspace state")]
-    [Description("Persists workspace-specific cache and state between sessions.")]
+    [LocalizedCategory("CachingCategory")]
+    [LocalizedDisplayName("PersistWorkspaceState.DisplayName")]
+    [LocalizedDescription("PersistWorkspaceState.Description")]
     [DefaultValue(true)]
     public bool PersistWorkspaceState { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Exchange mail search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("Mail")]
-    [Description("Enables Exchange mail search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("MailEnabled.DisplayName")]
+    [LocalizedDescription("MailEnabled.Description")]
     [DefaultValue(true)]
     public bool MailEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Microsoft Teams search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("Teams")]
-    [Description("Enables Microsoft Teams message search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("TeamsEnabled.DisplayName")]
+    [LocalizedDescription("TeamsEnabled.Description")]
     [DefaultValue(true)]
     public bool TeamsEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether SharePoint search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("SharePoint")]
-    [Description("Enables SharePoint content search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("SharePointEnabled.DisplayName")]
+    [LocalizedDescription("SharePointEnabled.Description")]
     [DefaultValue(true)]
     public bool SharePointEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether OneDrive search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("OneDrive")]
-    [Description("Enables OneDrive content search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("OneDriveEnabled.DisplayName")]
+    [LocalizedDescription("OneDriveEnabled.Description")]
     [DefaultValue(true)]
     public bool OneDriveEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Microsoft 365 connector search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("Connectors")]
-    [Description("Enables Microsoft 365 connector content search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("ConnectorsEnabled.DisplayName")]
+    [LocalizedDescription("ConnectorsEnabled.Description")]
     [DefaultValue(false)]
     public bool ConnectorsEnabled { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether OneNote search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("OneNote")]
-    [Description("Enables OneNote page search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("OneNoteEnabled.DisplayName")]
+    [LocalizedDescription("OneNoteEnabled.Description")]
     [DefaultValue(true)]
     public bool OneNoteEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Microsoft Planner task search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("Planner")]
-    [Description("Enables Microsoft Planner task search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("PlannerEnabled.DisplayName")]
+    [LocalizedDescription("PlannerEnabled.Description")]
     [DefaultValue(true)]
     public bool PlannerEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether Microsoft To Do task search integration is enabled.
     /// </summary>
-    [Category("Features")]
-    [DisplayName("To Do")]
-    [Description("Enables Microsoft To Do task search integration.")]
+    [LocalizedCategory("SearchSourcesCategory")]
+    [LocalizedDisplayName("TodoEnabled.DisplayName")]
+    [LocalizedDescription("TodoEnabled.Description")]
     [DefaultValue(true)]
     public bool TodoEnabled { get; set; } = true;
 
@@ -413,6 +414,7 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
         OneNoteEnabled = settings.OneNoteEnabled;
         PlannerEnabled = settings.PlannerEnabled;
         TodoEnabled = settings.TodoEnabled;
+        loadedUiLanguage = uiLanguage;
     }
 
     /// <summary>
@@ -432,7 +434,11 @@ public sealed class ContextRelayOptionsModel : BaseOptionModel<ContextRelayOptio
         settings.ChatMaxAttachedFiles = ChatMaxAttachedFiles;
         settings.ChatAttachActiveEditor = ChatAttachActiveEditor;
         settings.ChatStreamResponses = ChatStreamResponses;
-        settings.UiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(UiLanguage);
+        var currentUiLanguage = ContextRelaySettingsStore.NormalizeUiLanguage(UiLanguage);
+        if (!string.Equals(currentUiLanguage, loadedUiLanguage, StringComparison.Ordinal))
+        {
+            settings.UiLanguage = currentUiLanguage;
+        }
         settings.EnableGraphDebugLogging = EnableGraphDebugLogging;
         settings.EnableWorkIqDebugLogging = EnableWorkIqDebugLogging;
         settings.AllowLocalFileContextForWorkIq = AllowLocalFileContextForWorkIq;

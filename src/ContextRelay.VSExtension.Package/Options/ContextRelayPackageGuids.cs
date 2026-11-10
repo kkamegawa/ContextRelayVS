@@ -18,6 +18,11 @@ internal static class ContextRelayPackageGuids
     public const string OptionsPageString = "68A2D2D2-54F0-4D97-9AE7-861330F6231F";
 
     /// <summary>
+    /// Identifies the SharePoint Embedded options page implementation.
+    /// </summary>
+    public const string EmbeddedOptionsPageString = "D67FC8D0-11B4-4B4B-9C18-BD778E9F9CF1";
+
+    /// <summary>
     /// Gets the package GUID value.
     /// </summary>
     public static readonly Guid OptionsPackage = new(OptionsPackageString);

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="EnableRetrieval" xml:space="preserve">
+    <value>Enable SharePoint Embedded search</value>
+  </data>
+  <data name="Prerequisites" xml:space="preserve">
+    <value>Preview feature. Search requires pay-as-you-go billing, the Global cloud, and access granted by the container type’s owning app.</value>
+  </data>
+  <data name="CloudWarning" xml:space="preserve">
+    <value>The current cloud environment is outside Global. SharePoint Embedded search is unavailable in this environment.</value>
+  </data>
+  <data name="Sources" xml:space="preserve">
+    <value>_Search sources</value>
+  </data>
+  <data name="NoSources" xml:space="preserve">
+    <value>No search sources have been added.</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>_Add…</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>_Edit…</value>
+  </data>
+  <data name="Remove" xml:space="preserve">
+    <value>_Remove</value>
+  </data>
+  <data name="AddTitle" xml:space="preserve">
+    <value>Add a search source</value>
+  </data>
+  <data name="EditTitle" xml:space="preserve">
+    <value>Edit search source</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>_Display name</value>
+  </data>
+  <data name="ContainerTypeId" xml:space="preserve">
+    <value>Container _type ID</value>
+  </data>
+  <data name="EnableSource" xml:space="preserve">
+    <value>Enable this source</value>
+  </data>
+  <data name="SaveSource" xml:space="preserve">
+    <value>Sa_ve source</value>
+  </data>
+  <data name="DiscardSource" xml:space="preserve">
+    <value>Discard _edit</value>
+  </data>
+  <data name="Enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="Disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="NameRequired" xml:space="preserve">
+    <value>Enter a display name.</value>
+  </data>
+  <data name="NameTooLong" xml:space="preserve">
+    <value>Use 64 characters or fewer for the display name.</value>
+  </data>
+  <data name="NameDuplicate" xml:space="preserve">
+    <value>Another search source already uses this display name.</value>
+  </data>
+  <data name="ContainerTypeIdInvalid" xml:space="preserve">
+    <value>Enter a valid GUID for the container type ID.</value>
+  </data>
+  <data name="ContainerTypeIdDuplicate" xml:space="preserve">
+    <value>Another search source already uses this container type ID.</value>
+  </data>
+  <data name="SaveError" xml:space="preserve">
+    <value>Could not save SharePoint Embedded settings. {0}</value>
+  </data>
+</root>
