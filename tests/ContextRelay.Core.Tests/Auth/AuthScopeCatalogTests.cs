@@ -87,6 +87,24 @@ public sealed class AuthScopeCatalogTests
     }
 
     [Fact]
+    public void BuildEmbeddedScopes_UsesOnlyTheDedicatedGlobalScope()
+    {
+        Assert.Equal(new[] { "https://graph.microsoft.com/FileStorageContainer.Selected" }, AuthScopeCatalog.BuildEmbeddedScopes().ToArray());
+
+        var withOidc = AuthScopeCatalog.BuildEmbeddedScopes(includeOidcScopes: true);
+        Assert.Contains("offline_access", withOidc);
+        Assert.Contains("https://graph.microsoft.com/FileStorageContainer.Selected", withOidc);
+    }
+
+    [Fact]
+    public void BuildRequiredScopes_NeverIncludesTheEmbeddedScope()
+    {
+        var scopes = AuthScopeCatalog.BuildRequiredScopes(new ContextRelayFeatureOptions());
+
+        Assert.DoesNotContain(scopes, scope => scope.Contains(AuthScopeCatalog.EmbeddedPermission, System.StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BuildWorkIqScopes_CanIncludeOidcScopes()
     {
         var scopes = AuthScopeCatalog.BuildWorkIqScopes(includeOidcScopes: true).ToArray();

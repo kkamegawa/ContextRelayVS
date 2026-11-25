@@ -706,13 +706,46 @@ public sealed class SlashCommandSuggestionInteractionTests
         stringsType.GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)?.Invoke(obj: null, parameters: new object?[] { "en" });
         Assert.NotNull(method);
 
-        var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method!.Invoke(obj: null, parameters: new object?[] { "/mail /on" }));
+        var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method!.Invoke(obj: null, parameters: new object?[] { "/mail /on", false }));
         var enumerator = suggestions.GetEnumerator();
         Assert.True(enumerator.MoveNext());
         var firstSuggestion = enumerator.Current!;
 
         Assert.Equal("/onedrive", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("Name")!.GetValue(firstSuggestion)));
         Assert.Equal("/mail /onedrive ", Assert.IsType<string>(firstSuggestion.GetType().GetProperty("CommittedQuery")!.GetValue(firstSuggestion)));
+    }
+
+    [Theory]
+    [InlineData("/embedded renewal", null)]
+    [InlineData("/mail renewal", "summary")]
+    public void Host_SelectChatSearchSummary_DropsTheSummaryAfterAnEmbeddedSearch(string query, string? expected)
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var hostType = assembly.GetType("ContextRelay.VSExtension.Services.ContextRelayHost", throwOnError: true)!;
+        var method = hostType.GetMethod("SelectChatSearchSummary", BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var result = method.Invoke(obj: null, parameters: new object?[] { SlashCommandRouter.Parse(query), "summary" });
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void LocalizedStrings_GetCommandSuggestions_ShowsEmbeddedOnlyWhenActive(bool includeEmbedded, bool expected)
+    {
+        var assembly = LoadBuiltExtensionAssembly();
+        var stringsType = assembly.GetType("ContextRelay.VSExtension.ToolWindows.ContextRelayLocalizedStrings", throwOnError: true)!;
+        stringsType.GetMethod("SetUiLanguage", BindingFlags.Static | BindingFlags.Public)?.Invoke(obj: null, parameters: new object?[] { "en" });
+        var method = stringsType.GetMethod("GetCommandSuggestions", BindingFlags.Static | BindingFlags.Public)!;
+
+        var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method.Invoke(obj: null, parameters: new object?[] { "/", includeEmbedded }));
+        var names = suggestions.Cast<object>()
+            .Select(suggestion => Assert.IsType<string>(suggestion.GetType().GetProperty("Name")!.GetValue(suggestion)))
+            .ToList();
+
+        Assert.Equal(expected, names.Contains("/embedded"));
+        Assert.Contains("/connectors", names);
     }
 
     [Fact]
@@ -778,7 +811,8 @@ public sealed class SlashCommandSuggestionInteractionTests
         var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method!.Invoke(obj: null, new object[]
         {
             "/ask #docs/pl",
-            new[] { "docs/plan.md", "docs/summary.md" }
+            new[] { "docs/plan.md", "docs/summary.md" },
+            false
         }));
         var enumerator = suggestions.GetEnumerator();
         Assert.True(enumerator.MoveNext());
@@ -799,7 +833,8 @@ public sealed class SlashCommandSuggestionInteractionTests
         var suggestions = Assert.IsAssignableFrom<System.Collections.IEnumerable>(method!.Invoke(obj: null, new object[]
         {
             "/ask #\"docs/release notes.md\"",
-            new[] { "docs/release notes.md", "docs/summary.md" }
+            new[] { "docs/release notes.md", "docs/summary.md" },
+            false
         }));
         var enumerator = suggestions.GetEnumerator();
         Assert.True(enumerator.MoveNext());

@@ -9,5 +9,6 @@ public enum ContextSource
     Connectors,
     OneNote,
     Planner,
-    Todo
+    Todo,
+    SharePointEmbedded
 }

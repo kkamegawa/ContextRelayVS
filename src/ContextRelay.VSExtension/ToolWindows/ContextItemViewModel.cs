@@ -12,9 +12,10 @@ internal sealed class ContextItemViewModel
 {
     internal ContextItemViewModel(ContextItem item, ContextRelayWindowViewModel parent)
     {
+        Item = item;
         Title = item.Title;
         Snippet = item.Snippet;
-        Source = item.Source.ToString();
+        Source = ContextSourceSchema.ToSchemaValue(item.Source);
         SourceLabel = SourcePresentation.GetSourceLabel(Source);
         SourceIcon = SourcePresentation.GetSourceIcon(Source);
         Timestamp = item.Timestamp ?? string.Empty;
@@ -29,6 +30,12 @@ internal sealed class ContextItemViewModel
         AppendToHandoffCommand = new AsyncCommand(async (_, ct) => await parent.AppendResultAsync(this, ct).ConfigureAwait(false));
         OpenCommand = new AsyncCommand((_, _) => { parent.OpenUrl(Url); return Task.CompletedTask; });
     }
+
+    /// <summary>
+    /// The original result, kept in-process and never serialized, so pin, copy, and handoff act on the
+    /// full item (metadata and extracts included) instead of a lossy reconstruction from display fields.
+    /// </summary>
+    internal ContextItem Item { get; }
 
     [DataMember] public string Title { get; private set; }
     [DataMember] public string Snippet { get; private set; }

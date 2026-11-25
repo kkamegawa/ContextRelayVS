@@ -10,5 +10,6 @@ public enum SnippetSource
     OneNote,
     Planner,
     Todo,
-    Chat
+    Chat,
+    SharePointEmbedded
 }

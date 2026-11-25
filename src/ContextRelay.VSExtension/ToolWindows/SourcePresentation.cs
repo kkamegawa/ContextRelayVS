@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ContextRelay.Core.Router;
 
 namespace ContextRelay.VSExtension.ToolWindows;
 
@@ -21,6 +22,9 @@ internal static class SourcePresentation
             ["planner"] = () => ContextRelayLocalizedStrings.SourceLabelPlanner,
             ["todo"] = () => ContextRelayLocalizedStrings.SourceLabelTodo,
             ["connectors"] = () => ContextRelayLocalizedStrings.SourceLabelConnectors,
+            [ContextSourceSchema.SharePointEmbedded] = () => ContextRelayLocalizedStrings.SourceLabelEmbedded,
+            // The command name, used for the requested-sources line of the search summary.
+            ["embedded"] = () => ContextRelayLocalizedStrings.SourceLabelEmbedded,
             ["all"] = () => ContextRelayLocalizedStrings.SourceLabelAll,
         };
 
@@ -35,6 +39,8 @@ internal static class SourcePresentation
             ["planner"] = "✅",
             ["todo"] = "☑️",
             ["connectors"] = "🔗",
+            [ContextSourceSchema.SharePointEmbedded] = "🗄️",
+            ["embedded"] = "🗄️",
             ["all"] = "🔍",
         };
 
@@ -48,6 +54,7 @@ internal static class SourcePresentation
             ["/onenote"] = "🗒️",
             ["/task"] = "☑️",
             ["/connectors"] = "🔗",
+            ["/embedded"] = "🗄️",
             ["/all"] = "🔍",
             ["/ask"] = "🤖",
             ["/workiq"] = "🧠",

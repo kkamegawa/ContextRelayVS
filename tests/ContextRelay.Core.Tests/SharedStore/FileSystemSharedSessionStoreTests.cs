@@ -161,7 +161,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
         Assert.True(File.Exists(schemaPath));
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(schemaPath, cancellationToken));
-        Assert.Equal(1, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(SharedStoreOptions.CurrentSchemaVersion, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("vs", document.RootElement.GetProperty("updatedBy").GetString());
         Assert.Contains(
             "snippets.json",
@@ -178,7 +178,7 @@ public sealed class FileSystemSharedSessionStoreTests : IDisposable
             snippetsPath,
             """
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "updatedAt": "2026-04-18T00:00:00Z",
               "updatedBy": "vscode",
               "producerVersion": "0.1.0",
